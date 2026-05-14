@@ -1,63 +1,193 @@
-# Micro-frontend Game Suite
+# AI-Powered Game Discovery Community Platform
 
-This repository now houses a multi-service workspace with separate authentication and player progress domains, plus two Vite micro-frontends.
+A full-stack game discovery community platform where users can post game recommendations, browse community content, interact through likes, comments, and bookmarks, and get personalised suggestions from an AI Game Agent powered by LangChain and Google Gemini.
 
-## Package map
+---
+
+## Overview
+
+This platform brings together a community of gamers who share and discover games through user-created posts. Key capabilities include:
+
+- **User authentication** with JWT and role-based access (Player / Admin)
+- **Game recommendation posts** with rich metadata — genre, platform, developer, rating, tags, cover image, and review
+- **Community browsing** with likes, comments, and bookmarks
+- **User profiles** displaying posts, activity, and saved games
+- **Leaderboard** tracking top-rated games, most-liked posts, and active contributors
+- **AI Game Agent** that reads live platform data from MongoDB and provides game recommendations and community insights via LangChain and Google Gemini
+- **Conversation history** persisted in MongoDB per user
+
+---
+
+## Tech Stack
+
+| Layer | Technologies |
+|---|---|
+| Frontend | React, Vite |
+| Backend | Node.js, GraphQL (Apollo Server) |
+| Database | MongoDB (Mongoose) |
+| Authentication | JWT |
+| AI | LangChain, Google Gemini API |
+| Architecture | Monorepo, modular full-stack structure |
+
+---
+
+## Core Features
+
+### Authentication
+- Register and login with hashed passwords
+- JWT stored in `localStorage` and as an HTTP cookie
+- Player and Admin role support
+
+### Game Posts
+- Create game recommendation posts with title, genre, platform, developer, rating, tags, cover image, game link, and written review
+- Edit and delete your own posts
+
+### Community
+- Browse all game recommendation posts
+- Like, comment, and bookmark posts
+- Comments display username, content, timestamp, and like count
+
+### Bookmarks
+- Save games/posts from the community feed
+- View and manage your saved games from your profile
+
+### My Profile
+- View account information and statistics
+- See your posts, comments, likes, and bookmarked games in one place
+
+### Leaderboard
+- Top-rated games by community score
+- Most-liked posts
+- Most active contributors
+
+### AI Game Agent
+- Powered by **LangChain** and **Google Gemini**
+- Reads live platform context from MongoDB — posts, ratings, tags, bookmarks, likes, and comments
+- Answers natural-language questions and provides personalised recommendations
+- Conversation history stored per user in MongoDB
+- API key is **never** exposed to the frontend — all Gemini calls happen server-side
+
+---
+
+## Project Structure
 
 ```
-packages/
-  auth-service       # GraphQL auth service (port 4001)
-  progress-service   # GraphQL progress service (port 4002)
 apps/
-  auth-frontend        # Login/registration MFE (port 5173)
-  progress-frontend    # Progress/leaderboard MFE (port 5174)
+  auth-frontend/        # Main platform frontend
+                        # Covers: auth, dashboard, posts, community,
+                        #         bookmarks, AI agent, profile, leaderboard
+  progress-frontend/    # Secondary frontend module (progress & leaderboard views)
+
+packages/
+  auth-service/         # Main backend API service
+                        # Covers: GraphQL API, MongoDB models, JWT auth,
+                        #         community features, AI agent integration
+  progress-service/     # Progress-related backend service (experience, achievements)
+
 shared/
-  jwt                # Shared JWT helper used by both services
+  jwt/
+    index.js            # Shared JWT sign/verify helper used by both services
 ```
 
-Each package has its own `.env` with sensible defaults. Adjust `MONGO_URI` / `JWT_SECRET` as needed.
+> **Note:** Some folder names such as `auth-frontend` and `auth-service` are kept for compatibility with the original monorepo scaffold. In the current version they serve as the **main platform frontend** and **main backend service** respectively.
 
-## Install dependencies
+---
 
-```powershell
+## Environment Variables
+
+Real `.env` files are **not committed** to this repository. Each service reads its own `.env` at startup. A `.env.example` file is provided with placeholder values only.
+
+**Example (`packages/auth-service/.env`):**
+
+```env
+MONGODB_URI=your_mongodb_uri_here
+JWT_SECRET=your_jwt_secret_here
+GOOGLE_API_KEY=your_gemini_api_key_here
+AI_MODEL=gemini-2.5-flash-lite
+AI_MAX_HISTORY_MESSAGES=10
+AI_MAX_PLATFORM_POSTS=10
+PORT=4001
+```
+
+- `GOOGLE_API_KEY` must remain **server-side only** — the frontend never calls Gemini directly.
+- `.env.example` contains placeholder strings and is safe to commit.
+
+---
+
+## Installation
+
+Install all workspace dependencies (services, frontends, and shared modules) from the repo root:
+
+```bash
 npm install
 ```
 
-This installs all workspace dependencies (services, frontends, shared module).
+---
 
-## Development workflow
+## Development
 
-1. Start MongoDB (default URI `mongodb://localhost:27017`).
-2. Run the auth GraphQL service.
-   ```powershell
-   npm run dev:auth
-   ```
-3. Run the progress GraphQL service.
-   ```powershell
-   npm run dev:progress
-   ```
-4. Start the auth micro-frontend.
-   ```powershell
-   npm run dev:auth-frontend
-   ```
-5. Start the progress micro-frontend.
-   ```powershell
-   npm run dev:progress-frontend
-   ```
-6. Register through the auth front-end (`http://localhost:5173`). Login will store the JWT (localStorage + cookie) and redirect to the progress front-end at `http://localhost:5174`.
-7. Use the progress UI to track experience, unlock achievements, and check leaderboards.
+Start each service and frontend in a separate terminal:
 
-Module federation links the two front-ends: `auth-frontend` exposes a reusable `UserBadge` component that `progress-frontend` consumes to render the logged-in avatar.
+```bash
+# Main backend service (GraphQL, auth, AI agent)
+npm run dev:auth
 
-## Useful scripts
+# Main platform frontend
+npm run dev:auth-frontend
 
-- `npm run dev:auth` – nodemon dev server for auth service.
-- `npm run dev:progress` – nodemon dev server for progress service.
-- `npm run dev:auth-frontend` – Vite dev server (port 5173).
-- `npm run dev:progress-frontend` – Vite dev server (port 5174).
+# Progress backend service (optional)
+npm run dev:progress
 
-## Notes
+# Progress frontend (optional)
+npm run dev:progress-frontend
+```
 
-- Both services read the same `JWT_SECRET` via their `.env` files and rely on the shared `@shared/jwt` helpers for signing/verifying tokens.
-- Front-ends default to the local GraphQL endpoints but accept `VITE_GRAPHQL_URI`, `VITE_PROGRESS_APP_URL`, and `VITE_AUTH_APP_URL` overrides.
-- Ensure the auth front-end stays running so the progress front-end can load the federated `UserBadge` remote (`remoteEntry.js`).
+**Default URLs:**
+
+| App | URL |
+|---|---|
+| Platform frontend | http://localhost:5173 |
+| Platform GraphQL service | http://localhost:4001/graphql |
+| Progress GraphQL service | http://localhost:4002/graphql |
+
+> Make sure MongoDB is running before starting any service (default: `mongodb://localhost:27017`).
+
+---
+
+## AI Game Agent — Example Prompts
+
+The AI Agent is accessible from the platform frontend after logging in. Try prompts such as:
+
+- *Recommend games based on my bookmarks.*
+- *Summarise the most liked community posts.*
+- *What are the top-rated games right now?*
+- *Find multiplayer strategy games.*
+- *What should I play next?*
+
+The agent reads limited, relevant context from MongoDB on each request and forwards it to Gemini through the backend. **API keys are never sent to or exposed on the frontend.**
+
+---
+
+## Security Notes
+
+- `.env` files are listed in `.gitignore` and are never committed
+- All API keys and secrets are loaded server-side only
+- `.env.example` files use placeholder strings — no real credentials
+- `node_modules/` and build output directories are excluded from version control
+- User conversation history is stored in MongoDB and is not committed to the repository
+- Frontend communicates with the backend via GraphQL; the backend communicates with Gemini
+
+---
+
+## Portfolio Purpose
+
+This project demonstrates:
+
+- Full-stack web development with React and Node.js
+- GraphQL API design with Apollo Server
+- MongoDB data modelling with Mongoose
+- JWT authentication and role-based access control
+- Community platform features (posts, likes, comments, bookmarks)
+- AI integration using LangChain and the Google Gemini API
+- Secure server-side API key handling
+- Monorepo / modular project structure with npm workspaces
