@@ -1,0 +1,17 @@
+{
+  "name": "lab-session-4-m25",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "shared/*"
+  ],
+  "scripts": {
+    "dev:auth": "npm run dev --workspace @services/auth",
+    "dev:progress": "npm run dev --workspace @services/progress",
+    "dev:auth-frontend": "npm run dev --workspace @apps/auth-frontend",
+    "dev:progress-frontend": "npm run dev --workspace @apps/progress-frontend"
+  }
+}

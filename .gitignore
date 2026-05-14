@@ -1,0 +1,22 @@
+node_modules/
+dist/
+
+# Environment variable files — NEVER commit these
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+packages/*/.env
+apps/*/.env
+shared/*/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+
+# Local AI conversation history fallback
+packages/auth-service/data/conversationHistory.json

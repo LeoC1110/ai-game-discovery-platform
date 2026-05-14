@@ -1,0 +1,268 @@
+// graphql-server/graphql/schema.js
+export const typeDefs = /* GraphQL */ `
+  """用户（不含密码字段）"""
+  type User {
+    id: ID!
+    username: String!
+    email: String!
+    role: String!
+    createdAt: String
+    updatedAt: String
+  }
+
+  """登录 / 注册返回值"""
+  type AuthPayload {
+    ok: Boolean!
+    message: String
+    token: String
+    user: User
+  }
+
+  input RegisterInput {
+    username: String!
+    email: String!
+    password: String!
+    role: String
+  }
+
+  enum GameSourceType {
+    LocalMeta
+    ExternalLink
+    Embeddable
+  }
+
+  enum TournamentLaunchType {
+    Local
+    ExternalLink
+    Embeddable
+  }
+
+  type Game {
+    id: ID!
+    title: String!
+    genre: String
+    platform: String
+    releaseYear: Int
+    developer: String
+    rating: Int
+    description: String
+     sourceType: GameSourceType!
+     externalUrl: String
+     embedUrl: String
+     coverImage: String
+     tags: [String!]!
+    owner: User
+    createdAt: String
+    updatedAt: String
+  }
+
+  input AddGameInput {
+    title: String!
+    genre: String
+    platform: String
+    releaseYear: Int
+    developer: String
+    rating: Int
+    description: String
+    sourceType: GameSourceType
+    externalUrl: String
+    embedUrl: String
+    coverImage: String
+    tags: [String!]
+  }
+
+  type Player {
+    id: ID!
+    nickname: String
+    user: User!
+    createdAt: String
+    updatedAt: String
+  }
+
+  input TournamentInput {
+    name: String!
+    game: String!
+    date: String
+    status: String
+    launchType: TournamentLaunchType
+    launchUrl: String
+    embedUrl: String
+    gameId: ID
+    rules: String
+    scoreRules: String
+    prizePool: String
+  }
+
+  type Tournament {
+    id: ID!
+    name: String!
+    game: String!
+    date: String
+    status: String!
+    launchType: TournamentLaunchType!
+    launchUrl: String
+    embedUrl: String
+    rules: String
+    scoreRules: String
+    prizePool: String
+    linkedGame: Game
+    players: [Player!]!
+    createdAt: String
+    updatedAt: String
+  }
+
+  type TournamentResult {
+    id: ID!
+    tournament: Tournament!
+    user: User!
+    game: Game
+    score: Int!
+    position: Int
+    notes: String
+    submittedBy: User
+    submittedAt: String
+    createdAt: String
+    updatedAt: String
+  }
+
+  input TournamentResultInput {
+    tournamentId: ID!
+    userId: ID
+    score: Int!
+    position: Int
+    notes: String
+    gameId: ID
+  }
+
+  type PostComment {
+    id: ID!
+    author: User!
+    text: String!
+    createdAt: String
+    likedBy: [ID!]!
+    likeCount: Int!
+  }
+
+  type GamePost {
+    id: ID!
+    title: String!
+    genre: String
+    platform: String
+    developer: String
+    releaseYear: Int
+    gameType: String
+    rating: Int
+    coverImageUrl: String
+    gameLink: String
+    tags: [String!]!
+    review: String
+    postedBy: User!
+    likedBy: [User!]!
+    bookmarkedBy: [User!]!
+    comments: [PostComment!]!
+    likesCount: Int!
+    commentsCount: Int!
+    bookmarksCount: Int!
+    isLikedByMe: Boolean!
+    isBookmarkedByMe: Boolean!
+    featured: Boolean!
+    createdAt: String
+    updatedAt: String
+  }
+
+  input CreatePostInput {
+    title: String!
+    genre: String
+    platform: String
+    developer: String
+    releaseYear: Int
+    gameType: String
+    rating: Int
+    coverImageUrl: String
+    gameLink: String
+    tags: [String!]
+    review: String!
+    featured: Boolean
+  }
+
+  input EditPostInput {
+    title: String
+    genre: String
+    platform: String
+    developer: String
+    releaseYear: Int
+    gameType: String
+    rating: Int
+    coverImageUrl: String
+    gameLink: String
+    tags: [String!]
+    review: String
+  }
+
+  # ── AI Game Agent ───────────────────────────────────────────────────────────
+
+  type AIRecommendedPost {
+    id: ID
+    title: String
+    rating: Float
+    tags: [String]
+    likesCount: Int
+    commentsCount: Int
+    reason: String
+  }
+
+  type AIResponse {
+    answer: String!
+    recommendedPosts: [AIRecommendedPost]
+  }
+
+  type AIHistoryMessage {
+    role: String!
+    content: String!
+    createdAt: String
+  }
+
+  # ── Queries & Mutations ──────────────────────────────────────────────────────
+
+  type Query {
+    _health: String!
+    me: User
+    myAIHistory: [AIHistoryMessage!]!
+    myGames: [Game!]!
+    getAllGames: [Game!]!
+    players: [Player!]!
+    tournaments: [Tournament!]!
+    myRecentTournaments(limit: Int): [Tournament!]!
+    tournamentLeaderboard(tournamentId: ID!, limit: Int): [TournamentResult!]!
+    gameLeaderboard(gameId: ID!, limit: Int): [TournamentResult!]!
+    myRecentResults(limit: Int): [TournamentResult!]!
+    allPosts(search: String, genre: String, platform: String, tag: String, sort: String): [GamePost!]!
+    myPosts: [GamePost!]!
+    bookmarkedPosts: [GamePost!]!
+    getPost(id: ID!): GamePost
+  }
+
+  type Mutation {
+    register(input: RegisterInput!): AuthPayload!
+    login(identifier: String!, password: String!): AuthPayload!
+    logout: Boolean!
+    askAI(message: String!): AIResponse!
+    clearAIHistory: Boolean!
+    geminiHealthTest: String!
+    addGame(input: AddGameInput!): Game!
+    removeGameFromUser(gameId: ID!): Boolean!
+    createTournament(input: TournamentInput!): Tournament!
+    deleteTournament(id: ID!): Boolean!
+    addPlayerToTournament(tournamentId: ID!, playerId: ID!): Tournament!
+    recordTournamentResult(input: TournamentResultInput!): TournamentResult!
+    createPost(input: CreatePostInput!): GamePost!
+    deletePost(id: ID!): Boolean!
+    editPost(id: ID!, input: EditPostInput!): GamePost!
+    likePost(id: ID!): GamePost!
+    addComment(postId: ID!, text: String!): GamePost!
+    toggleBookmark(postId: ID!): GamePost!
+    deleteComment(postId: ID!, commentId: ID!): GamePost!
+    toggleCommentLike(postId: ID!, commentId: ID!): GamePost!
+    featurePost(id: ID!, featured: Boolean!): GamePost!
+  }
+`;
