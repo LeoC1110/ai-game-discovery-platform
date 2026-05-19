@@ -191,3 +191,142 @@ This project demonstrates:
 - AI integration using LangChain and the Google Gemini API
 - Secure server-side API key handling
 - Monorepo / modular project structure with npm workspaces
+
+---
+
+## AI Feature Branches
+
+Four AI capability branches were developed independently and merged into `main`. Each one builds on the previous to make the AI agent smarter and more reliable.
+
+---
+
+### 🧩 feature/rag-recommendation-engine
+
+**What it does:** The AI no longer returns plain text — it now outputs structured game recommendations alongside its answer.
+
+**How it works:**
+
+```
+User asks a question
+        ↓
+Gemini returns answer + a JSON block
+        ↓
+Server parses the JSON block
+        ↓
+Response includes: title, reason, confidence %, matched tags
+```
+
+**Result:** Every recommendation shows *why* the game was suggested and *how confident* the AI is.
+
+| Field | Example |
+|---|---|
+| `title` | Hollow Knight |
+| `reason` | Matches your interest in challenging platformers |
+| `confidence` | 0.92 |
+| `matchedTags` | indie, metroidvania, difficult |
+
+---
+
+### 🔧 feature/ai-tool-calling
+
+**What it does:** Gives the AI three real tools it can call to look up live data from the database before answering.
+
+**Tools available:**
+
+| Tool | What it fetches |
+|---|---|
+| `get_my_bookmarks` | The current user's saved posts |
+| `get_popular_games` | Most-liked posts on the platform |
+| `search_games_by_tag` | Posts matching a specific tag or genre |
+
+**How it works:**
+
+```
+User asks a question
+        ↓
+AI decides which tool(s) to call
+        ↓
+Tools query MongoDB and return real data
+        ↓
+AI uses that data to generate the answer
+```
+
+**Result:** The AI answers with *real, up-to-date* content instead of guessing. If you ask "what are the popular games right now?" it actually checks.
+
+---
+
+### 🔍 feature/ai-evaluation
+
+**What it does:** Every AI response is automatically evaluated by a rule-based quality checker before being returned to the user.
+
+**Four checks run on every response:**
+
+```
+AI response
+    ├── Grounding check      → Is the answer based on real platform data?
+    ├── Hallucination check  → Did the AI invent game titles not in the DB?
+    ├── Safety check         → Does it contain unsafe or harmful content?
+    └── Recommendation check → Do recommended post IDs actually exist?
+```
+
+**Result:** The response includes an `evaluation` object:
+
+```json
+{
+  "groundingScore": 0.85,
+  "hallucinations": [],
+  "safetyPassed": true,
+  "recommendedPostsValid": true,
+  "flags": []
+}
+```
+
+Developers and admins can use this to monitor AI quality over time.
+
+---
+
+### 🧠 feature/ai-user-memory
+
+**What it does:** The AI now remembers who you are across conversations, using four different types of memory.
+
+**Memory layers:**
+
+```
+Short-term memory  → Current chat history (last N messages sent to Gemini)
+Long-term memory   → Your saved preferences stored in MongoDB (genres, platforms, tone)
+Behavioral memory  → Inferred from your likes and bookmarks (computed each request)
+Explicit memory    → Preferences you state directly ("I like RPG") — auto-saved
+```
+
+**How the profile is built:**
+
+```
+You say: "I like strategy games, I avoid horror"
+                    ↓
+Regex extracts: likedGenres=["strategy"], avoidedGenres=["horror"]
+                    ↓
+Saved to MongoDB UserPreference document
+                    ↓
+Next request: profile injected into system prompt
+                    ↓
+AI tailors recommendations to your profile
+```
+
+**User Preference Profile injected into every prompt:**
+
+```
+## User Preference Profile
+- Likes: strategy, co-op
+- Avoids: horror
+- Preferred platforms: PC, Switch
+- Recommendation tone: short
+- Inferred interests (from likes/bookmarks): rpg, indie, turn-based
+```
+
+**New GraphQL operations:**
+
+| Operation | Type | Description |
+|---|---|---|
+| `myPreferences` | Query | View your current stored preference profile |
+| `updatePreference` | Mutation | Manually update genres, platforms, or tone |
+| `clearPreferences` | Mutation | Reset your preference profile |
