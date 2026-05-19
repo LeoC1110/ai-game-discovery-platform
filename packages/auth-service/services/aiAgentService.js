@@ -1,7 +1,9 @@
 // packages/auth-service/services/aiAgentService.js
 // LangChain + Google Gemini — AI Game Agent backend service
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
 import ConversationHistory from '../models/ConversationHistory.js';
 import GamePost from '../models/GamePost.js';
 import { buildFullSystemPrompt } from '../prompts/aiAgentSystemPrompt.js';
@@ -118,6 +120,77 @@ async function extractRecommendedPosts(aiText) {
   }
 }
 
+// ── Format a post for tool output (compact text for the AI) ───────────────────
+function formatToolPost(p) {
+  return (
+    `• "${p.title}"` +
+    (p.genre ? ` [${p.genre}]` : '') +
+    (p.rating != null ? ` — ${p.rating}/10` : '') +
+    (p.tags?.length ? ` tags: ${p.tags.slice(0, 4).join(', ')}` : '') +
+    (p.likedBy?.length ? ` ♥${p.likedBy.length}` : '')
+  );
+}
+
+// ── Tool factory — creates per-request tools with userId in closure ────────────
+function createTools(userId) {
+  const getMyBookmarks = tool(
+    async () => {
+      const posts = await GamePost.find({ bookmarkedBy: userId })
+        .limit(10)
+        .select('title genre platform rating tags likedBy')
+        .lean();
+      if (!posts.length) return 'The user has no bookmarked games yet.';
+      return `User bookmarks (${posts.length}):\n` + posts.map(formatToolPost).join('\n');
+    },
+    {
+      name: 'get_my_bookmarks',
+      description: "Fetch the current user's bookmarked games from the database.",
+      schema: z.object({}),
+    },
+  );
+
+  const getPopularGames = tool(
+    async ({ limit = 10 }) => {
+      const posts = await GamePost.find()
+        .sort({ 'likedBy.length': -1, rating: -1 })
+        .limit(limit)
+        .select('title genre platform rating tags likedBy')
+        .lean();
+      // sort in JS since MongoDB can't sort by array length without aggregation
+      posts.sort((a, b) => (b.likedBy?.length ?? 0) - (a.likedBy?.length ?? 0));
+      if (!posts.length) return 'No games found in the community yet.';
+      return `Popular games (top ${posts.length}):\n` + posts.map(formatToolPost).join('\n');
+    },
+    {
+      name: 'get_popular_games',
+      description: 'Fetch the most-liked / highest-rated games in the community.',
+      schema: z.object({
+        limit: z.number().int().min(1).max(20).optional().describe('Max results, default 10'),
+      }),
+    },
+  );
+
+  const searchGamesByTag = tool(
+    async ({ tag }) => {
+      const posts = await GamePost.find({ tags: { $regex: tag, $options: 'i' } })
+        .limit(10)
+        .select('title genre platform rating tags likedBy')
+        .lean();
+      if (!posts.length) return `No games found with tag matching "${tag}".`;
+      return `Games matching tag "${tag}" (${posts.length}):\n` + posts.map(formatToolPost).join('\n');
+    },
+    {
+      name: 'search_games_by_tag',
+      description: 'Search community games by a tag, genre, or keyword (e.g. "rpg", "indie", "co-op").',
+      schema: z.object({
+        tag: z.string().describe('The tag or keyword to search for'),
+      }),
+    },
+  );
+
+  return [getMyBookmarks, getPopularGames, searchGamesByTag];
+}
+
 // ── Timeout wrapper ────────────────────────────────────────────────────────────
 function withTimeout(promise, ms) {
   const timeoutErr = new Error(TIMEOUT_RESPONSE);
@@ -218,24 +291,56 @@ export async function askAIAgent({ userId, username, message }) {
   langchainMessages.push(new HumanMessage(message));
   console.timeEnd('[AI] build prompt');
 
-  // 4. Call Gemini with timeout — log real error safely before rethrowing
+  // 4. Run agentic loop — AI can call tools up to MAX_TOOL_ITERATIONS times
   console.time('[AI] gemini call');
+  const tools = createTools(userId);
+  const modelWithTools = model.bindTools(tools);
+  const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]));
+  const MAX_TOOL_ITERATIONS = 5;
+
   let answer;
+  let iteration = 0;
   try {
-    const response = await withTimeout(model.invoke(langchainMessages), AI_TIMEOUT_MS);
-    answer = typeof response.content === 'string'
-      ? response.content
-      : response.content.map((c) => (typeof c === 'string' ? c : c.text ?? '')).join('');
+    while (iteration < MAX_TOOL_ITERATIONS) {
+      const response = await withTimeout(modelWithTools.invoke(langchainMessages), AI_TIMEOUT_MS);
+      langchainMessages.push(response);
+
+      // No tool calls → final answer
+      if (!response.tool_calls || response.tool_calls.length === 0) {
+        answer = typeof response.content === 'string'
+          ? response.content
+          : response.content.map((c) => (typeof c === 'string' ? c : c.text ?? '')).join('');
+        break;
+      }
+
+      // Execute each tool call and feed results back
+      console.log('[AI] tool calls:', response.tool_calls.map((tc) => tc.name).join(', '));
+      for (const tc of response.tool_calls) {
+        const toolFn = toolMap[tc.name];
+        let toolResult;
+        try {
+          toolResult = toolFn ? await toolFn.invoke(tc.args) : `Unknown tool: ${tc.name}`;
+        } catch (toolErr) {
+          toolResult = `Tool error: ${toolErr?.message ?? 'unknown'}`;
+        }
+        console.log(`[AI]   ${tc.name} →`, String(toolResult).slice(0, 120));
+        langchainMessages.push(new ToolMessage({ content: String(toolResult), tool_call_id: tc.id }));
+      }
+      iteration++;
+    }
+
+    // Safety fallback if we exhausted iterations without a text answer
+    if (!answer) {
+      answer = GENERIC_ERROR_RESPONSE;
+    }
   } catch (err) {
     console.timeEnd('[AI] gemini call');
     console.timeEnd('[AI] askAI total');
     if (err.isTimeout) {
       console.warn('[AI] Gemini call timed out after', AI_TIMEOUT_MS, 'ms');
-      throw err; // message is already TIMEOUT_RESPONSE
+      throw err;
     }
-    // Log the real Gemini/LangChain error safely
     logAIError('model.invoke', err);
-    // Reset singleton so next call creates a fresh model (avoids stuck bad state)
     _model = null;
     throw new Error(GENERIC_ERROR_RESPONSE);
   }
