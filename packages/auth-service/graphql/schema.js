@@ -199,6 +199,25 @@ export const typeDefs = /* GraphQL */ `
     review: String
   }
 
+  # ── AI User Memory ──────────────────────────────────────────────────────────
+
+  type UserPreference {
+    id: ID!
+    likedGenres: [String!]!
+    avoidedGenres: [String!]!
+    preferredPlatforms: [String!]!
+    recommendationTone: String!
+    explicitNotes: [String!]!
+    updatedAt: String
+  }
+
+  input UpdatePreferenceInput {
+    likedGenres: [String]
+    avoidedGenres: [String]
+    preferredPlatforms: [String]
+    recommendationTone: String
+  }
+
   # ── AI Game Agent ───────────────────────────────────────────────────────────
 
   type AIRecommendedPost {
@@ -252,6 +271,7 @@ export const typeDefs = /* GraphQL */ `
     myPosts: [GamePost!]!
     bookmarkedPosts: [GamePost!]!
     getPost(id: ID!): GamePost
+    myPreferences: UserPreference
   }
 
   type Mutation {
@@ -276,5 +296,7 @@ export const typeDefs = /* GraphQL */ `
     deleteComment(postId: ID!, commentId: ID!): GamePost!
     toggleCommentLike(postId: ID!, commentId: ID!): GamePost!
     featurePost(id: ID!, featured: Boolean!): GamePost!
+    updatePreference(input: UpdatePreferenceInput!): UserPreference!
+    clearPreferences: Boolean!
   }
 `;

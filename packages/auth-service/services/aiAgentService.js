@@ -9,6 +9,7 @@ import GamePost from '../models/GamePost.js';
 import { buildFullSystemPrompt } from '../prompts/aiAgentSystemPrompt.js';
 import { buildPlatformContext } from '../prompts/platformContextTemplate.js';
 import { evaluateAIResponse } from './aiEvaluationService.js';
+import { buildUserMemoryContext, saveExplicitPreferences } from './userMemoryService.js';
 import {
   GREETING_RESPONSE,
   TIMEOUT_RESPONSE,
@@ -287,24 +288,32 @@ export async function askAIAgent({ userId, username, message }) {
   }
   console.timeEnd('[AI] load history');
 
-  // 2. Optionally load platform context (disable via AI_ENABLE_PLATFORM_CONTEXT=false)
+  // 2. Load platform context + user memory in parallel
   let platformContext = '';
-  if (AI_ENABLE_PLATFORM_CONTEXT) {
-    console.time('[AI] load platform context');
-    try {
-      platformContext = await buildPlatformContext(userId);
-    } catch (err) {
-      logAIError('buildPlatformContext', err);
-      // Non-fatal — continue with empty context
-    }
-    console.timeEnd('[AI] load platform context');
-  } else {
-    console.log('[AI] platform context disabled (AI_ENABLE_PLATFORM_CONTEXT=false)');
-  }
+  let userMemoryContext = '';
+
+  console.time('[AI] load context');
+  await Promise.all([
+    // Platform context (disable via AI_ENABLE_PLATFORM_CONTEXT=false)
+    AI_ENABLE_PLATFORM_CONTEXT
+      ? buildPlatformContext(userId)
+          .then((ctx) => { platformContext = ctx; })
+          .catch((err) => { logAIError('buildPlatformContext', err); })
+      : Promise.resolve(),
+
+    // User memory: long-term preferences + behavioral inference
+    buildUserMemoryContext(userId)
+      .then((ctx) => { userMemoryContext = ctx; })
+      .catch((err) => { logAIError('buildUserMemoryContext', err); }),
+
+    // Detect and save explicit preferences from this message (fire-and-forget)
+    saveExplicitPreferences(userId, message).catch(() => {}),
+  ]);
+  console.timeEnd('[AI] load context');
 
   // 3. Build LangChain messages
   console.time('[AI] build prompt');
-  const systemPrompt = buildFullSystemPrompt(platformContext);
+  const systemPrompt = buildFullSystemPrompt(platformContext, userMemoryContext);
   const langchainMessages = [new SystemMessage(systemPrompt)];
   for (const msg of historyRecords) {
     langchainMessages.push(
