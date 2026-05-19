@@ -239,6 +239,7 @@ export const typeDefs = /* GraphQL */ `
     safetyPassed: Boolean
     recommendedPostsValid: Boolean
     flags: [String]
+    wasReflected: Boolean
   }
 
   type AIResponse {
