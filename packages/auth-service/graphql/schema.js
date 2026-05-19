@@ -211,9 +211,19 @@ export const typeDefs = /* GraphQL */ `
     reason: String
   }
 
+  type AIEvaluation {
+    groundingScore: Float
+    matchedTitles: [String]
+    hallucinations: [String]
+    safetyPassed: Boolean
+    recommendedPostsValid: Boolean
+    flags: [String]
+  }
+
   type AIResponse {
     answer: String!
     recommendedPosts: [AIRecommendedPost]
+    evaluation: AIEvaluation
   }
 
   type AIHistoryMessage {
