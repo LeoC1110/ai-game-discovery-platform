@@ -7,6 +7,7 @@ import Player from '../models/Player.js';
 import Tournament from '../models/Tournament.js';
 import TournamentResult from '../models/TournamentResult.js';
 import { askAIAgent, clearAIHistory, getAIHistory, geminiHealthTest } from '../services/aiAgentService.js';
+import { loadStoredPreferences, upsertUserPreferences, clearUserPreferences } from '../services/userMemoryService.js';
 import {
   signAuthToken,
   setAuthCookie,
@@ -295,6 +296,20 @@ export const resolvers = {
   Query: {
     _health: () => 'ok',
     me: async (_parent, _args, { user }) => (user ? safeUser(user) : null),
+    myPreferences: async (_parent, _args, { user }) => {
+      const current = requireUser(user);
+      const pref = await loadStoredPreferences(current._id);
+      if (!pref) return null;
+      return {
+        id: pref._id?.toString(),
+        likedGenres: pref.likedGenres ?? [],
+        avoidedGenres: pref.avoidedGenres ?? [],
+        preferredPlatforms: pref.preferredPlatforms ?? [],
+        recommendationTone: pref.recommendationTone ?? 'balanced',
+        explicitNotes: pref.explicitNotes ?? [],
+        updatedAt: pref.updatedAt ? pref.updatedAt.toISOString?.() ?? String(pref.updatedAt) : null,
+      };
+    },
     myAIHistory: async (_parent, _args, { user }) => {
       const current = requireUser(user);
       const history = await getAIHistory(current._id);
@@ -527,6 +542,23 @@ export const resolvers = {
     clearAIHistory: async (_parent, _args, { user }) => {
       const current = requireUser(user);
       return clearAIHistory(current._id);
+    },
+    updatePreference: async (_parent, { input }, { user }) => {
+      const current = requireUser(user);
+      const pref = await upsertUserPreferences(current._id, input);
+      return {
+        id: pref._id?.toString(),
+        likedGenres: pref.likedGenres ?? [],
+        avoidedGenres: pref.avoidedGenres ?? [],
+        preferredPlatforms: pref.preferredPlatforms ?? [],
+        recommendationTone: pref.recommendationTone ?? 'balanced',
+        explicitNotes: pref.explicitNotes ?? [],
+        updatedAt: pref.updatedAt ? pref.updatedAt.toISOString?.() ?? String(pref.updatedAt) : null,
+      };
+    },
+    clearPreferences: async (_parent, _args, { user }) => {
+      const current = requireUser(user);
+      return clearUserPreferences(current._id);
     },
     geminiHealthTest: async () => {
       // No auth required — safe to call from Apollo Sandbox to verify API connectivity.
