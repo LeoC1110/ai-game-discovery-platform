@@ -25,6 +25,45 @@ const AI_MAX_HISTORY_MESSAGES = parseInt(process.env.AI_MAX_HISTORY_MESSAGES ?? 
 // Set AI_ENABLE_PLATFORM_CONTEXT=false in .env to disable heavy context loading for debugging
 const AI_ENABLE_PLATFORM_CONTEXT = process.env.AI_ENABLE_PLATFORM_CONTEXT !== 'false';
 
+// ── Web-search rate limiter (protects Tavily free-tier quota) ────────────────
+// Free tier: 1 000 calls / month — we budget 30/day global + 3/hour per user.
+const _webSearchLimiter = {
+  GLOBAL_DAILY_LIMIT: 30,
+  PER_USER_HOURLY_LIMIT: 3,
+  _global: { count: 0, resetAt: 0 },
+  _users: new Map(),
+  check(userId) {
+    const now = Date.now();
+    // reset global counter at next UTC midnight
+    if (now >= this._global.resetAt) {
+      const midnight = new Date();
+      midnight.setUTCHours(24, 0, 0, 0);
+      this._global = { count: 0, resetAt: midnight.getTime() };
+    }
+    if (this._global.count >= this.GLOBAL_DAILY_LIMIT) {
+      return { ok: false, reason: 'Daily web-search limit reached. Please try again tomorrow.' };
+    }
+    // per-user: reset every 60 minutes
+    let u = this._users.get(userId);
+    if (!u || now >= u.resetAt) {
+      u = { count: 0, resetAt: now + 3_600_000 };
+      this._users.set(userId, u);
+    }
+    if (u.count >= this.PER_USER_HOURLY_LIMIT) {
+      return {
+        ok: false,
+        reason: `You have used all ${this.PER_USER_HOURLY_LIMIT} web searches for this hour. Please wait before trying again.`,
+      };
+    }
+    return { ok: true };
+  },
+  increment(userId) {
+    this._global.count++;
+    const u = this._users.get(userId);
+    if (u) u.count++;
+  },
+};
+
 // ── Safe error logger (never logs API key or user PII) ────────────────────────
 function logAIError(step, err) {
   console.error('[AI] Error at step:', step);
@@ -242,7 +281,59 @@ function createTools(userId) {
     },
   );
 
-  return [getMyBookmarks, getPopularGames, searchGamesByTag, getUserStats];
+  // ── Tool 5: web search (Tavily) — only registered when API key is configured ──
+  const tools = [getMyBookmarks, getPopularGames, searchGamesByTag, getUserStats];
+
+  if (process.env.TAVILY_API_KEY) {
+    const searchWeb = tool(
+      async ({ query }) => {
+        const check = _webSearchLimiter.check(String(userId));
+        if (!check.ok) {
+          console.warn('[AI:web-search] Rate limit hit for user', userId);
+          return check.reason;
+        }
+        const response = await fetch('https://api.tavily.com/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: process.env.TAVILY_API_KEY,
+            query,
+            max_results: 3,
+            search_depth: 'basic',
+            include_answer: false,
+            include_images: false,
+          }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!response.ok) {
+          throw new Error(`Web search API error: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json();
+        _webSearchLimiter.increment(String(userId));
+        console.log(
+          `[AI:web-search] Query: "${query}" — global today: ${_webSearchLimiter._global.count}/${_webSearchLimiter.GLOBAL_DAILY_LIMIT}`,
+        );
+        if (!data.results?.length) return 'No web results found for that query.';
+        return data.results
+          .map((r, i) => `[${i + 1}] ${r.title}\n${(r.content ?? '').slice(0, 400)}\nSource: ${r.url}`)
+          .join('\n\n');
+      },
+      {
+        name: 'search_web',
+        description:
+          'Search the internet for up-to-date information about games — e.g. release dates, system requirements, ' +
+          'patch notes, reviews, or gaming news not available on this platform. ' +
+          'Use ONLY as a last resort when platform data and other tools cannot answer the question. ' +
+          `Rate-limited: ${_webSearchLimiter.PER_USER_HOURLY_LIMIT} searches per user per hour, ${_webSearchLimiter.GLOBAL_DAILY_LIMIT} per day globally.`,
+        schema: z.object({
+          query: z.string().describe('Specific search query, e.g. "Hollow Knight PC minimum system requirements"'),
+        }),
+      },
+    );
+    tools.push(searchWeb);
+  }
+
+  return tools;
 }
 
 // ── Timeout wrapper ────────────────────────────────────────────────────────────
@@ -343,7 +434,8 @@ export async function askAIAgent({ userId, username, message }) {
 
   // 3. Build LangChain messages
   console.time('[AI] build prompt');
-  const systemPrompt = buildFullSystemPrompt(platformContext, userMemoryContext);
+  const hasWebSearch = !!process.env.TAVILY_API_KEY;
+  const systemPrompt = buildFullSystemPrompt(platformContext, userMemoryContext, hasWebSearch);
   const langchainMessages = [new SystemMessage(systemPrompt)];
   for (const msg of historyRecords) {
     langchainMessages.push(
