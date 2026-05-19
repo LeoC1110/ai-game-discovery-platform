@@ -1,20 +1,111 @@
-# AI-Powered Game Discovery Community Platform
+﻿# AI-Powered Game Discovery Community Platform
 
-A full-stack game discovery community platform where users can post game recommendations, browse community content, interact through likes, comments, and bookmarks, and get personalised suggestions from an AI Game Agent powered by LangChain and Google Gemini.
+A full-stack game discovery platform where users can share game recommendations, browse community posts, interact through likes, comments, and bookmarks, and receive personalized suggestions from an AI Game Agent.
+
+The project combines a community web application with an AI assistant that can read platform data, call backend tools, and generate recommendations based on real user activity.
 
 ---
 
-## Overview
+## Demo Preview
 
-This platform brings together a community of gamers who share and discover games through user-created posts. Key capabilities include:
+> Screenshots or a short demo video can be added here.
 
-- **User authentication** with JWT and role-based access (Player / Admin)
-- **Game recommendation posts** with rich metadata — genre, platform, developer, rating, tags, cover image, and review
-- **Community browsing** with likes, comments, and bookmarks
-- **User profiles** displaying posts, activity, and saved games
-- **Leaderboard** tracking top-rated games, most-liked posts, and active contributors
-- **AI Game Agent** that reads live platform data from MongoDB and provides game recommendations and community insights via LangChain and Google Gemini
-- **Conversation history** persisted in MongoDB per user
+<!-- Replace these with real screenshots after you add them to the repo -->
+
+![Community Feed](./docs/screenshots/community-feed.png)
+![AI Game Agent](./docs/screenshots/ai-agent.png)
+![Recommendation Result](./docs/screenshots/recommendation-result.png)
+
+Demo video: Coming soon  
+Live demo: Coming soon
+
+---
+
+## Key Features
+
+### Community Platform
+
+- User registration and login
+- Player and Admin role support
+- Create, edit, and delete game recommendation posts
+- Add game details such as genre, platform, developer, rating, tags, cover image, game link, and review
+- Browse community posts
+- Like, comment, and bookmark posts
+- View saved games and user activity from the profile page
+- Leaderboard for top-rated games, most-liked posts, and active contributors
+
+### AI Game Agent
+
+The AI Game Agent helps users discover games and understand community activity.
+
+It can:
+
+- Recommend games based on user bookmarks and platform activity
+- Search community posts by genre or tag
+- Summarize popular games and posts
+- Read limited, relevant MongoDB context before answering
+- Use optional web search for game information not stored in the platform
+- Store conversation history per user
+
+The AI Agent is powered by LangChain and Google Gemini. All AI requests are handled through the backend, so API keys are never exposed to the frontend.
+
+---
+
+## AI Agent Highlights
+
+This project focuses on making the AI assistant more grounded and useful inside a real full-stack application.
+
+### Backend Tool Calling
+
+The AI Agent can call backend tools to fetch real platform data before generating an answer.
+
+Available tools include:
+
+| Tool | Purpose |
+|---|---|
+| `get_my_bookmarks` | Fetches the current user's bookmarked games |
+| `get_popular_games` | Finds popular or highly liked posts |
+| `search_games_by_tag` | Searches posts by genre or tag |
+| `get_user_stats` | Reads the user's platform activity summary |
+| `search_web` | Optional Tavily-powered web search |
+
+Instead of only relying on model knowledge, the agent can use live data from MongoDB.
+
+### Rule-Based Hallucination Reduction
+
+The project includes rule-based checks to reduce unsupported AI recommendations.
+
+For example:
+
+- Recommended game titles are checked against MongoDB records
+- Recommendations without a matching database record are filtered out
+- AI responses are evaluated for unsupported game titles
+- A correction pass can be triggered when the evaluation finds issues
+
+This does not claim to fully solve hallucinations, but it reduces cases where the frontend displays AI-invented recommendation cards.
+
+### User Preference Memory
+
+The AI Agent can use user preference data to personalize recommendations.
+
+It can consider:
+
+- Explicit preferences stated by the user
+- Liked genres
+- Avoided genres
+- Preferred platforms
+- Bookmarked games
+- Recent conversation history
+
+User preferences and conversation history are stored in MongoDB.
+
+### Optional Web Search
+
+When `TAVILY_API_KEY` is configured, the AI Agent can use web search for information not available in the platform database, such as release dates, system requirements, or recent game news.
+
+The web search tool includes simple in-memory rate limiting to protect free-tier API usage.
+
+If no Tavily key is provided, the platform still works normally with the database-based AI tools.
 
 ---
 
@@ -22,85 +113,64 @@ This platform brings together a community of gamers who share and discover games
 
 | Layer | Technologies |
 |---|---|
-| Frontend | React, Vite |
-| Backend | Node.js, GraphQL (Apollo Server) |
-| Database | MongoDB (Mongoose) |
-| Authentication | JWT |
-| AI | LangChain, Google Gemini API |
-| Architecture | Monorepo, modular full-stack structure |
-
----
-
-## Core Features
-
-### Authentication
-- Register and login with hashed passwords
-- JWT stored in `localStorage` and as an HTTP cookie
-- Player and Admin role support
-
-### Game Posts
-- Create game recommendation posts with title, genre, platform, developer, rating, tags, cover image, game link, and written review
-- Edit and delete your own posts
-
-### Community
-- Browse all game recommendation posts
-- Like, comment, and bookmark posts
-- Comments display username, content, timestamp, and like count
-
-### Bookmarks
-- Save games/posts from the community feed
-- View and manage your saved games from your profile
-
-### My Profile
-- View account information and statistics
-- See your posts, comments, likes, and bookmarked games in one place
-
-### Leaderboard
-- Top-rated games by community score
-- Most-liked posts
-- Most active contributors
-
-### AI Game Agent
-- Powered by **LangChain** and **Google Gemini**
-- Reads live platform context from MongoDB — posts, ratings, tags, bookmarks, likes, and comments
-- Answers natural-language questions and provides personalised recommendations
-- **Five tools** available at runtime: `get_my_bookmarks`, `get_popular_games`, `search_games_by_tag`, `get_user_stats`, and `search_web` (Tavily, optional)
-- **Reflection loop** — if evaluation detects hallucinations or unsafe content, the agent automatically issues a self-correction pass before returning the answer
-- **Web search** (when `TAVILY_API_KEY` is set) lets the agent look up release dates, system requirements, and news not in the platform — rate-limited to protect the free tier
-- Conversation history stored per user in MongoDB
-- API key is **never** exposed to the frontend — all Gemini calls happen server-side
+| Frontend | React, Vite, Apollo Client |
+| Backend | Node.js, GraphQL, Apollo Server |
+| Database | MongoDB, Mongoose |
+| Authentication | JWT, bcrypt |
+| AI / LLM | LangChain, Google Gemini API |
+| External API | Tavily Search API |
+| Architecture | Monorepo, npm workspaces |
 
 ---
 
 ## Project Structure
 
-```
+```txt
 apps/
   auth-frontend/        # Main platform frontend
-                        # Covers: auth, dashboard, posts, community,
-                        #         bookmarks, AI agent, profile, leaderboard
-  progress-frontend/    # Secondary frontend module (progress & leaderboard views)
+                        # Auth, dashboard, posts, community,
+                        # bookmarks, AI agent, profile, leaderboard
+
+  progress-frontend/    # Secondary frontend module
+                        # Progress and leaderboard-related views
 
 packages/
   auth-service/         # Main backend API service
-                        # Covers: GraphQL API, MongoDB models, JWT auth,
-                        #         community features, AI agent integration
-  progress-service/     # Progress-related backend service (experience, achievements)
+                        # GraphQL API, MongoDB models, JWT auth,
+                        # community features, AI agent integration
+
+  progress-service/     # Progress-related backend service
+                        # Experience and achievement features
 
 shared/
   jwt/
-    index.js            # Shared JWT sign/verify helper used by both services
+    index.js            # Shared JWT sign/verify helper
 ```
 
-> **Note:** Some folder names such as `auth-frontend` and `auth-service` are kept for compatibility with the original monorepo scaffold. In the current version they serve as the **main platform frontend** and **main backend service** respectively.
+> **Note:** Some folder names such as `auth-frontend` and `auth-service` are kept from the original monorepo scaffold. In the current version, they act as the main platform frontend and backend service.
 
 ---
 
-## Environment Variables
+## Quick Start
 
-Real `.env` files are **not committed** to this repository. Each service reads its own `.env` at startup. A `.env.example` file is provided with placeholder values only.
+### 1. Clone the repository
 
-**Example (`packages/auth-service/.env`):**
+```bash
+git clone https://github.com/LeoC1110/ai-game-discovery-platform.git
+cd ai-game-discovery-platform
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Set up environment variables
+
+Create `.env` files based on the provided `.env.example` files.
+
+Example for `packages/auth-service/.env`:
 
 ```env
 MONGODB_URI=your_mongodb_uri_here
@@ -110,42 +180,36 @@ AI_MODEL=gemini-2.5-flash-lite
 AI_MAX_HISTORY_MESSAGES=10
 AI_MAX_PLATFORM_POSTS=10
 PORT=4001
+
+# Optional: enables web search tool
+TAVILY_API_KEY=your_tavily_api_key_here
 ```
 
-- `GOOGLE_API_KEY` must remain **server-side only** — the frontend never calls Gemini directly.
-- `.env.example` contains placeholder strings and is safe to commit.
+### 4. Start MongoDB
 
----
+Use either a local MongoDB instance or MongoDB Atlas.
 
-## Installation
+Default local connection: `mongodb://localhost:27017`
 
-Install all workspace dependencies (services, frontends, and shared modules) from the repo root:
+### 5. Run the backend and frontend
 
-```bash
-npm install
-```
-
----
-
-## Development
-
-Start each service and frontend in a separate terminal:
+Start each service in a separate terminal.
 
 ```bash
-# Main backend service (GraphQL, auth, AI agent)
+# Main backend service
 npm run dev:auth
 
 # Main platform frontend
 npm run dev:auth-frontend
 
-# Progress backend service (optional)
+# Optional progress backend
 npm run dev:progress
 
-# Progress frontend (optional)
+# Optional progress frontend
 npm run dev:progress-frontend
 ```
 
-**Default URLs:**
+**Default Local URLs:**
 
 | App | URL |
 |---|---|
@@ -153,32 +217,79 @@ npm run dev:progress-frontend
 | Platform GraphQL service | http://localhost:4001/graphql |
 | Progress GraphQL service | http://localhost:4002/graphql |
 
-> Make sure MongoDB is running before starting any service (default: `mongodb://localhost:27017`).
-
 ---
 
-## AI Game Agent — Example Prompts
+## Example AI Prompts
 
-The AI Agent is accessible from the platform frontend after logging in. Try prompts such as:
+After logging in, users can try prompts such as:
 
-- *Recommend games based on my bookmarks.*
-- *Summarise the most liked community posts.*
-- *What are the top-rated games right now?*
-- *Find multiplayer strategy games.*
-- *What should I play next?*
-
-The agent reads limited, relevant context from MongoDB on each request and forwards it to Gemini through the backend. **API keys are never sent to or exposed on the frontend.**
+- Recommend games based on my bookmarks.
+- What are the most liked games right now?
+- Find multiplayer strategy games.
+- Summarize my platform activity.
+- What should I play next?
 
 ---
 
 ## Security Notes
 
-- `.env` files are listed in `.gitignore` and are never committed
-- All API keys and secrets are loaded server-side only
-- `.env.example` files use placeholder strings — no real credentials
-- `node_modules/` and build output directories are excluded from version control
+- Real `.env` files are not committed
+- API keys and secrets are loaded server-side only
+- Gemini API calls are made from the backend, not the frontend
+- `.env.example` files only contain placeholder values
+- `node_modules/` and build output folders are excluded from version control
 - User conversation history is stored in MongoDB and is not committed to the repository
-- Frontend communicates with the backend via GraphQL; the backend communicates with Gemini
+- Passwords are hashed with bcrypt
+- JWT is used for authentication and role-based access control
+
+> **Note:** If JWT is stored in `localStorage` in the current implementation, this can be improved in the future by moving toward an HTTP-only cookie flow to reduce exposure to XSS attacks.
+
+---
+
+## AI Quality Checks
+
+The backend includes lightweight evaluation logic before returning AI results.
+
+Current checks include:
+
+| Check | Purpose |
+|---|---|
+| Grounding check | Verifies whether the answer is based on available platform data |
+| Recommendation validation | Checks whether recommended posts exist in MongoDB |
+| Unsupported title detection | Looks for game titles that are not backed by platform data |
+| Safety check | Flags unsafe or problematic content |
+| Reflection pass | Allows one correction attempt if issues are detected |
+
+Example evaluation response:
+
+```json
+{
+  "groundingScore": 0.85,
+  "hallucinations": [],
+  "safetyPassed": true,
+  "recommendedPostsValid": true,
+  "wasReflected": false,
+  "flags": []
+}
+```
+
+---
+
+## Feature Branch Summary
+
+Several AI-focused branches were developed and merged into the main project.
+
+| Branch | Purpose |
+|---|---|
+| `feature/rag-recommendation-engine` | Adds structured AI recommendation output |
+| `feature/ai-tool-calling` | Allows the AI Agent to call backend data tools |
+| `feature/ai-evaluation` | Adds rule-based response quality checks |
+| `feature/ai-user-memory` | Adds user preference memory and personalized recommendations |
+| `feature/agent-planning` | Adds one-pass reflection and correction flow |
+| `feature/web-search-tool` | Adds optional Tavily-powered web search |
+| `hallucination-reduce` | Improves recommendation grounding and unsupported-title filtering |
+
+Detailed implementation notes can be moved to the `docs/` folder.
 
 ---
 
@@ -188,298 +299,27 @@ This project demonstrates:
 
 - Full-stack web development with React and Node.js
 - GraphQL API design with Apollo Server
-- MongoDB data modelling with Mongoose
+- MongoDB data modeling with Mongoose
 - JWT authentication and role-based access control
-- Community platform features (posts, likes, comments, bookmarks)
-- AI integration using LangChain and the Google Gemini API
-- Agentic ReAct loop with tool calling, self-reflection, and planning
-- External API integration (Tavily web search) with in-memory rate limiting
-- Hallucination detection and self-correction without extra LLM cost
+- Community platform features such as posts, likes, comments, and bookmarks
+- AI integration using LangChain and Google Gemini
+- Backend tool calling for AI-assisted recommendations
+- Rule-based AI response evaluation
+- Optional external API integration with Tavily Search
 - Secure server-side API key handling
-- Monorepo / modular project structure with npm workspaces
+- Monorepo project organization with npm workspaces
 
 ---
 
-## Hallucination Reduction (`hallucination-reduce` branch)
-
-Four vulnerabilities were identified in the AI response pipeline and fixed without any additional LLM calls.
-
-### Vulnerabilities Found & Fixes Applied
-
-| # | Vulnerability | Where | Impact | Fix Applied |
-|---|---|---|---|---|
-| 1 | Hallucinated titles reach the client via `RECOMMENDATIONS` block | `aiAgentService.js` — `extractRecommendedPosts()` | Client displays invented game cards with no DB backing | **Plan C** — filter out any recommendation whose title has no MongoDB match (`id === null` is dropped) |
-| 2 | Detection only scans `**bold**` and `"quoted"` text — misses `*italic*` | `aiEvaluationService.js` — `detectHallucinations()` | Hallucinated names written in italic bypass the checker | Added `*italic*` regex pattern to the candidate extraction loop |
-| 3 | System prompt says _"use your general knowledge"_ if platform data is missing | `aiAgentSystemPrompt.js` | AI freely recommends games it knows from training — none of which exist in the platform | **Plan B** — replaced with _"say you don't see it in the platform yet"_ |
-| 4 | User memory context is injected with no constraint on data source | `aiAgentSystemPrompt.js` | AI uses preference profile to recommend real-world games outside the platform | Added explicit instruction: _"only recommend games that exist in the platform data below"_ alongside the memory block |
-
-### Before vs After
-
-```
-BEFORE                                      AFTER
-──────────────────────────────────────────────────────────────────────
-System prompt allows "general knowledge"  → Blocked — must use platform data only
-User memory has no source constraint      → Constrained to platform titles only
-RECOMMENDATIONS block keeps null-id items → Filtered out before client response
-detectHallucinations misses *italic* text → italic regex added
-Hallucination log is silent on server     → Prominent console.warn with title list
-```
-
-### Data Flow After Fixes
-
-```
-User message
-      ↓
-[Plan B] System prompt: platform-only constraint injected
-[Plan B] Memory profile: constrained to platform titles
-      ↓
-Gemini generates answer + RECOMMENDATIONS block
-      ↓
-extractRecommendedPosts() — DB lookup for every title
-[Plan C] Filter: drop recommendations with no DB match
-      ↓
-evaluateAIResponse() — hallucination scan
-[Fix 2]  italic text now included in scan
-[Fix 4]  console.warn if hallucinations found in answer text
-      ↓
-Return { answer, recommendedPosts (verified), evaluation }
-```
-
----
-
-## AI Feature Branches
-
-Four AI capability branches were developed independently and merged into `main`. Each one builds on the previous to make the AI agent smarter and more reliable.
-
----
-
-### 🧩 feature/rag-recommendation-engine
-
-**What it does:** The AI no longer returns plain text — it now outputs structured game recommendations alongside its answer.
-
-**How it works:**
-
-```
-User asks a question
-        ↓
-Gemini returns answer + a JSON block
-        ↓
-Server parses the JSON block
-        ↓
-Response includes: title, reason, confidence %, matched tags
-```
-
-**Result:** Every recommendation shows *why* the game was suggested and *how confident* the AI is.
-
-| Field | Example |
-|---|---|
-| `title` | Hollow Knight |
-| `reason` | Matches your interest in challenging platformers |
-| `confidence` | 0.92 |
-| `matchedTags` | indie, metroidvania, difficult |
-
----
-
-### 🔧 feature/ai-tool-calling
-
-**What it does:** Gives the AI three real tools it can call to look up live data from the database before answering.
-
-**Tools available:**
-
-| Tool | What it fetches |
-|---|---|
-| `get_my_bookmarks` | The current user's saved posts |
-| `get_popular_games` | Most-liked posts on the platform |
-| `search_games_by_tag` | Posts matching a specific tag or genre |
-
-**How it works:**
-
-```
-User asks a question
-        ↓
-AI decides which tool(s) to call
-        ↓
-Tools query MongoDB and return real data
-        ↓
-AI uses that data to generate the answer
-```
-
-**Result:** The AI answers with *real, up-to-date* content instead of guessing. If you ask "what are the popular games right now?" it actually checks.
-
----
-
-### 🔍 feature/ai-evaluation
-
-**What it does:** Every AI response is automatically evaluated by a rule-based quality checker before being returned to the user.
-
-**Four checks run on every response:**
-
-```
-AI response
-    ├── Grounding check      → Is the answer based on real platform data?
-    ├── Hallucination check  → Did the AI invent game titles not in the DB?
-    ├── Safety check         → Does it contain unsafe or harmful content?
-    └── Recommendation check → Do recommended post IDs actually exist?
-```
-
-**Result:** The response includes an `evaluation` object:
-
-```json
-{
-  "groundingScore": 0.85,
-  "hallucinations": [],
-  "safetyPassed": true,
-  "recommendedPostsValid": true,
-  "flags": []
-}
-```
-
-Developers and admins can use this to monitor AI quality over time.
-
----
-
-### 🧠 feature/ai-user-memory
-
-**What it does:** The AI now remembers who you are across conversations, using four different types of memory.
-
-**Memory layers:**
-
-```
-Short-term memory  → Current chat history (last N messages sent to Gemini)
-Long-term memory   → Your saved preferences stored in MongoDB (genres, platforms, tone)
-Behavioral memory  → Inferred from your likes and bookmarks (computed each request)
-Explicit memory    → Preferences you state directly ("I like RPG") — auto-saved
-```
-
-**How the profile is built:**
-
-```
-You say: "I like strategy games, I avoid horror"
-                    ↓
-Regex extracts: likedGenres=["strategy"], avoidedGenres=["horror"]
-                    ↓
-Saved to MongoDB UserPreference document
-                    ↓
-Next request: profile injected into system prompt
-                    ↓
-AI tailors recommendations to your profile
-```
-
-**User Preference Profile injected into every prompt:**
-
-```
-## User Preference Profile
-- Likes: strategy, co-op
-- Avoids: horror
-- Preferred platforms: PC, Switch
-- Recommendation tone: short
-- Inferred interests (from likes/bookmarks): rpg, indie, turn-based
-```
-
-**New GraphQL operations:**
-
-| Operation | Type | Description |
-|---|---|---|
-| `myPreferences` | Query | View your current stored preference profile |
-| `updatePreference` | Mutation | Manually update genres, platforms, or tone |
-| `clearPreferences` | Mutation | Reset your preference profile |
-
----
-
-### 🗂️ feature/agent-planning
-
-**What it does:** Completes the four-module agent architecture (Memory, Tools, Action, Planning) by adding the Planning / Reflection module and expanding the tool set.
-
-**1 — Fixed `get_my_bookmarks` tool description**
-
-Previously the description said only *"fetch the user's bookmarks"*, so Gemini would simply re-list them as recommendations. The description now explicitly tells the agent to:
-- Identify the common genres and tags across the bookmarks
-- Recommend **different** platform games that share those patterns
-
-**2 — New `get_user_stats` tool**
-
-Returns the user's activity summary directly from MongoDB:
-
-```
-User activity on this platform: 5 post(s) created, 8 game(s) bookmarked, 12 post(s) liked.
-```
-
-Used for personalised greetings and activity summaries.
-
-**3 — Self-correction reflection loop (Planning module)**
-
-After the main ReAct loop, evaluation runs. If hallucinations or safety issues are found the agent automatically issues one correction pass:
-
-```
-ReAct loop → answer
-        ↓
-evaluateAIResponse()
-        ↓
-hallucinations OR safetyPassed=false?
-        ↓  YES
-Reflection pass:
-  [system prompt] + [user message] + [bad answer] + [flag list]
-        ↓
-Gemini produces revised answer
-        ↓
-Re-extract recommendations + re-evaluate
-        ↓
-Return final (corrected) answer  •  evaluation.wasReflected = true
-```
-
-At most **one** reflection round per request — no recursive loops.
-
-**4 — System prompt improvements**
-
-- Explicit bookmark-discovery rule: *"identify patterns, then recommend different games"*
-- `get_user_stats` added to available-tools list
-- Preparation rule for `search_web`: *"use only as a last resort"*
-
-**New GraphQL field:**
-
-| Field | Type | Description |
-|---|---|---|
-| `AIEvaluation.wasReflected` | `Boolean` | `true` if a reflection correction pass fired for this response |
-
----
-
-### 🌐 feature/web-search-tool
-
-**What it does:** Gives the agent live internet access via the Tavily Search API so it can answer questions about games not yet in the platform database.
-
-**How it works:**
-
-```
-User asks: "What are the PC system requirements for Hollow Knight?"
-        ↓
-Agent checks platform data — not found
-        ↓
-Agent calls search_web({ query: "Hollow Knight PC minimum system requirements" })
-        ↓
-Tavily returns top 3 web results (title + snippet + source URL)
-        ↓
-Agent summarises results in its answer
-```
-
-**Rate limiting (free-tier protection):**
-
-| Limit | Value | Resets |
-|---|---|---|
-| Global daily cap | 30 calls / day | UTC midnight |
-| Per-user hourly cap | 3 calls / hour | Rolling 60 minutes |
-
-Limits are enforced entirely in-memory — no extra database table needed. When a limit is reached the tool returns a human-readable message and **no API call is made**.
-
-**Graceful degradation:**
-
-`search_web` is only registered when `TAVILY_API_KEY` is present in `.env`. Without the key the agent runs with its four platform-only tools as normal — no errors, no code changes required.
-
-**Implementation note:** Uses Node.js built-in `fetch` to POST directly to `https://api.tavily.com/search` — **no new npm package** is required.
-
-**Configuration:**
-
-```env
-# Optional — enables search_web tool. Free tier: 1 000 searches / month.
-# Get your key at: https://app.tavily.com
-TAVILY_API_KEY=tvly-xxxxxx
-```
+## Future Improvements
+
+Planned improvements include:
+
+- Add live deployment
+- Add demo video and screenshots
+- Improve UI polish and responsive layout
+- Add seed data for easier local testing
+- Add automated tests for GraphQL resolvers
+- Improve authentication flow with HTTP-only cookies
+- Add admin dashboard for monitoring AI response quality
+- Move detailed AI architecture notes into separate documentation files
