@@ -209,6 +209,8 @@ export const typeDefs = /* GraphQL */ `
     likesCount: Int
     commentsCount: Int
     reason: String
+    confidence: Float
+    matchedTags: [String]
   }
 
   type AIResponse {

@@ -26,7 +26,15 @@ Behavior guidelines:
 
 ${platformContext
     ? `Platform data (real data from this community — use it to answer the user):\n${platformContext}`
-    : 'Platform data: No community posts or bookmarks are available yet. Ask the user to create or bookmark some community posts first.'}`;
+    : 'Platform data: No community posts or bookmarks are available yet. Ask the user to create or bookmark some community posts first.'}
+
+When your response includes game recommendations, you MUST append a machine-readable block at the very end in this exact format (no extra text after it):
+<!--RECOMMENDATIONS:[{"title":"Exact Game Title","reason":"One concise sentence why this fits the user","confidence":0.95,"matchedTags":["tag1","tag2"]}]-->
+Rules for the block:
+- Use only titles that exist in the platform data above.
+- confidence is a float between 0.0 and 1.0.
+- matchedTags are tags from the game that match the user's request or bookmarks.
+- If no specific games are being recommended, omit the block entirely.`;
 }
 
 /**
