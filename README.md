@@ -64,6 +64,9 @@ This platform brings together a community of gamers who share and discover games
 - Powered by **LangChain** and **Google Gemini**
 - Reads live platform context from MongoDB — posts, ratings, tags, bookmarks, likes, and comments
 - Answers natural-language questions and provides personalised recommendations
+- **Five tools** available at runtime: `get_my_bookmarks`, `get_popular_games`, `search_games_by_tag`, `get_user_stats`, and `search_web` (Tavily, optional)
+- **Reflection loop** — if evaluation detects hallucinations or unsafe content, the agent automatically issues a self-correction pass before returning the answer
+- **Web search** (when `TAVILY_API_KEY` is set) lets the agent look up release dates, system requirements, and news not in the platform — rate-limited to protect the free tier
 - Conversation history stored per user in MongoDB
 - API key is **never** exposed to the frontend — all Gemini calls happen server-side
 
@@ -189,6 +192,9 @@ This project demonstrates:
 - JWT authentication and role-based access control
 - Community platform features (posts, likes, comments, bookmarks)
 - AI integration using LangChain and the Google Gemini API
+- Agentic ReAct loop with tool calling, self-reflection, and planning
+- External API integration (Tavily web search) with in-memory rate limiting
+- Hallucination detection and self-correction without extra LLM cost
 - Secure server-side API key handling
 - Monorepo / modular project structure with npm workspaces
 
@@ -377,3 +383,103 @@ AI tailors recommendations to your profile
 | `myPreferences` | Query | View your current stored preference profile |
 | `updatePreference` | Mutation | Manually update genres, platforms, or tone |
 | `clearPreferences` | Mutation | Reset your preference profile |
+
+---
+
+### 🗂️ feature/agent-planning
+
+**What it does:** Completes the four-module agent architecture (Memory, Tools, Action, Planning) by adding the Planning / Reflection module and expanding the tool set.
+
+**1 — Fixed `get_my_bookmarks` tool description**
+
+Previously the description said only *"fetch the user's bookmarks"*, so Gemini would simply re-list them as recommendations. The description now explicitly tells the agent to:
+- Identify the common genres and tags across the bookmarks
+- Recommend **different** platform games that share those patterns
+
+**2 — New `get_user_stats` tool**
+
+Returns the user's activity summary directly from MongoDB:
+
+```
+User activity on this platform: 5 post(s) created, 8 game(s) bookmarked, 12 post(s) liked.
+```
+
+Used for personalised greetings and activity summaries.
+
+**3 — Self-correction reflection loop (Planning module)**
+
+After the main ReAct loop, evaluation runs. If hallucinations or safety issues are found the agent automatically issues one correction pass:
+
+```
+ReAct loop → answer
+        ↓
+evaluateAIResponse()
+        ↓
+hallucinations OR safetyPassed=false?
+        ↓  YES
+Reflection pass:
+  [system prompt] + [user message] + [bad answer] + [flag list]
+        ↓
+Gemini produces revised answer
+        ↓
+Re-extract recommendations + re-evaluate
+        ↓
+Return final (corrected) answer  •  evaluation.wasReflected = true
+```
+
+At most **one** reflection round per request — no recursive loops.
+
+**4 — System prompt improvements**
+
+- Explicit bookmark-discovery rule: *"identify patterns, then recommend different games"*
+- `get_user_stats` added to available-tools list
+- Preparation rule for `search_web`: *"use only as a last resort"*
+
+**New GraphQL field:**
+
+| Field | Type | Description |
+|---|---|---|
+| `AIEvaluation.wasReflected` | `Boolean` | `true` if a reflection correction pass fired for this response |
+
+---
+
+### 🌐 feature/web-search-tool
+
+**What it does:** Gives the agent live internet access via the Tavily Search API so it can answer questions about games not yet in the platform database.
+
+**How it works:**
+
+```
+User asks: "What are the PC system requirements for Hollow Knight?"
+        ↓
+Agent checks platform data — not found
+        ↓
+Agent calls search_web({ query: "Hollow Knight PC minimum system requirements" })
+        ↓
+Tavily returns top 3 web results (title + snippet + source URL)
+        ↓
+Agent summarises results in its answer
+```
+
+**Rate limiting (free-tier protection):**
+
+| Limit | Value | Resets |
+|---|---|---|
+| Global daily cap | 30 calls / day | UTC midnight |
+| Per-user hourly cap | 3 calls / hour | Rolling 60 minutes |
+
+Limits are enforced entirely in-memory — no extra database table needed. When a limit is reached the tool returns a human-readable message and **no API call is made**.
+
+**Graceful degradation:**
+
+`search_web` is only registered when `TAVILY_API_KEY` is present in `.env`. Without the key the agent runs with its four platform-only tools as normal — no errors, no code changes required.
+
+**Implementation note:** Uses Node.js built-in `fetch` to POST directly to `https://api.tavily.com/search` — **no new npm package** is required.
+
+**Configuration:**
+
+```env
+# Optional — enables search_web tool. Free tier: 1 000 searches / month.
+# Get your key at: https://app.tavily.com
+TAVILY_API_KEY=tvly-xxxxxx
+```
