@@ -6,6 +6,7 @@ import ConversationHistory from '../models/ConversationHistory.js';
 import GamePost from '../models/GamePost.js';
 import { buildFullSystemPrompt } from '../prompts/aiAgentSystemPrompt.js';
 import { buildPlatformContext } from '../prompts/platformContextTemplate.js';
+import { evaluateAIResponse } from './aiEvaluationService.js';
 import {
   GREETING_RESPONSE,
   TIMEOUT_RESPONSE,
@@ -241,16 +242,21 @@ export async function askAIAgent({ userId, username, message }) {
   }
   console.timeEnd('[AI] gemini call');
 
-  // 5. Save history + extract recommended posts in parallel
+  // 5. Save history + extract recommended posts + run evaluation in parallel
   console.time('[AI] save + extract');
+  const allPosts = await GamePost.find().select('title').lean();
+  const knownTitles = allPosts.map((p) => p.title);
+
   const [, recommendedPosts] = await Promise.all([
     saveExchange(userId, username, message, answer),
     extractRecommendedPosts(answer),
   ]);
   console.timeEnd('[AI] save + extract');
 
+  const evaluation = evaluateAIResponse({ answer, recommendedPosts, knownTitles });
+
   console.timeEnd('[AI] askAI total');
-  return { answer, recommendedPosts };
+  return { answer, recommendedPosts, evaluation };
 }
 
 // ── Clear a user's history ─────────────────────────────────────────────────────
