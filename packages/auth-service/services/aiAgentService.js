@@ -136,7 +136,9 @@ async function extractRecommendedPosts(aiText) {
         confidence: typeof item.confidence === 'number' ? item.confidence : null,
         matchedTags: Array.isArray(item.matchedTags) ? item.matchedTags : [],
       };
-    });
+    // Plan C: remove any entry whose title has no matching DB record — prevents
+    // hallucinated game titles from reaching the client.
+    }).filter((item) => item.id !== null);
 
     return { cleanAnswer, recommendations };
   } catch {
@@ -388,6 +390,16 @@ export async function askAIAgent({ userId, username, message }) {
   console.timeEnd('[AI] save + extract');
 
   const evaluation = evaluateAIResponse({ answer: cleanAnswer, recommendedPosts, knownTitles });
+
+  // Fix 4: if hallucinations were detected in the answer text, log a prominent warning.
+  // The hallucinated titles are already blocked from recommendedPosts (Plan C above).
+  // We do NOT silently swallow the answer — the client sees evaluation.hallucinations.
+  if (evaluation.hallucinations?.length) {
+    console.warn(
+      '[AI:hallucination] Detected possible hallucinations in answer text:',
+      evaluation.hallucinations.join(', '),
+    );
+  }
 
   console.timeEnd('[AI] askAI total');
   return { answer: cleanAnswer, recommendedPosts, evaluation };

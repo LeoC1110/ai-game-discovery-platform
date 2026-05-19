@@ -32,11 +32,12 @@ export function evaluateGrounding(answer, knownTitles) {
 export function detectHallucinations(answer, knownTitles) {
   const candidates = new Set();
 
-  // Match **Bold Text** (markdown) and "Quoted Text"
-  const boldRe = /\*\*([^*]{3,80})\*\*/g;
-  const quoteRe = /"([^"]{3,80})"/g;
+  // Match **Bold Text**, *Italic Text*, and "Quoted Text"
+  const boldRe   = /\*\*([^*]{3,80})\*\*/g;
+  const italicRe = /(?<!\*)\*([^*\n]{3,80})\*(?!\*)/g;
+  const quoteRe  = /"([^"]{3,80})"/g;
 
-  for (const re of [boldRe, quoteRe]) {
+  for (const re of [boldRe, italicRe, quoteRe]) {
     let m;
     while ((m = re.exec(answer)) !== null) {
       candidates.add(m[1].trim());

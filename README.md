@@ -194,6 +194,53 @@ This project demonstrates:
 
 ---
 
+## Hallucination Reduction (`hallucination-reduce` branch)
+
+Four vulnerabilities were identified in the AI response pipeline and fixed without any additional LLM calls.
+
+### Vulnerabilities Found & Fixes Applied
+
+| # | Vulnerability | Where | Impact | Fix Applied |
+|---|---|---|---|---|
+| 1 | Hallucinated titles reach the client via `RECOMMENDATIONS` block | `aiAgentService.js` — `extractRecommendedPosts()` | Client displays invented game cards with no DB backing | **Plan C** — filter out any recommendation whose title has no MongoDB match (`id === null` is dropped) |
+| 2 | Detection only scans `**bold**` and `"quoted"` text — misses `*italic*` | `aiEvaluationService.js` — `detectHallucinations()` | Hallucinated names written in italic bypass the checker | Added `*italic*` regex pattern to the candidate extraction loop |
+| 3 | System prompt says _"use your general knowledge"_ if platform data is missing | `aiAgentSystemPrompt.js` | AI freely recommends games it knows from training — none of which exist in the platform | **Plan B** — replaced with _"say you don't see it in the platform yet"_ |
+| 4 | User memory context is injected with no constraint on data source | `aiAgentSystemPrompt.js` | AI uses preference profile to recommend real-world games outside the platform | Added explicit instruction: _"only recommend games that exist in the platform data below"_ alongside the memory block |
+
+### Before vs After
+
+```
+BEFORE                                      AFTER
+──────────────────────────────────────────────────────────────────────
+System prompt allows "general knowledge"  → Blocked — must use platform data only
+User memory has no source constraint      → Constrained to platform titles only
+RECOMMENDATIONS block keeps null-id items → Filtered out before client response
+detectHallucinations misses *italic* text → italic regex added
+Hallucination log is silent on server     → Prominent console.warn with title list
+```
+
+### Data Flow After Fixes
+
+```
+User message
+      ↓
+[Plan B] System prompt: platform-only constraint injected
+[Plan B] Memory profile: constrained to platform titles
+      ↓
+Gemini generates answer + RECOMMENDATIONS block
+      ↓
+extractRecommendedPosts() — DB lookup for every title
+[Plan C] Filter: drop recommendations with no DB match
+      ↓
+evaluateAIResponse() — hallucination scan
+[Fix 2]  italic text now included in scan
+[Fix 4]  console.warn if hallucinations found in answer text
+      ↓
+Return { answer, recommendedPosts (verified), evaluation }
+```
+
+---
+
 ## AI Feature Branches
 
 Four AI capability branches were developed independently and merged into `main`. Each one builds on the previous to make the AI agent smarter and more reliable.
