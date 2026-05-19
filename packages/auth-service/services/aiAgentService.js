@@ -170,7 +170,11 @@ function createTools(userId) {
     },
     {
       name: 'get_my_bookmarks',
-      description: "Fetch the current user's bookmarked games from the database.",
+      description:
+        "Fetch the current user's bookmarked games to understand their taste profile. " +
+        'After calling this tool, identify the common genres and tags across the bookmarks, ' +
+        'then recommend DIFFERENT games from the platform data that share those patterns. ' +
+        'Do NOT simply re-list the bookmarked games as recommendations.',
       schema: z.object({}),
     },
   );
@@ -214,7 +218,31 @@ function createTools(userId) {
     },
   );
 
-  return [getMyBookmarks, getPopularGames, searchGamesByTag];
+  // ── Tool 4: user activity stats ──────────────────────────────────────────
+  const getUserStats = tool(
+    async () => {
+      const [postsCount, bookmarksCount, likedCount] = await Promise.all([
+        GamePost.countDocuments({ user: userId }),
+        GamePost.countDocuments({ bookmarkedBy: userId }),
+        GamePost.countDocuments({ likedBy: userId }),
+      ]);
+      return (
+        `User activity on this platform: ` +
+        `${postsCount} post(s) created, ` +
+        `${bookmarksCount} game(s) bookmarked, ` +
+        `${likedCount} post(s) liked.`
+      );
+    },
+    {
+      name: 'get_user_stats',
+      description:
+        "Get the current user's activity statistics (posts created, bookmarks, liked games). " +
+        'Use this for personalised greetings, activity summaries, or when the user asks how active they are.',
+      schema: z.object({}),
+    },
+  );
+
+  return [getMyBookmarks, getPopularGames, searchGamesByTag, getUserStats];
 }
 
 // ── Timeout wrapper ────────────────────────────────────────────────────────────
@@ -380,29 +408,70 @@ export async function askAIAgent({ userId, username, message }) {
   }
   console.timeEnd('[AI] gemini call');
 
-  // 5. Parse structured recommendations + run evaluation in parallel
+  // 5. Extract structured recommendations + fetch known titles for evaluation
   console.time('[AI] save + extract');
-  const { cleanAnswer, recommendations } = await extractRecommendedPosts(answer);
+  let { cleanAnswer, recommendations } = await extractRecommendedPosts(answer);
   const allPosts = await GamePost.find().select('title').lean();
   const knownTitles = allPosts.map((p) => p.title);
-  await saveExchange(userId, username, message, cleanAnswer);
-  const recommendedPosts = recommendations;
   console.timeEnd('[AI] save + extract');
 
-  const evaluation = evaluateAIResponse({ answer: cleanAnswer, recommendedPosts, knownTitles });
+  // 6. First evaluation pass
+  let evaluation = evaluateAIResponse({ answer: cleanAnswer, recommendedPosts: recommendations, knownTitles });
 
-  // Fix 4: if hallucinations were detected in the answer text, log a prominent warning.
-  // The hallucinated titles are already blocked from recommendedPosts (Plan C above).
-  // We do NOT silently swallow the answer — the client sees evaluation.hallucinations.
-  if (evaluation.hallucinations?.length) {
-    console.warn(
-      '[AI:hallucination] Detected possible hallucinations in answer text:',
-      evaluation.hallucinations.join(', '),
-    );
+  // 7. Planning — Reflection pass
+  // If evaluation found hallucinations or safety issues, ask Gemini to revise its own answer.
+  // Uses a minimal context (system + user message + bad answer) — no tools this round.
+  // At most ONE reflection to avoid runaway API calls.
+  const needsReflection = evaluation.hallucinations.length > 0 || !evaluation.safetyPassed;
+  let wasReflected = false;
+
+  if (needsReflection) {
+    console.warn('[AI:reflect] Issues detected — starting reflection pass. Flags:', evaluation.flags);
+    try {
+      const flagList = evaluation.flags.map((f) => `- ${f}`).join('\n');
+      const reflectionMessages = [
+        new SystemMessage(systemPrompt),
+        new HumanMessage(message),
+        new AIMessage(cleanAnswer),
+        new HumanMessage(
+          `Your previous response was automatically checked and the following issues were found:\n` +
+          `${flagList}\n\n` +
+          `Please provide a revised response that:\n` +
+          `• Only references game titles that exist in the platform data\n` +
+          `• Is safe and appropriate\n` +
+          `• Stays grounded in the provided context`,
+        ),
+      ];
+      console.time('[AI] reflection call');
+      const reflected = await withTimeout(model.invoke(reflectionMessages), AI_TIMEOUT_MS);
+      console.timeEnd('[AI] reflection call');
+      const reflectedText =
+        typeof reflected.content === 'string'
+          ? reflected.content
+          : reflected.content.map((c) => (typeof c === 'string' ? c : c.text ?? '')).join('');
+      if (reflectedText) {
+        const re = await extractRecommendedPosts(reflectedText);
+        cleanAnswer = re.cleanAnswer;
+        recommendations = re.recommendations;
+        evaluation = evaluateAIResponse({ answer: cleanAnswer, recommendedPosts: recommendations, knownTitles });
+        wasReflected = true;
+        console.log('[AI:reflect] Reflection complete. Remaining flags:', evaluation.flags.length);
+      }
+    } catch (err) {
+      console.warn('[AI:reflect] Reflection pass failed — using original answer:', err?.message);
+    }
+  } else if (evaluation.hallucinations?.length) {
+    // Hallucinations found in text but not in RECOMMENDATIONS block — log only
+    console.warn('[AI:hallucination] Hallucinations in answer text:', evaluation.hallucinations.join(', '));
   }
 
+  // 8. Save final (possibly reflected) answer to history
+  await saveExchange(userId, username, message, cleanAnswer);
+
+  evaluation.wasReflected = wasReflected;
+
   console.timeEnd('[AI] askAI total');
-  return { answer: cleanAnswer, recommendedPosts, evaluation };
+  return { answer: cleanAnswer, recommendedPosts: recommendations, evaluation };
 }
 
 // ── Clear a user's history ─────────────────────────────────────────────────────
