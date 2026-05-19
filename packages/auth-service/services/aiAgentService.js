@@ -94,27 +94,49 @@ async function saveExchange(userId, username, userMessage, aiResponse) {
   }
 }
 
-// ── Build recommended posts list from AI answer ────────────────────────────────
+// ── Extract the <!--RECOMMENDATIONS:[...]-->  block from AI text ─────────────
+// Returns { cleanAnswer, recommendations } where recommendations is the parsed
+// array augmented with DB data (id, rating, tags, likesCount, commentsCount).
+const RECO_BLOCK_RE = /<!--RECOMMENDATIONS:(\[.*?\])-->/s;
+
 async function extractRecommendedPosts(aiText) {
+  const match = RECO_BLOCK_RE.exec(aiText);
+  if (!match) return { cleanAnswer: aiText, recommendations: [] };
+
+  // Strip the block from the visible answer
+  const cleanAnswer = aiText.replace(RECO_BLOCK_RE, '').trimEnd();
+
+  let parsed;
+  try {
+    parsed = JSON.parse(match[1]);
+    if (!Array.isArray(parsed)) return { cleanAnswer, recommendations: [] };
+  } catch {
+    return { cleanAnswer, recommendations: [] };
+  }
+
+  // Enrich each entry with real DB data
   try {
     const posts = await GamePost.find().lean();
-    const mentioned = posts
-      .filter((p) => {
-        const re = new RegExp(p.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-        return re.test(aiText);
-      })
-      .slice(0, 5);
-    return mentioned.map((p) => ({
-      id: p._id.toString(),
-      title: p.title,
-      rating: p.rating ?? null,
-      tags: p.tags ?? [],
-      likesCount: p.likedBy?.length ?? 0,
-      commentsCount: p.comments?.length ?? 0,
-      reason: null,
-    }));
+    const postMap = new Map(posts.map((p) => [p.title.toLowerCase(), p]));
+
+    const recommendations = parsed.slice(0, 5).map((item) => {
+      const dbPost = postMap.get((item.title ?? '').toLowerCase());
+      return {
+        id: dbPost ? dbPost._id.toString() : null,
+        title: item.title ?? null,
+        rating: dbPost?.rating ?? null,
+        tags: dbPost?.tags ?? [],
+        likesCount: dbPost?.likedBy?.length ?? 0,
+        commentsCount: dbPost?.comments?.length ?? 0,
+        reason: item.reason ?? null,
+        confidence: typeof item.confidence === 'number' ? item.confidence : null,
+        matchedTags: Array.isArray(item.matchedTags) ? item.matchedTags : [],
+      };
+    });
+
+    return { cleanAnswer, recommendations };
   } catch {
-    return [];
+    return { cleanAnswer, recommendations: [] };
   }
 }
 
@@ -241,16 +263,14 @@ export async function askAIAgent({ userId, username, message }) {
   }
   console.timeEnd('[AI] gemini call');
 
-  // 5. Save history + extract recommended posts in parallel
+  // 5. Parse structured recommendations + strip block from answer
   console.time('[AI] save + extract');
-  const [, recommendedPosts] = await Promise.all([
-    saveExchange(userId, username, message, answer),
-    extractRecommendedPosts(answer),
-  ]);
+  const { cleanAnswer, recommendations } = await extractRecommendedPosts(answer);
+  await saveExchange(userId, username, message, cleanAnswer);
   console.timeEnd('[AI] save + extract');
 
   console.timeEnd('[AI] askAI total');
-  return { answer, recommendedPosts };
+  return { answer: cleanAnswer, recommendedPosts: recommendations };
 }
 
 // ── Clear a user's history ─────────────────────────────────────────────────────
