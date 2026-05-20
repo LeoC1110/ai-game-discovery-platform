@@ -9,7 +9,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
  */
 export function renderWithProviders(ui, { mocks = [], route = '/', path = '*' } = {}) {
   return render(
-      <MockedProvider mocks={mocks}>
+      <MockedProvider mocks={mocks} addTypename={false}>
       <MemoryRouter initialEntries={[route]}>
         <Routes>
           <Route path={path} element={ui} />
