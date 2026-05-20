@@ -90,7 +90,8 @@ npm run dev:auth:real   # real Gemini mode (from project root)
 | Suite | Result | Command |
 |---|---|---|
 | Frontend — Vitest + React Testing Library | 70 / 70 pass | `npm test --workspace @apps/auth-frontend` |
-| Backend — AI mock mode (Node `node:test`) | 17 / 17 pass | `npm test --workspace @services/auth` |
+| Backend — mock mode unit tests (Node `node:test`) | 17 / 17 pass | `npm test --workspace @services/auth` |
+| Backend — pipeline integration tests (Node `node:test`) | 15 / 15 pass | `npm test --workspace @services/auth` |
 
 ---
 

@@ -210,7 +210,8 @@ After logging in, users can try prompts such as:
 | Suite | Result | Command |
 |---|---|---|
 | Frontend — Vitest + React Testing Library | 70 / 70 pass | `npm test --workspace @apps/auth-frontend` |
-| Backend — AI mock mode (`node:test`) | 17 / 17 pass | `npm test --workspace @services/auth` |
+| Backend — mock mode unit tests (`node:test`) | 17 / 17 pass | `npm test --workspace @services/auth` |
+| Backend — pipeline integration tests (`node:test`) | 15 / 15 pass | `npm test --workspace @services/auth` |
 
 ---
 
@@ -233,7 +234,7 @@ This project demonstrates:
 - Optional external API integration with Tavily Search
 - Secure server-side API key handling
 - Monorepo project organization with npm workspaces
-- 70/70 frontend tests + 17/17 backend tests
+- 70/70 frontend tests + 32/32 backend tests (mock mode unit tests + pipeline integration tests)
 
 ---
 
