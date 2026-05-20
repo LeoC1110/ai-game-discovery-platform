@@ -49,84 +49,9 @@ The AI Agent helps users discover games and understand community activity. It ca
 - Search community posts by genre or tag
 - Use optional web search for game information not stored in the platform
 
-The AI Agent is powered by LangChain and Google Gemini. All AI requests are handled through the backend, so API keys are never exposed to the frontend.
+The AI Agent is powered by LangChain and Google Gemini. All API keys are handled server-side — never exposed to the frontend.
 
----
-
-## AI Agent Highlights
-
-This project focuses on making the AI assistant more grounded and useful inside a real full-stack application.
-
-### Modular Agent Pipeline
-
-The AI Agent was refactored from a monolithic service into a 6-step modular pipeline (`packages/auth-service/ai/`):
-
-| Step | Module | Purpose |
-|---|---|---|
-| 0 | `aiPipeline.js` | Greeting fast-path — returns immediately for `hi`, `hello`, `你好`, etc. |
-| 1 | `conversationManager.js` | Load history, count turns, load `UserMemory` (summary + tracked topics) |
-| 2 | `routerAgent.js` | Classify intent via keyword patterns (no Gemini call) |
-| 3 | `platformTools.js` | Fetch DB data relevant to the intent |
-| 4 | `answerAgent.js` | Call Gemini with context + platform data |
-| 4b | `recommendationExtractor.js` | Strip `<!--RECOMMENDATIONS:[…]-->` block, enrich with DB data |
-| 5 | `validatorAgent.js` | Evaluate grounding/hallucinations/safety; run reflection pass if needed |
-| 6 | `conversationManager.js` | Save exchange; trigger 5-turn summary into `UserMemory` |
-
-**Context management** — Every 5 user turns, a rolling plain-text summary of the conversation is saved to the `UserMemory` model (per-user, MongoDB). On subsequent turns, the summary + tracked genre topics are prepended to the Gemini context window.
-
-**Reflection loop** — If `evaluateResponse()` detects hallucinated titles or a safety failure, `generateReflection()` sends the bad answer + flag list back to Gemini for a one-pass correction. The returned `evaluation` object includes a `wasReflected` flag.
-
-### Backend Tool Calling
-
-The AI Agent can call backend tools to fetch real platform data before generating an answer.
-
-Available tools include:
-
-| Tool | Purpose |
-|---|---|
-| `get_my_bookmarks` | Fetches the current user's bookmarked games |
-| `get_popular_games` | Finds popular or highly liked posts |
-| `search_games_by_tag` | Searches posts by genre or tag |
-| `get_user_stats` | Reads the user's platform activity summary |
-| `search_web` | Optional Tavily-powered web search |
-
-Instead of only relying on model knowledge, the agent can use live data from MongoDB.
-
-### Rule-Based Hallucination Reduction
-
-The project includes rule-based checks to reduce unsupported AI recommendations.
-
-For example:
-
-- Recommended game titles are checked against MongoDB records
-- Recommendations without a matching database record are filtered out
-- AI responses are evaluated for unsupported game titles
-- A correction pass can be triggered when the evaluation finds issues
-
-This does not claim to fully solve hallucinations, but it reduces cases where the frontend displays AI-invented recommendation cards.
-
-### User Preference Memory
-
-The AI Agent can use user preference data to personalize recommendations.
-
-It can consider:
-
-- Explicit preferences stated by the user
-- Liked genres
-- Avoided genres
-- Preferred platforms
-- Bookmarked games
-- Recent conversation history
-
-User preferences and conversation history are stored in MongoDB.
-
-### Optional Web Search
-
-When `TAVILY_API_KEY` is configured, the AI Agent can use web search for information not available in the platform database, such as release dates, system requirements, or recent game news.
-
-The web search tool includes simple in-memory rate limiting to protect free-tier API usage.
-
-If no Tavily key is provided, the platform still works normally with the database-based AI tools.
+See [CHANGELOG.md](./CHANGELOG.md) for a detailed breakdown of the pipeline architecture, evaluation logic, and update history.
 
 ---
 
@@ -168,75 +93,20 @@ shared/
     index.js            # Shared JWT sign/verify helper
 ```
 
-> **Note:** Some folder names such as `auth-frontend` and `auth-service` are kept from the original monorepo scaffold. In the current version, they act as the main platform frontend and backend service.
+> **Note:** Some folder names such as `auth-frontend` and `auth-service` are from the original monorepo scaffold. They act as the main platform frontend and backend service.
 
 ---
 
-## AI Mock Mode (Local Development)
+## AI Mock Mode
 
-When the Gemini free-tier quota is exhausted, or you want to test the UI and pipeline
-without consuming API calls, run the backend in mock mode.
-
-### How to enable mock mode
-
-Option A — use the npm script (recommended, no `.env` editing needed):
+When the Gemini free-tier quota is exhausted, run with `AI_MOCK_MODE=true` to skip all Gemini calls and return deterministic responses for local testing.
 
 ```bash
-# From the project root
-npm run dev:auth:mock
-
-# Or from packages/auth-service directly
-npm run dev:mock
+npm run dev:auth:mock   # mock mode — no Gemini calls
+npm run dev:auth:real   # real Gemini mode
 ```
 
-Option B — set the variable in `packages/auth-service/.env`:
-
-```env
-AI_MOCK_MODE=true
-```
-
-Then start normally with `npm run dev:auth`.
-
-### How to switch back to real Gemini mode
-
-Option A — use the npm script:
-
-```bash
-# From the project root
-npm run dev:auth:real
-
-# Or from packages/auth-service directly
-npm run dev:real
-```
-
-Option B — set `AI_MOCK_MODE=false` (or remove the variable) in `.env`, then restart.
-
-### What mock mode does
-
-| Behaviour | Mock mode | Real mode |
-|---|---|---|
-| Gemini API calls | Skipped entirely | Normal |
-| `GOOGLE_API_KEY` required | No | Yes |
-| `recommendedPosts` in response | Yes (pre-defined) | Yes (from Gemini) |
-| Memory + evaluation + reflection | All pipeline steps run | All pipeline steps run |
-| Greeting fast-path | Still works | Still works |
-| Responses vary per message | Fixed per intent | Dynamic |
-
-> **Note:** Mock mode is only for local development and testing.
-> Never set `AI_MOCK_MODE=true` in a production environment.
-
-### Running backend tests
-
-```bash
-# From packages/auth-service
-npm test
-
-# Or from the project root
-npm test --workspace @services/auth
-```
-
-These tests verify that mock mode skips Gemini, real mode reaches Gemini,
-and all mock responses are valid strings with the correct structure.
+See [CHANGELOG.md](./CHANGELOG.md) for full mock mode documentation and behaviour details.
 
 ---
 
@@ -331,55 +201,16 @@ After logging in, users can try prompts such as:
 - Passwords are hashed with bcrypt
 - JWT is used for authentication and role-based access control
 
-> **Note:** If JWT is stored in `localStorage` in the current implementation, this can be improved in the future by moving toward an HTTP-only cookie flow to reduce exposure to XSS attacks.
+> **Note:** If JWT is stored in `localStorage`, consider moving to HTTP-only cookies in a future iteration to reduce XSS exposure.
 
 ---
 
-## AI Quality Checks
+## Testing
 
-The backend includes lightweight evaluation logic before returning AI results.
-
-Current checks include:
-
-| Check | Purpose |
-|---|---|
-| Grounding check | Verifies whether the answer is based on available platform data |
-| Recommendation validation | Checks whether recommended posts exist in MongoDB |
-| Unsupported title detection | Looks for game titles that are not backed by platform data |
-| Safety check | Flags unsafe or problematic content |
-| Reflection pass | Allows one correction attempt if issues are detected |
-
-Example evaluation response:
-
-```json
-{
-  "groundingScore": 0.85,
-  "hallucinations": [],
-  "safetyPassed": true,
-  "recommendedPostsValid": true,
-  "wasReflected": false,
-  "flags": []
-}
-```
-
----
-
-## Feature Branch Summary
-
-Several AI-focused branches were developed and merged into the main project.
-
-| Branch | Purpose |
-|---|---|
-| `feature/agent-update` | Modular 6-step AI pipeline, context management, UserMemory, evaluation + reflection (70/70 tests) |
-| `feature/rag-recommendation-engine` | Adds structured AI recommendation output |
-| `feature/ai-tool-calling` | Allows the AI Agent to call backend data tools |
-| `feature/ai-evaluation` | Adds rule-based response quality checks |
-| `feature/ai-user-memory` | Adds user preference memory and personalized recommendations |
-| `feature/agent-planning` | Adds one-pass reflection and correction flow |
-| `feature/web-search-tool` | Adds optional Tavily-powered web search |
-| `hallucination-reduce` | Improves recommendation grounding and unsupported-title filtering |
-
-Detailed implementation notes can be moved to the `docs/` folder.
+| Suite | Result | Command |
+|---|---|---|
+| Frontend — Vitest + React Testing Library | 70 / 70 pass | `npm test --workspace @apps/auth-frontend` |
+| Backend — AI mock mode (`node:test`) | 17 / 17 pass | `npm test --workspace @services/auth` |
 
 ---
 
@@ -402,19 +233,16 @@ This project demonstrates:
 - Optional external API integration with Tavily Search
 - Secure server-side API key handling
 - Monorepo project organization with npm workspaces
-- 70/70 frontend tests passing (Vitest + React Testing Library)
+- 70/70 frontend tests + 17/17 backend tests
 
 ---
 
-## Future Improvements
+## Changelog
 
-Planned improvements include:
+See [CHANGELOG.md](./CHANGELOG.md) for:
 
-- Add live deployment
-- Add demo video and screenshots
-- Improve UI polish and responsive layout
-- Add seed data for easier local testing
-- Add automated tests for GraphQL resolvers
-- Improve authentication flow with HTTP-only cookies
-- Add admin dashboard for monitoring AI response quality
-- Move detailed AI architecture notes into separate documentation files
+- AI Agent pipeline architecture and all recent updates
+- AI quality checks and evaluation details
+- Backend tool calling and web search
+- Feature branch history
+- Planned future improvements
