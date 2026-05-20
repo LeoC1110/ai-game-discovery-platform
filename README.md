@@ -172,6 +172,74 @@ shared/
 
 ---
 
+## AI Mock Mode (Local Development)
+
+When the Gemini free-tier quota is exhausted, or you want to test the UI and pipeline
+without consuming API calls, run the backend in mock mode.
+
+### How to enable mock mode
+
+Option A — use the npm script (recommended, no `.env` editing needed):
+
+```bash
+# From the project root
+npm run dev:auth:mock
+
+# Or from packages/auth-service directly
+npm run dev:mock
+```
+
+Option B — set the variable in `packages/auth-service/.env`:
+
+```env
+AI_MOCK_MODE=true
+```
+
+Then start normally with `npm run dev:auth`.
+
+### How to switch back to real Gemini mode
+
+Option A — use the npm script:
+
+```bash
+# From the project root
+npm run dev:auth:real
+
+# Or from packages/auth-service directly
+npm run dev:real
+```
+
+Option B — set `AI_MOCK_MODE=false` (or remove the variable) in `.env`, then restart.
+
+### What mock mode does
+
+| Behaviour | Mock mode | Real mode |
+|---|---|---|
+| Gemini API calls | Skipped entirely | Normal |
+| `GOOGLE_API_KEY` required | No | Yes |
+| `recommendedPosts` in response | Yes (pre-defined) | Yes (from Gemini) |
+| Memory + evaluation + reflection | All pipeline steps run | All pipeline steps run |
+| Greeting fast-path | Still works | Still works |
+| Responses vary per message | Fixed per intent | Dynamic |
+
+> **Note:** Mock mode is only for local development and testing.
+> Never set `AI_MOCK_MODE=true` in a production environment.
+
+### Running backend tests
+
+```bash
+# From packages/auth-service
+npm test
+
+# Or from the project root
+npm test --workspace @services/auth
+```
+
+These tests verify that mock mode skips Gemini, real mode reaches Gemini,
+and all mock responses are valid strings with the correct structure.
+
+---
+
 ## Quick Start
 
 ### 1. Clone the repository

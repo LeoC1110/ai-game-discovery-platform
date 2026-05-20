@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon --watch .env server.js",
-    "start": "node server.js"
+    "dev:mock": "cross-env AI_MOCK_MODE=true nodemon --watch .env server.js",
+    "dev:real": "cross-env AI_MOCK_MODE=false nodemon --watch .env server.js",
+    "start": "node server.js",
+    "test": "node --test ai/__tests__/mockMode.test.js"
   },
   "dependencies": {
     "@apollo/server": "^5.0.0",
@@ -23,6 +26,7 @@
     "mongoose": "^8.19.1"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "nodemon": "^3.1.10"
   }
 }

@@ -1,9 +1,13 @@
 // packages/auth-service/ai/answerAgent.js
 // Generates a Gemini response from intent-classified context and platform data.
 // Reuses the same SDK and env vars as the existing AI service.
+//
+// Mock mode: set AI_MOCK_MODE=true in .env (or use `npm run dev:mock` from auth-service)
+// to skip all Gemini calls and return deterministic responses for local development.
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import { INTENTS } from './routerAgent.js';
+import { getMockAnswer, getMockReflection } from './mockAiService.js';
 
 const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS ?? '30000', 10);
 
@@ -88,6 +92,11 @@ function withTimeout(promise, ms) {
  * @returns {Promise<string>} raw text answer from Gemini
  */
 export async function generateAnswer({ userMessage, intent, conversationContext, platformData }) {
+  if (process.env.AI_MOCK_MODE === 'true') {
+    console.log('[answerAgent] MOCK MODE — skipping Gemini, returning mock answer for intent:', intent);
+    return getMockAnswer({ intent });
+  }
+
   const model = getModel();
   const messages = [new SystemMessage(buildSystemPrompt(intent, platformData))];
 
@@ -119,6 +128,11 @@ export async function generateAnswer({ userMessage, intent, conversationContext,
  * @returns {Promise<string>} corrected answer text
  */
 export async function generateReflection({ badAnswer, flags, userMessage, intent, platformData }) {
+  if (process.env.AI_MOCK_MODE === 'true') {
+    console.log('[answerAgent] MOCK MODE — skipping Gemini reflection, returning mock reflection');
+    return getMockReflection({ badAnswer });
+  }
+
   const model = getModel();
   const flagList = flags.map((f) => `- ${f}`).join('\n');
 
