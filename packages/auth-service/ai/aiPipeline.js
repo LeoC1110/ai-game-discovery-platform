@@ -23,6 +23,9 @@ import {
   getUserTurnCount,
   buildConversationContext,
   extractTopicContext,
+  loadUserMemory,
+  saveConversationSummary,
+  buildSimpleSummary,
 } from './conversationManager.js';
 import { classifyIntent } from './routerAgent.js';
 import { fetchDataForIntent } from './platformTools.js';
@@ -99,15 +102,25 @@ export async function runPipeline({ userId, username, message }) {
 
   // ── Step 1: Conversation Manager ─────────────────────────────────────────
   console.time('[pipeline] step1 conversationManager');
-  const [historyRecords, userTurnCount] = await Promise.all([
+  const [historyRecords, userTurnCount, userMemory] = await Promise.all([
     loadHistory(userId),
     getUserTurnCount(userId),
+    loadUserMemory(userId),
   ]);
-  const conversationContext = buildConversationContext(historyRecords);
-  // eslint-disable-next-line no-unused-vars
-  const topicContext = extractTopicContext(historyRecords); // placeholder — null for now
+  const topicContext = extractTopicContext(historyRecords, message);
+
+  // Build conversation context: stored summary (if any) + recent history
+  let conversationContext = buildConversationContext(historyRecords);
+  if (userMemory.conversationSummary) {
+    conversationContext = `${userMemory.conversationSummary}\n\n${conversationContext}`;
+  }
+  if (userMemory.trackedTopics.length) {
+    conversationContext = `[Recent topics: ${userMemory.trackedTopics.join(', ')}]\n${conversationContext}`;
+  }
+
+  const newTurnCount = userTurnCount + 1;
   console.log(
-    `[pipeline] turn #${userTurnCount + 1}, history: ${historyRecords.length} msg(s)`,
+    `[pipeline] turn #${newTurnCount}, history: ${historyRecords.length} msg(s), topics: ${topicContext?.join(', ') ?? 'none'}`,
   );
   console.timeEnd('[pipeline] step1 conversationManager');
 
@@ -157,7 +170,7 @@ export async function runPipeline({ userId, username, message }) {
     return {
       answer: GENERIC_ERROR_RESPONSE,
       intent,
-      userTurnCount: userTurnCount + 1,
+      userTurnCount: newTurnCount,
       recommendedPosts: [],
       evaluation: null,
     };
@@ -169,6 +182,17 @@ export async function runPipeline({ userId, username, message }) {
   await saveExchange(userId, username, message, cleanAnswer);
   console.log('[pipeline] Exchange saved');
 
+  // ── 5-turn summary trigger ─────────────────────────────────────────────
+  // Every 5th user turn: compress history + current exchange into a rolling
+  // summary stored in UserMemory, so long conversations don’t overflow context.
+  if (newTurnCount % 5 === 0) {
+    console.log(`[pipeline] 5-turn milestone (turn ${newTurnCount}) — saving summary`);
+    const summary = buildSimpleSummary(historyRecords, message, cleanAnswer);
+    const latestTopics = extractTopicContext(historyRecords, message) ?? [];
+    // Fire-and-forget — non-blocking so it doesn’t delay the response
+    saveConversationSummary(userId, summary, latestTopics).catch(() => {});
+  }
+
   console.timeEnd('[pipeline] total');
 
   // Return shape matches the AIResponse GraphQL type.
@@ -176,7 +200,7 @@ export async function runPipeline({ userId, username, message }) {
   return {
     answer: cleanAnswer,
     intent,
-    userTurnCount: userTurnCount + 1,
+    userTurnCount: newTurnCount,
     recommendedPosts: recommendations,
     evaluation: null,
   };
