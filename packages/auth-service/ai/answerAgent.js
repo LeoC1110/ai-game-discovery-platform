@@ -39,6 +39,17 @@ const INTENT_ROLE_MAP = {
   [INTENTS.GENERAL_CHAT]:        'have a helpful conversation about games and gaming',
 };
 
+// RECOMMENDATIONS block format instruction — must match the regex in recommendationExtractor.js
+const RECO_FORMAT_RULE =
+  `\nWhen your response includes specific game recommendations, you MUST append a ` +
+  `machine-readable block at the very end in this exact format (no extra text after it):\n` +
+  `<!--RECOMMENDATIONS:[{"title":"Exact Game Title","reason":"One concise sentence why this fits the user","confidence":0.95,"matchedTags":["tag1","tag2"]}]-->\n` +
+  `Rules for the block:\n` +
+  `- Use only titles that exist in the platform data above.\n` +
+  `- confidence is a float between 0.0 and 1.0.\n` +
+  `- matchedTags are tags from the game that match the user's request.\n` +
+  `- If no specific games are being recommended, omit the block entirely.`;
+
 function buildSystemPrompt(intent, platformData) {
   const role = INTENT_ROLE_MAP[intent] ?? 'assist with gaming questions';
   let prompt =
@@ -49,6 +60,8 @@ function buildSystemPrompt(intent, platformData) {
   if (platformData) {
     prompt += `\n--- Platform Data ---\n${platformData}\n--- End Platform Data ---\n`;
   }
+
+  prompt += RECO_FORMAT_RULE;
 
   return prompt;
 }

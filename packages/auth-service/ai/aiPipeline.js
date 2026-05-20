@@ -27,8 +27,28 @@ import {
 import { classifyIntent } from './routerAgent.js';
 import { fetchDataForIntent } from './platformTools.js';
 import { generateAnswer, resetModel } from './answerAgent.js';
+import { extractRecommendedPosts } from './recommendationExtractor.js';
 import { validate } from './validatorAgent.js';
 import { GENERIC_ERROR_RESPONSE } from '../prompts/fallbackResponses.js';
+
+// ── Pipeline roadmap ──────────────────────────────────────────────────────────
+// TODO Step 1 (next): Greeting fast-path
+//   - Detect simple greetings (hi / hello / 你好) before calling Gemini.
+//   - Return GREETING_RESPONSE immediately to save API quota.
+//   - Update conversationManager to save the exchange without a Gemini call.
+//
+// TODO Step 2: Basic context management
+//   - Expose userTurnCount in the returned payload.
+//   - Add topic-tracking placeholder (extractTopicContext already stubbed).
+//   - Trigger a 5-turn conversation summary when userTurnCount % 5 === 0.
+//   - Create a UserMemory model for long-term preference storage.
+//
+// TODO Step 3: Validator / Evaluation
+//   - Wire in aiEvaluationService (grounding score, matched titles).
+//   - Add reflection loop: if evaluation.hallucinations.length > 0 call Gemini again.
+//   - Expand validatorAgent with hallucination checks against known platform titles.
+//   - Add safety / off-topic filter.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Run the full AI agent pipeline for a single user message.
@@ -93,30 +113,43 @@ export async function runPipeline({ userId, username, message }) {
   }
   console.timeEnd('[pipeline] step4 answerAgent');
 
+  // ── Step 4b: Extract structured recommendations ──────────────────────────
+  console.time('[pipeline] step4b extractRecommendations');
+  const { cleanAnswer, recommendations } = await extractRecommendedPosts(answer);
+  console.log(`[pipeline] recommendations extracted: ${recommendations.length}`);
+  console.timeEnd('[pipeline] step4b extractRecommendations');
+
   // ── Step 5: Validator Agent ───────────────────────────────────────────────
   console.time('[pipeline] step5 validatorAgent');
-  const { valid, reason } = validate(answer);
+  const { valid, reason } = validate(cleanAnswer);
   if (!valid) {
     console.warn('[pipeline] Validation failed:', reason, '— using fallback');
-    answer = GENERIC_ERROR_RESPONSE;
-  } else {
-    console.log('[pipeline] Validation passed');
+    console.timeEnd('[pipeline] step5 validatorAgent');
+    console.timeEnd('[pipeline] total');
+    return {
+      answer: GENERIC_ERROR_RESPONSE,
+      intent,
+      userTurnCount: userTurnCount + 1,
+      recommendedPosts: [],
+      evaluation: null,
+    };
   }
+  console.log('[pipeline] Validation passed');
   console.timeEnd('[pipeline] step5 validatorAgent');
 
-  // ── Step 6: Save exchange ─────────────────────────────────────────────────
-  await saveExchange(userId, username, message, answer);
+  // ── Step 6: Save exchange (clean answer — block already stripped) ─────────
+  await saveExchange(userId, username, message, cleanAnswer);
   console.log('[pipeline] Exchange saved');
 
   console.timeEnd('[pipeline] total');
 
   // Return shape matches the AIResponse GraphQL type.
-  // recommendedPosts and evaluation will be populated in future pipeline iterations.
+  // evaluation will be populated in TODO Step 3 (Validator/Evaluation).
   return {
-    answer,
+    answer: cleanAnswer,
     intent,
     userTurnCount: userTurnCount + 1,
-    recommendedPosts: [],
+    recommendedPosts: recommendations,
     evaluation: null,
   };
 }
