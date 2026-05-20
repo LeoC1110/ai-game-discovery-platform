@@ -1,6 +1,9 @@
 import '@testing-library/jest-dom';
 import React from 'react';
 
+// jsdom does not implement scrollIntoView — stub it so AgentPage tests don't crash
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
 // Mock Three.js (WebGL not available in jsdom)
 vi.mock('../components/ThreeBackground', () => ({
   default: () => null,

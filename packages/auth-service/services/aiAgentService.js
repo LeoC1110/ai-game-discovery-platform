@@ -1,5 +1,6 @@
 // packages/auth-service/services/aiAgentService.js
 // LangChain + Google Gemini — AI Game Agent backend service
+// askAIAgent now delegates to the modular pipeline in ../ai/aiPipeline.js
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { tool } from '@langchain/core/tools';
@@ -15,6 +16,7 @@ import {
   TIMEOUT_RESPONSE,
   GENERIC_ERROR_RESPONSE,
 } from '../prompts/fallbackResponses.js';
+import { runPipeline } from '../ai/aiPipeline.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 // AI_MODEL read at call-time (inside getModel) so .env changes take effect after restart.
@@ -377,8 +379,14 @@ export async function geminiHealthTest() {
   }
 }
 
-// ── Main export ────────────────────────────────────────────────────────────────
+// ── Main export — delegates to the modular pipeline ────────────────────────────
 export async function askAIAgent({ userId, username, message }) {
+  return runPipeline({ userId, username, message });
+}
+
+// ── Legacy monolith kept below for reference only (not called) ─────────────────
+// Remove in the next cleanup pass once the pipeline is fully validated.
+async function _legacyAskAIAgent({ userId, username, message }) {
   console.time('[AI] askAI total');
 
   // ── Fast path: instant local response for greetings — no Gemini call ─────────
@@ -564,7 +572,7 @@ export async function askAIAgent({ userId, username, message }) {
 
   console.timeEnd('[AI] askAI total');
   return { answer: cleanAnswer, recommendedPosts: recommendations, evaluation };
-}
+} // end _legacyAskAIAgent
 
 // ── Clear a user's history ─────────────────────────────────────────────────────
 export async function clearAIHistory(userId) {
