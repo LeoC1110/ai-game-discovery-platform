@@ -2,7 +2,7 @@
 // Generates a Gemini response from intent-classified context and platform data.
 // Reuses the same SDK and env vars as the existing AI service.
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import { INTENTS } from './routerAgent.js';
 
 const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS ?? '30000', 10);
@@ -96,6 +96,45 @@ export async function generateAnswer({ userMessage, intent, conversationContext,
   }
 
   messages.push(new HumanMessage(userMessage));
+
+  const response = await withTimeout(model.invoke(messages), AI_TIMEOUT_MS);
+
+  return typeof response.content === 'string'
+    ? response.content
+    : response.content.map((c) => (typeof c === 'string' ? c : (c.text ?? ''))).join('');
+}
+
+/**
+ * Run one reflection pass: send the original message + bad answer + flag list
+ * to Gemini and ask it to produce a corrected response.
+ * Called at most once per pipeline run (see aiPipeline.js).
+ *
+ * @param {{
+ *   badAnswer: string,
+ *   flags: string[],
+ *   userMessage: string,
+ *   intent: string,
+ *   platformData: string
+ * }} params
+ * @returns {Promise<string>} corrected answer text
+ */
+export async function generateReflection({ badAnswer, flags, userMessage, intent, platformData }) {
+  const model = getModel();
+  const flagList = flags.map((f) => `- ${f}`).join('\n');
+
+  const messages = [
+    new SystemMessage(buildSystemPrompt(intent, platformData)),
+    new HumanMessage(userMessage),
+    new AIMessage(badAnswer),
+    new HumanMessage(
+      `Your previous response was automatically checked and the following issues were found:\n` +
+      `${flagList}\n\n` +
+      `Please provide a revised response that:\n` +
+      `• Only references game titles that exist in the platform data\n` +
+      `• Is safe and appropriate\n` +
+      `• Stays grounded in the provided context`,
+    ),
+  ];
 
   const response = await withTimeout(model.invoke(messages), AI_TIMEOUT_MS);
 

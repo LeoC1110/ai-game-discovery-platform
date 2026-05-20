@@ -29,9 +29,9 @@ import {
 } from './conversationManager.js';
 import { classifyIntent } from './routerAgent.js';
 import { fetchDataForIntent } from './platformTools.js';
-import { generateAnswer, resetModel } from './answerAgent.js';
+import { generateAnswer, generateReflection, resetModel } from './answerAgent.js';
 import { extractRecommendedPosts } from './recommendationExtractor.js';
-import { validate } from './validatorAgent.js';
+import { validate, evaluateResponse, loadKnownTitles } from './validatorAgent.js';
 import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE } from '../prompts/fallbackResponses.js';
 
 // ── Greeting fast-path ───────────────────────────────────────────────────────
@@ -59,11 +59,11 @@ function isSimpleGreeting(msg) {
 //   - Trigger a 5-turn conversation summary when userTurnCount % 5 === 0.
 //   - Create a UserMemory model for long-term preference storage.
 //
-// TODO Step 3: Validator / Evaluation
-//   - Wire in aiEvaluationService (grounding score, matched titles).
-//   - Add reflection loop: if evaluation.hallucinations.length > 0 call Gemini again.
-//   - Expand validatorAgent with hallucination checks against known platform titles.
-//   - Add safety / off-topic filter.
+// ✅ Step 3 (done): Validator / Evaluation
+//   - evaluateResponse() wires in aiEvaluationService (grounding, hallucination, safety).
+//   - Reflection loop: one correction pass when hallucinations or safety issues detected.
+//   - loadKnownTitles() fetches DB titles as ground truth for hallucination detection.
+//   - evaluation (with wasReflected flag) returned in pipeline result.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -154,18 +154,53 @@ export async function runPipeline({ userId, username, message }) {
   }
   console.timeEnd('[pipeline] step4 answerAgent');
 
-  // ── Step 4b: Extract structured recommendations ──────────────────────────
+  // ── Step 4b: Extract recommendations + load known titles in parallel ─────────
   console.time('[pipeline] step4b extractRecommendations');
-  const { cleanAnswer, recommendations } = await extractRecommendedPosts(answer);
-  console.log(`[pipeline] recommendations extracted: ${recommendations.length}`);
+  const [{ cleanAnswer: rawClean, recommendations: rawReco }, knownTitles] = await Promise.all([
+    extractRecommendedPosts(answer),
+    loadKnownTitles(),
+  ]);
+  let cleanAnswer = rawClean;
+  let recommendations = rawReco;
+  console.log(`[pipeline] recommendations extracted: ${recommendations.length}, knownTitles: ${knownTitles.length}`);
   console.timeEnd('[pipeline] step4b extractRecommendations');
 
-  // ── Step 5: Validator Agent ───────────────────────────────────────────────
-  console.time('[pipeline] step5 validatorAgent');
+  // ── Step 5: Semantic evaluation + optional reflection pass ────────────────
+  console.time('[pipeline] step5 evaluateAndReflect');
+  let { evaluation, needsReflection } = evaluateResponse(cleanAnswer, recommendations, knownTitles);
+  let wasReflected = false;
+
+  if (needsReflection) {
+    console.warn('[pipeline] Reflection triggered. Flags:', evaluation.flags);
+    try {
+      console.time('[pipeline] step5 reflection');
+      const reflectedText = await generateReflection({
+        badAnswer: cleanAnswer,
+        flags: evaluation.flags,
+        userMessage: message,
+        intent,
+        platformData,
+      });
+      console.timeEnd('[pipeline] step5 reflection');
+
+      const re = await extractRecommendedPosts(reflectedText);
+      cleanAnswer    = re.cleanAnswer;
+      recommendations = re.recommendations;
+      ({ evaluation } = evaluateResponse(cleanAnswer, recommendations, knownTitles));
+      wasReflected = true;
+      console.log('[pipeline] Reflection complete. Remaining flags:', evaluation.flags.length);
+    } catch (err) {
+      console.warn('[pipeline] Reflection failed — using original answer:', err?.message);
+    }
+  }
+
+  evaluation = { ...evaluation, wasReflected };
+
+  // Basic structural validation (blank / non-string guard)
   const { valid, reason } = validate(cleanAnswer);
   if (!valid) {
-    console.warn('[pipeline] Validation failed:', reason, '— using fallback');
-    console.timeEnd('[pipeline] step5 validatorAgent');
+    console.warn('[pipeline] Structural validation failed:', reason);
+    console.timeEnd('[pipeline] step5 evaluateAndReflect');
     console.timeEnd('[pipeline] total');
     return {
       answer: GENERIC_ERROR_RESPONSE,
@@ -175,8 +210,14 @@ export async function runPipeline({ userId, username, message }) {
       evaluation: null,
     };
   }
-  console.log('[pipeline] Validation passed');
-  console.timeEnd('[pipeline] step5 validatorAgent');
+  console.log(
+    `[pipeline] Evaluation done. grounding=${
+      evaluation.groundingScore != null ? evaluation.groundingScore.toFixed(2) : 'n/a'
+    } hallucinations=${evaluation.hallucinations.length} safety=${
+      evaluation.safetyPassed ? 'OK' : 'FAIL'
+    } reflected=${wasReflected}`,
+  );
+  console.timeEnd('[pipeline] step5 evaluateAndReflect');
 
   // ── Step 6: Save exchange (clean answer — block already stripped) ─────────
   await saveExchange(userId, username, message, cleanAnswer);
@@ -196,12 +237,11 @@ export async function runPipeline({ userId, username, message }) {
   console.timeEnd('[pipeline] total');
 
   // Return shape matches the AIResponse GraphQL type.
-  // evaluation will be populated in TODO Step 3 (Validator/Evaluation).
   return {
     answer: cleanAnswer,
     intent,
     userTurnCount: newTurnCount,
     recommendedPosts: recommendations,
-    evaluation: null,
+    evaluation,
   };
 }
