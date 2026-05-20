@@ -47,17 +47,10 @@ function isSimpleGreeting(msg) {
 // ── Pipeline roadmap ──────────────────────────────────────────────────────────
 // ✅ Step 1 (done): Greeting fast-path — see isSimpleGreeting above.
 //
-// TODO Step 2: Basic context management
-//   - Expose userTurnCount in the returned payload.
-//   - Add topic-tracking placeholder (extractTopicContext already stubbed).
-//   - Trigger a 5-turn conversation summary when userTurnCount % 5 === 0.
-//   - Create a UserMemory model for long-term preference storage.
-//
-// TODO Step 2: Basic context management
-//   - Expose userTurnCount in the returned payload.
-//   - Add topic-tracking placeholder (extractTopicContext already stubbed).
-//   - Trigger a 5-turn conversation summary when userTurnCount % 5 === 0.
-//   - Create a UserMemory model for long-term preference storage.
+// ✅ Step 2 (done): Basic context management
+//   - userTurnCount exposed in returned payload.
+//   - Topic tracking via extractTopicContext.
+//   - 5-turn rolling summary stored in UserMemory.
 //
 // ✅ Step 3 (done): Validator / Evaluation
 //   - evaluateResponse() wires in aiEvaluationService (grounding, hallucination, safety).
@@ -74,12 +67,9 @@ function isSimpleGreeting(msg) {
  *   answer: string,
  *   intent: string,
  *   userTurnCount: number,
- *   recommendedPosts: [],
- *   evaluation: null
+ *   recommendedPosts: Array,
+ *   evaluation: object
  * }>}
- *
- * Note: recommendedPosts and evaluation are reserved for future steps
- * (structured extraction and hallucination evaluation).
  */
 export async function runPipeline({ userId, username, message }) {
   console.time('[pipeline] total');
