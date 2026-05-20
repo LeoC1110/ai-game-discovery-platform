@@ -29,13 +29,26 @@ import { fetchDataForIntent } from './platformTools.js';
 import { generateAnswer, resetModel } from './answerAgent.js';
 import { extractRecommendedPosts } from './recommendationExtractor.js';
 import { validate } from './validatorAgent.js';
-import { GENERIC_ERROR_RESPONSE } from '../prompts/fallbackResponses.js';
+import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE } from '../prompts/fallbackResponses.js';
+
+// ── Greeting fast-path ───────────────────────────────────────────────────────
+// Matches simple one-word greetings in English, Pinyin, or Chinese characters.
+// Extend the alternation list to add more languages.
+const SIMPLE_GREETING_RE =
+  /^\s*(hi|hello|hey|yo|sup|hiya|howdy|greetings|ping|test|你好|您好|nihao)[!?.,'"\s]*$/i;
+
+function isSimpleGreeting(msg) {
+  return SIMPLE_GREETING_RE.test(msg);
+}
 
 // ── Pipeline roadmap ──────────────────────────────────────────────────────────
-// TODO Step 1 (next): Greeting fast-path
-//   - Detect simple greetings (hi / hello / 你好) before calling Gemini.
-//   - Return GREETING_RESPONSE immediately to save API quota.
-//   - Update conversationManager to save the exchange without a Gemini call.
+// ✅ Step 1 (done): Greeting fast-path — see isSimpleGreeting above.
+//
+// TODO Step 2: Basic context management
+//   - Expose userTurnCount in the returned payload.
+//   - Add topic-tracking placeholder (extractTopicContext already stubbed).
+//   - Trigger a 5-turn conversation summary when userTurnCount % 5 === 0.
+//   - Create a UserMemory model for long-term preference storage.
 //
 // TODO Step 2: Basic context management
 //   - Expose userTurnCount in the returned payload.
@@ -68,6 +81,21 @@ import { GENERIC_ERROR_RESPONSE } from '../prompts/fallbackResponses.js';
 export async function runPipeline({ userId, username, message }) {
   console.time('[pipeline] total');
   console.log('[pipeline] START — user:', username, '| message:', message.slice(0, 60));
+
+  // ── Greeting fast-path — skip Gemini entirely ────────────────────────────
+  if (isSimpleGreeting(message)) {
+    console.log('[pipeline] greeting fast-path — skipping Gemini');
+    console.timeEnd('[pipeline] total');
+    // Fire-and-forget — not awaited so the response returns immediately
+    saveExchange(userId, username, message, GREETING_RESPONSE).catch(() => {});
+    return {
+      answer: GREETING_RESPONSE,
+      intent: 'general_chat',
+      userTurnCount: 0,
+      recommendedPosts: [],
+      evaluation: null,
+    };
+  }
 
   // ── Step 1: Conversation Manager ─────────────────────────────────────────
   console.time('[pipeline] step1 conversationManager');
