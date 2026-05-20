@@ -32,7 +32,7 @@ import { fetchDataForIntent } from './platformTools.js';
 import { generateAnswer, generateReflection, resetModel } from './answerAgent.js';
 import { extractRecommendedPosts } from './recommendationExtractor.js';
 import { validate, evaluateResponse, loadKnownTitles } from './validatorAgent.js';
-import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE } from '../prompts/fallbackResponses.js';
+import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE, QUOTA_EXCEEDED_RESPONSE } from '../prompts/fallbackResponses.js';
 
 // ── Greeting fast-path ───────────────────────────────────────────────────────
 // Matches simple one-word greetings in English, Pinyin, or Chinese characters.
@@ -133,14 +133,17 @@ export async function runPipeline({ userId, username, message }) {
     answer = await generateAnswer({ userMessage: message, intent, conversationContext, platformData });
   } catch (err) {
     console.error('[pipeline] answerAgent error:', err?.message);
+    const is429 = err?.message?.includes('429') || err?.message?.includes('Too Many Requests') || err?.message?.includes('quota');
     if (err?.isTimeout) {
       console.warn('[pipeline] Gemini timed out');
+    } else if (is429) {
+      console.warn('[pipeline] Gemini quota exceeded (429)');
     } else {
       resetModel(); // clear stale singleton on unexpected errors
     }
     console.timeEnd('[pipeline] step4 answerAgent');
     console.timeEnd('[pipeline] total');
-    throw new Error(GENERIC_ERROR_RESPONSE);
+    throw new Error(is429 ? QUOTA_EXCEEDED_RESPONSE : GENERIC_ERROR_RESPONSE);
   }
   console.timeEnd('[pipeline] step4 answerAgent');
 

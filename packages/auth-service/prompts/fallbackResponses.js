@@ -36,3 +36,8 @@ export const NO_BOOKMARKS_RESPONSE =
 /** Generic catch-all when the AI service fails unexpectedly. */
 export const GENERIC_ERROR_RESPONSE =
   'Something went wrong with the AI service. Please try again in a moment.';
+
+/** Returned when the Gemini API quota is exceeded (HTTP 429). */
+export const QUOTA_EXCEEDED_RESPONSE =
+  "The AI service has reached its daily request limit. " +
+  "Please try again after midnight UTC, or contact the administrator to upgrade the API plan.";
