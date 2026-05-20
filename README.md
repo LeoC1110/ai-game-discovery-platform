@@ -36,16 +36,18 @@ Live demo: Coming soon
 
 ### AI Game Agent
 
-The AI Game Agent helps users discover games and understand community activity.
+Built a memory-based multi-agent AI pipeline with context management, conversation summarization, recommendation extraction, and response evaluation.
 
-It can:
+The AI Agent helps users discover games and understand community activity. It can:
 
-- Recommend games based on user bookmarks and platform activity
+- Recommend games based on user bookmarks and platform activity via a modular 6-step pipeline
+- Classify intent (bookmarks, leaderboard, community, game recommendations, general chat) without a Gemini call
+- Extract and enrich structured `recommendedPosts` from every AI response
+- Skip Gemini entirely for simple greetings (fast-path)
+- Maintain per-user conversation context with topic tracking and rolling 5-turn summaries stored in `UserMemory`
+- Evaluate each response for grounding, hallucinations, and safety — and run a one-pass reflection correction when issues are detected
 - Search community posts by genre or tag
-- Summarize popular games and posts
-- Read limited, relevant MongoDB context before answering
 - Use optional web search for game information not stored in the platform
-- Store conversation history per user
 
 The AI Agent is powered by LangChain and Google Gemini. All AI requests are handled through the backend, so API keys are never exposed to the frontend.
 
@@ -54,6 +56,25 @@ The AI Agent is powered by LangChain and Google Gemini. All AI requests are hand
 ## AI Agent Highlights
 
 This project focuses on making the AI assistant more grounded and useful inside a real full-stack application.
+
+### Modular Agent Pipeline
+
+The AI Agent was refactored from a monolithic service into a 6-step modular pipeline (`packages/auth-service/ai/`):
+
+| Step | Module | Purpose |
+|---|---|---|
+| 0 | `aiPipeline.js` | Greeting fast-path — returns immediately for `hi`, `hello`, `你好`, etc. |
+| 1 | `conversationManager.js` | Load history, count turns, load `UserMemory` (summary + tracked topics) |
+| 2 | `routerAgent.js` | Classify intent via keyword patterns (no Gemini call) |
+| 3 | `platformTools.js` | Fetch DB data relevant to the intent |
+| 4 | `answerAgent.js` | Call Gemini with context + platform data |
+| 4b | `recommendationExtractor.js` | Strip `<!--RECOMMENDATIONS:[…]-->` block, enrich with DB data |
+| 5 | `validatorAgent.js` | Evaluate grounding/hallucinations/safety; run reflection pass if needed |
+| 6 | `conversationManager.js` | Save exchange; trigger 5-turn summary into `UserMemory` |
+
+**Context management** — Every 5 user turns, a rolling plain-text summary of the conversation is saved to the `UserMemory` model (per-user, MongoDB). On subsequent turns, the summary + tracked genre topics are prepended to the Gemini context window.
+
+**Reflection loop** — If `evaluateResponse()` detects hallucinated titles or a safety failure, `generateReflection()` sends the bad answer + flag list back to Gemini for a one-pass correction. The returned `evaluation` object includes a `wasReflected` flag.
 
 ### Backend Tool Calling
 
@@ -281,6 +302,7 @@ Several AI-focused branches were developed and merged into the main project.
 
 | Branch | Purpose |
 |---|---|
+| `feature/agent-update` | Modular 6-step AI pipeline, context management, UserMemory, evaluation + reflection (70/70 tests) |
 | `feature/rag-recommendation-engine` | Adds structured AI recommendation output |
 | `feature/ai-tool-calling` | Allows the AI Agent to call backend data tools |
 | `feature/ai-evaluation` | Adds rule-based response quality checks |
@@ -303,11 +325,16 @@ This project demonstrates:
 - JWT authentication and role-based access control
 - Community platform features such as posts, likes, comments, and bookmarks
 - AI integration using LangChain and Google Gemini
+- Modular multi-step AI agent pipeline with intent routing, context management, and per-user memory
+- Conversation summarization and rolling context window via `UserMemory` model
+- Structured recommendation extraction from AI output with DB-backed hallucination filtering
+- Response evaluation and one-pass reflection loop (`wasReflected` flag)
 - Backend tool calling for AI-assisted recommendations
 - Rule-based AI response evaluation
 - Optional external API integration with Tavily Search
 - Secure server-side API key handling
 - Monorepo project organization with npm workspaces
+- 70/70 frontend tests passing (Vitest + React Testing Library)
 
 ---
 
