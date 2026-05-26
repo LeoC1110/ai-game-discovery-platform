@@ -5,6 +5,95 @@ New features and updates should be added under the relevant version or date sect
 
 ---
 
+## [2026-05-26] — Pipeline Cleanup, User Memory Wiring, and README Rewrite
+
+### `aiAgentService.js` — Dead Code Removal
+
+The entry-point service was slimmed from ~500 lines to **134 lines** by removing all legacy code that became orphaned after the modular pipeline was introduced.
+
+Removed:
+- `RECO_BLOCK_RE` constant and `extractRecommendedPosts` function (moved to `recommendationExtractor.js` in the previous refactor; the copy in the service was never called)
+- `createTools` factory function — the full LangChain `tool()`-based implementation including `get_my_bookmarks`, `get_popular_games`, `search_games_by_tag`, `get_user_stats`, and the legacy `search_web` tool wrapper
+- `_legacyAskAIAgent` function (~250 lines) — the original monolithic Gemini call loop that `askAIAgent` previously delegated to; now replaced entirely by `runPipeline`
+
+Kept (all 5 public exports still present):
+- `geminiHealthTest` — lightweight API key / model verification
+- `askAIAgent` → delegates to `runPipeline`
+- `clearAIHistory`, `getAIHistory` — history management for the frontend
+- `warmUpAIAgent` — optional pre-warm on server start
+
+### `aiPipeline.js` — User Memory Wired End-to-End
+
+The `userMemoryService` is now fully integrated into the pipeline:
+
+```js
+// Step 1 — all four values fetched in parallel
+const [historyRecords, userTurnCount, userMemory, userMemoryContext] = await Promise.all([
+  loadHistory(userId),
+  getUserTurnCount(userId),
+  loadUserMemory(userId),
+  buildUserMemoryContext(userId).catch(() => ''),
+]);
+// Fire-and-forget: persist any explicit preferences stated in this message
+saveExplicitPreferences(userId, message).catch(() => {});
+```
+
+`userMemoryContext` is then passed through to:
+- `generateAnswer({ …, userMemoryContext })` — Step 4
+- `generateReflection({ …, userMemoryContext })` — Step 5 reflection pass
+
+This means the user's long-term preference profile (liked genres, avoided games, platform preferences) is injected into **every** Gemini prompt, including reflection corrections.
+
+### `answerAgent.js` — Enhanced System Prompt
+
+`buildSystemPrompt` now includes six explicit behavioural rules:
+
+1. Do not invent game titles not present in the provided data
+2. Base all recommendations only on platform data, never on training knowledge
+3. If platform data is empty, tell the user and suggest they add posts
+4. Format lists with bullet points or numbered items
+5. If the user states a preference, acknowledge and use it
+6. Do not hallucinate user bookmarks, likes, or statistics
+
+When `userMemoryContext` is non-empty, it is injected between the rules and the platform data block:
+
+```
+[User preference profile]
+…
+Use the profile above to personalise your reply. Only recommend games present in the platform data.
+
+--- Platform Data ---
+…
+--- End Platform Data ---
+```
+
+### `platformTools.js` — Web Search Properly Wired
+
+The `searchWeb` function now lives in `platformTools.js` (not in the deleted `createTools` factory) and is called directly by `fetchDataForIntent`:
+
+```js
+case INTENTS.GENERAL_CHAT:
+default:
+  if (process.env.TAVILY_API_KEY && userMessage.trim()) {
+    return await searchWeb(userMessage, userId).catch(() => '');
+  }
+  return '';
+```
+
+Rate limiter configuration (in-memory, resets on server restart):
+- Global: 30 calls / day
+- Per-user: 3 calls / hour
+
+### README Rewrite
+
+The README was rewritten for a recruiter / HR audience:
+- Added plain-language project summary
+- Replaced the incorrect "multi-agent" label with the accurate "6-step sequential pipeline"
+- Added a text-based architecture diagram showing all pipeline steps
+- Replaced the verbose bullet-point portfolio section with a skill → implementation table
+
+---
+
 ## [Current] — AI Agent Pipeline Overhaul
 
 ### Modular 6-Step AI Pipeline
@@ -109,17 +198,19 @@ The backend evaluates every AI response before it reaches the frontend.
 
 ---
 
-## Backend Tool Calling
+## Backend Data Retrieval (`platformTools.js`)
 
-The AI Agent can call backend tools to fetch real platform data before generating an answer, instead of relying solely on model knowledge.
+The pipeline fetches platform data in Step 3 via intent-routed functions in `platformTools.js`. Each function queries MongoDB directly — no LangChain tool-calling involved.
 
-| Tool | Purpose |
-|---|---|
-| `get_my_bookmarks` | Fetches the current user's bookmarked games |
-| `get_popular_games` | Finds popular or highly liked posts |
-| `search_games_by_tag` | Searches posts by genre or tag |
-| `get_user_stats` | Reads the user's platform activity summary |
-| `search_web` | Optional Tavily-powered web search |
+| Function | Intent | Purpose |
+|---|---|---|
+| `getMyBookmarks(userId)` | `bookmark_analysis` | User's bookmarked games |
+| `getMostLikedPosts(limit)` | `community_summary` | Most-liked community posts |
+| `getTopRatedGames(limit)` | `leaderboard_query` | Highest-rated games |
+| `getMyBookmarks` + `getMostLikedPosts` | `game_recommendation` | Combined bookmark + community data |
+| `searchWeb(query, userId)` | `general_chat` | Tavily web search (if `TAVILY_API_KEY` set) |
+
+> **Note:** The previous LangChain `tool()`-based `createTools` factory (`get_my_bookmarks`, `get_popular_games`, `search_games_by_tag`, `get_user_stats`) was removed in the [2026-05-26] cleanup. Data retrieval is now handled by direct function calls.
 
 ---
 
