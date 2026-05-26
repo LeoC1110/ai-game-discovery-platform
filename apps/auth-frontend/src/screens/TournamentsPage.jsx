@@ -297,7 +297,7 @@ export default function TournamentsPage() {
                 value={form.prizePool}
                 onChange={(event) => setForm({ ...form, prizePool: event.target.value })}
               />
-              <button type="submit" disabled={creating} className="btn-primary tournaments-form__submit">
+              <button type="submit" disabled={creating} className={`btn-primary tournaments-form__submit ${creating ? 'is-loading' : ''}`} aria-busy={creating}>
                 {creating ? 'Creating…' : 'Create Tournament'}
               </button>
             </form>

@@ -26,11 +26,11 @@ const SORT_OPTIONS = [
 ];
 
 function StarRating({ value }) {
-  if (!value) return <span style={{ color: '#666', fontSize: 13 }}>No rating</span>;
+  if (!value) return <span className="star-rating star-rating--empty">No rating</span>;
   return (
-    <span style={{ color: '#ffd60a', fontWeight: 700, fontSize: 14 }}>
+    <span className="star-rating">
       {'★'.repeat(Math.round(value / 2))}{'☆'.repeat(5 - Math.round(value / 2))}
-      <span style={{ color: '#aaa', marginLeft: 4, fontSize: 13 }}>{value}/10</span>
+      <span className="star-rating__value">{value}/10</span>
     </span>
   );
 }
@@ -54,7 +54,7 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
           <h3 className="community-card__title">
             {post.title}
             {post.featured && (
-              <span className="badge badge--featured" style={{ marginLeft: 8 }}>⭐ Featured</span>
+              <span className="badge badge--featured community-card__featured">⭐ Featured</span>
             )}
           </h3>
           <StarRating value={post.rating} />
@@ -99,7 +99,7 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
           >
             🔖 {post.bookmarksCount}
           </button>
-          <button className="btn-ghost" style={{ fontSize: 13, height: 30 }} onClick={() => onExpand(post)}>
+          <button className="btn-ghost community-card__view-btn" onClick={() => onExpand(post)}>
             💬 {post.commentsCount} · View
           </button>
         </div>
@@ -190,39 +190,39 @@ function EditModal({ post, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
+      <div className="modal-box modal-box--edit" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>✕</button>
-        <h2 style={{ marginTop: 0 }}>Edit Post</h2>
-        {errMsg && <div className="msg-error" style={{ marginBottom: 12 }}>{errMsg}</div>}
-        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#bcc6da' }}>
+        <h2 className="modal-title">Edit Post</h2>
+        {errMsg && <div className="msg-error msg-error--spaced">{errMsg}</div>}
+        <form onSubmit={submit} className="community-edit-form">
+          <div className="community-edit-form__grid">
+            <label className="community-form-label">
               Game Title *
               <input className="input" name="title" value={form.title} onChange={handle} required />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#bcc6da' }}>
+            <label className="community-form-label">
               Genre
               <input className="input" name="genre" value={form.genre} onChange={handle} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#bcc6da' }}>
+            <label className="community-form-label">
               Platform
               <input className="input" name="platform" value={form.platform} onChange={handle} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#bcc6da' }}>
+            <label className="community-form-label">
               Rating (1-10)
               <input className="input" name="rating" type="number" min="1" max="10" value={form.rating} onChange={handle} />
             </label>
           </div>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#bcc6da' }}>
+          <label className="community-form-label">
             Tags (comma-separated)
             <input className="input" name="tags" value={form.tags} onChange={handle} />
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#bcc6da' }}>
+          <label className="community-form-label">
             Review *
-            <textarea className="input textarea" name="review" value={form.review} onChange={handle} rows={4} required style={{ minHeight: 90 }} />
+            <textarea className="input textarea community-review-input" name="review" value={form.review} onChange={handle} rows={4} required />
           </label>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn-primary" type="submit" disabled={loading} style={{ flex: 1 }}>
+          <div className="community-edit-form__actions">
+            <button className={`btn-primary community-edit-form__submit ${loading ? 'is-loading' : ''}`} type="submit" disabled={loading} aria-busy={loading}>
               {loading ? 'Saving…' : 'Save Changes'}
             </button>
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
@@ -265,67 +265,58 @@ function PostModal({ post, currentUser, onClose, onRefetch }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>✕</button>
-        <h2 style={{ marginTop: 0 }}>
+        <h2 className="modal-title">
           {post.title}
-          {post.featured && <span className="badge badge--featured" style={{ marginLeft: 10, fontSize: 13 }}>⭐ Featured</span>}
+          {post.featured && <span className="badge badge--featured community-modal__featured">⭐ Featured</span>}
         </h2>
         {post.coverImageUrl && (
-          <img src={post.coverImageUrl} alt={post.title} style={{ width: '100%', borderRadius: 8, marginBottom: 12 }} onError={(e) => { e.target.style.display = 'none'; }} />
+          <img src={post.coverImageUrl} alt={post.title} className="community-modal__cover" onError={(e) => { e.target.style.display = 'none'; }} />
         )}
         <StarRating value={post.rating} />
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '8px 0' }}>
+        <div className="community-modal__meta">
           {post.genre && <span className="badge">{post.genre}</span>}
           {post.platform && <span className="badge">{post.platform}</span>}
           {post.developer && <span className="badge badge--dim">{post.developer}</span>}
           {post.releaseYear && <span className="badge badge--dim">{post.releaseYear}</span>}
         </div>
         {post.tags?.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div className="community-modal__tags">
             {post.tags.map((t) => <span key={t} className="tag">#{t}</span>)}
           </div>
         )}
-        <p style={{ lineHeight: 1.7, color: '#d0d5e8' }}>{post.review}</p>
+        <p className="community-modal__review">{post.review}</p>
         {post.gameLink && (
-          <a href={post.gameLink} target="_blank" rel="noopener noreferrer" className="btn-ghost" style={{ display: 'inline-block', marginBottom: 12 }}>
+          <a href={post.gameLink} target="_blank" rel="noopener noreferrer" className="btn-ghost community-modal__link">
             Game Link ↗
           </a>
         )}
-        <p style={{ fontSize: 13, color: '#888' }}>
+        <p className="community-modal__stats">
           by {post.postedBy?.username} · {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : ''}
           · ♥ {post.likesCount} · 💬 {post.commentsCount}
         </p>
 
-        <h4 style={{ marginBottom: 8 }}>Comments ({post.commentsCount})</h4>
-        <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <h4 className="community-modal__comments-title">Comments ({post.commentsCount})</h4>
+        <div className="community-comments-list">
           {(!post.comments || post.comments.length === 0) && (
-            <p style={{ color: '#666', fontSize: 13 }}>No comments yet. Be the first!</p>
+            <p className="community-comments-list__empty">No comments yet. Be the first!</p>
           )}
           {post.comments?.map((c) => (
-            <div key={c.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '8px 12px', position: 'relative' }}>
-              <strong style={{ fontSize: 13 }}>{c.author?.username}</strong>
-              <span style={{ color: '#888', fontSize: 12, marginLeft: 8 }}>{formatCommentDate(c.createdAt)}</span>
+            <div key={c.id} className="community-comment">
+              <strong className="community-comment__author">{c.author?.username}</strong>
+              <span className="community-comment__time">{formatCommentDate(c.createdAt)}</span>
               {(isAdmin || currentUser?.id === c.author?.id) && (
                 <button
                   onClick={() => handleDeleteComment(c.id)}
-                  style={{ position: 'absolute', right: 8, top: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,80,80,0.7)', fontSize: 12, padding: 0 }}
+                  className="community-comment__delete"
                   title={isAdmin && currentUser?.id !== c.author?.id ? 'Delete comment (Admin)' : 'Delete your comment'}
                 >
                   🗑
                 </button>
               )}
-              <p style={{ margin: '4px 0 0', fontSize: 14, color: '#ccc' }}>{c.text}</p>
+              <p className="community-comment__text">{c.text}</p>
               <button
                 onClick={() => toggleCommentLike({ variables: { postId: post.id, commentId: c.id } })}
-                style={{
-                  marginTop: 6,
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  padding: 0,
-                  color: c.likedBy?.includes(currentUser?.id) ? '#ff6b9d' : '#888',
-                  fontWeight: c.likedBy?.includes(currentUser?.id) ? 700 : 400,
-                }}
+                className={`community-comment__like ${c.likedBy?.includes(currentUser?.id) ? 'community-comment__like--active' : ''}`}
                 title={c.likedBy?.includes(currentUser?.id) ? 'Unlike' : 'Like'}
               >
                 ❤ {c.likeCount ?? 0} {c.likeCount === 1 ? 'like' : 'likes'}
@@ -334,20 +325,19 @@ function PostModal({ post, currentUser, onClose, onRefetch }) {
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <div className="community-comment-form">
           <input
-            className="input"
-            style={{ flex: 1 }}
+            className="input community-comment-form__input"
             placeholder="Add a comment…"
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && commentText.trim()) addComment(); }}
           />
           <button
-            className="btn-primary"
-            style={{ height: 40, padding: '0 16px', fontSize: 13 }}
+            className={`btn-primary community-comment-form__submit ${commenting ? 'is-loading' : ''}`}
             onClick={() => commentText.trim() && addComment()}
             disabled={commenting || !commentText.trim()}
+            aria-busy={commenting}
           >
             {commenting ? '…' : 'Post'}
           </button>
@@ -410,34 +400,30 @@ export default function CommunityPage() {
         </p>
 
         {/* Filters */}
-        <div className="community-filters card" style={{ marginBottom: 24 }}>
+        <div className="community-filters card community-filters--panel">
           <div className="community-filters__row">
             <input
-              className="input"
+              className="input community-filters__search"
               placeholder="Search games, keywords…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: 2, minWidth: 180 }}
             />
             <input
-              className="input"
+              className="input community-filters__field"
               placeholder="Genre"
               value={filterGenre}
               onChange={(e) => setFilterGenre(e.target.value)}
-              style={{ flex: 1, minWidth: 120 }}
             />
             <input
-              className="input"
+              className="input community-filters__field"
               placeholder="Platform"
               value={filterPlatform}
               onChange={(e) => setFilterPlatform(e.target.value)}
-              style={{ flex: 1, minWidth: 120 }}
             />
             <select
-              className="input"
+              className="input community-filters__select"
               value={sort}
               onChange={(e) => setSort(e.target.value)}
-              style={{ flex: 1, minWidth: 140 }}
             >
               {SORT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -446,8 +432,8 @@ export default function CommunityPage() {
           </div>
         </div>
 
-        {loading && <p style={{ color: '#aaa', textAlign: 'center' }}>Loading posts…</p>}
-        {error && <p style={{ color: '#ff6b6b', textAlign: 'center' }}>Error: {error.message}</p>}
+        {loading && <p className="community-status community-status--loading">Loading posts…</p>}
+        {error && <p className="community-status community-status--error">Error: {error.message}</p>}
 
         {!loading && posts.length === 0 && (
           <div className="empty-state">

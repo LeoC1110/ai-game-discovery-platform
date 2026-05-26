@@ -246,7 +246,7 @@ export default function PostPage() {
               )}
 
               <div className="post-form__footer">
-                <button className="btn-primary" type="submit" disabled={loading} style={{ flex: 1 }}>
+                <button className={`btn-primary ${loading ? 'is-loading' : ''}`} type="submit" disabled={loading} aria-busy={loading} style={{ flex: 1 }}>
                   {loading ? 'Publishing...' : 'Publish Post'}
                 </button>
                 <button

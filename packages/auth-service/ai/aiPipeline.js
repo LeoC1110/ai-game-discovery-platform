@@ -33,6 +33,7 @@ import { generateAnswer, generateReflection, resetModel } from './answerAgent.js
 import { extractRecommendedPosts } from './recommendationExtractor.js';
 import { validate, evaluateResponse, loadKnownTitles } from './validatorAgent.js';
 import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE, QUOTA_EXCEEDED_RESPONSE } from '../prompts/fallbackResponses.js';
+import { buildUserMemoryContext, saveExplicitPreferences } from '../services/userMemoryService.js';
 
 // ── Greeting fast-path ───────────────────────────────────────────────────────
 // Matches simple one-word greetings in English, Pinyin, or Chinese characters.
@@ -92,11 +93,14 @@ export async function runPipeline({ userId, username, message }) {
 
   // ── Step 1: Conversation Manager ─────────────────────────────────────────
   console.time('[pipeline] step1 conversationManager');
-  const [historyRecords, userTurnCount, userMemory] = await Promise.all([
+  const [historyRecords, userTurnCount, userMemory, userMemoryContext] = await Promise.all([
     loadHistory(userId),
     getUserTurnCount(userId),
     loadUserMemory(userId),
+    buildUserMemoryContext(userId).catch(() => ''),
   ]);
+  // Fire-and-forget: detect and persist any explicit preferences stated in this message
+  saveExplicitPreferences(userId, message).catch(() => {});
   const topicContext = extractTopicContext(historyRecords, message);
 
   // Build conversation context: stored summary (if any) + recent history
@@ -122,7 +126,7 @@ export async function runPipeline({ userId, username, message }) {
 
   // ── Step 3: Platform Tools ────────────────────────────────────────────────
   console.time('[pipeline] step3 platformTools');
-  const platformData = await fetchDataForIntent(intent, userId);
+  const platformData = await fetchDataForIntent(intent, userId, message);
   console.log(`[pipeline] platformData: ${platformData.length} chars`);
   console.timeEnd('[pipeline] step3 platformTools');
 
@@ -130,7 +134,7 @@ export async function runPipeline({ userId, username, message }) {
   console.time('[pipeline] step4 answerAgent');
   let answer;
   try {
-    answer = await generateAnswer({ userMessage: message, intent, conversationContext, platformData });
+    answer = await generateAnswer({ userMessage: message, intent, conversationContext, platformData, userMemoryContext });
   } catch (err) {
     console.error('[pipeline] answerAgent error:', err?.message);
     const is429 = err?.message?.includes('429') || err?.message?.includes('Too Many Requests') || err?.message?.includes('quota');
@@ -173,6 +177,7 @@ export async function runPipeline({ userId, username, message }) {
         userMessage: message,
         intent,
         platformData,
+        userMemoryContext,
       });
       console.timeEnd('[pipeline] step5 reflection');
 

@@ -54,15 +54,27 @@ const RECO_FORMAT_RULE =
   `- matchedTags are tags from the game that match the user's request.\n` +
   `- If no specific games are being recommended, omit the block entirely.`;
 
-function buildSystemPrompt(intent, platformData) {
+function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
   const role = INTENT_ROLE_MAP[intent] ?? 'assist with gaming questions';
   let prompt =
     `You are an AI Game Agent for a gaming discovery platform. Your task is to ${role}.\n` +
-    `Be concise, friendly, and grounded in the platform data below.\n` +
-    `Do not invent or fabricate game titles that are not present in the provided data.\n`;
+    `Be concise, friendly, and grounded in the platform data below.\n\n` +
+    `Behaviour rules:\n` +
+    `- Do not invent or fabricate game titles not present in the provided data.\n` +
+    `- Base all recommendations ONLY on the platform data supplied below — never on training knowledge.\n` +
+    `- If platform data is empty, tell the user no posts are available yet and suggest they browse or add some.\n` +
+    `- Format lists with bullet points or numbered items for readability.\n` +
+    `- If the user states a preference (e.g. “I like RPG”), acknowledge it and use it in your reply.\n` +
+    `- Do not hallucinate user bookmarks, likes, or statistics.\n`;
+
+  if (userMemoryContext) {
+    prompt += `\n${userMemoryContext}\nUse the profile above to personalise your reply. Only recommend games present in the platform data.\n`;
+  }
 
   if (platformData) {
     prompt += `\n--- Platform Data ---\n${platformData}\n--- End Platform Data ---\n`;
+  } else {
+    prompt += `\nPlatform data: No community posts are available yet. Ask the user to create or bookmark some posts first.\n`;
   }
 
   prompt += RECO_FORMAT_RULE;
@@ -91,14 +103,14 @@ function withTimeout(promise, ms) {
  * }} params
  * @returns {Promise<string>} raw text answer from Gemini
  */
-export async function generateAnswer({ userMessage, intent, conversationContext, platformData }) {
+export async function generateAnswer({ userMessage, intent, conversationContext, platformData, userMemoryContext = '' }) {
   if (process.env.AI_MOCK_MODE === 'true') {
     console.log('[answerAgent] MOCK MODE — skipping Gemini, returning mock answer for intent:', intent);
     return getMockAnswer({ intent });
   }
 
   const model = getModel();
-  const messages = [new SystemMessage(buildSystemPrompt(intent, platformData))];
+  const messages = [new SystemMessage(buildSystemPrompt(intent, platformData, userMemoryContext))];
 
   if (conversationContext) {
     messages.push(new HumanMessage(`Previous conversation:\n${conversationContext}`));
@@ -127,7 +139,7 @@ export async function generateAnswer({ userMessage, intent, conversationContext,
  * }} params
  * @returns {Promise<string>} corrected answer text
  */
-export async function generateReflection({ badAnswer, flags, userMessage, intent, platformData }) {
+export async function generateReflection({ badAnswer, flags, userMessage, intent, platformData, userMemoryContext = '' }) {
   if (process.env.AI_MOCK_MODE === 'true') {
     console.log('[answerAgent] MOCK MODE — skipping Gemini reflection, returning mock reflection');
     return getMockReflection({ badAnswer });
@@ -137,7 +149,7 @@ export async function generateReflection({ badAnswer, flags, userMessage, intent
   const flagList = flags.map((f) => `- ${f}`).join('\n');
 
   const messages = [
-    new SystemMessage(buildSystemPrompt(intent, platformData)),
+    new SystemMessage(buildSystemPrompt(intent, platformData, userMemoryContext)),
     new HumanMessage(userMessage),
     new AIMessage(badAnswer),
     new HumanMessage(

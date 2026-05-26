@@ -17,36 +17,26 @@ const SUGGESTIONS = [
 // ── Small recommendation card ──────────────────────────────────────────────────
 function RecommendedCard({ post }) {
   return (
-    <div
-      style={{
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(0,255,200,0.2)',
-        borderRadius: 10,
-        padding: '10px 14px',
-        minWidth: 180,
-        maxWidth: 220,
-        flex: '0 0 auto',
-      }}
-    >
-      <p style={{ margin: '0 0 4px', fontWeight: 700, color: '#00ffc8', fontSize: 13 }}>
+    <div className="agent-recommended-card">
+      <p className="agent-recommended-card__title">
         {post.title}
       </p>
       {post.rating != null && (
-        <p style={{ margin: '0 0 4px', color: '#ffd700', fontSize: 12 }}>
+        <p className="agent-recommended-card__rating">
           ⭐ {post.rating}/10
         </p>
       )}
       {post.tags?.length > 0 && (
-        <p style={{ margin: '0 0 4px', color: '#aaa', fontSize: 11 }}>
+        <p className="agent-recommended-card__tags">
           {post.tags.slice(0, 3).join(' · ')}
         </p>
       )}
-      <p style={{ margin: 0, color: '#777', fontSize: 11 }}>
+      <p className="agent-recommended-card__stats">
         {post.likesCount != null && `♥ ${post.likesCount}`}
         {post.commentsCount != null && `  💬 ${post.commentsCount}`}
       </p>
       {post.reason && (
-        <p style={{ margin: '6px 0 0', color: '#bbb', fontSize: 11, fontStyle: 'italic' }}>
+        <p className="agent-recommended-card__reason">
           {post.reason}
         </p>
       )}
@@ -131,7 +121,7 @@ export default function AgentPage() {
       <div className="app-container">
         <DashboardNav />
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div className="agent-header">
           <div>
             <h1 className="app-title">AI Game Agent</h1>
             <p className="page-subtitle post-subtitle">
@@ -139,8 +129,7 @@ export default function AgentPage() {
             </p>
           </div>
           <button
-            className="btn-ghost"
-            style={{ fontSize: 12, padding: '6px 14px', opacity: 0.7 }}
+            className="btn-ghost agent-clear-btn"
             onClick={handleClear}
             title="Delete all your AI conversation history"
           >
@@ -151,8 +140,8 @@ export default function AgentPage() {
         <div className="card agent-container">
           {/* Suggested prompts */}
           <div className="agent-suggestions">
-            <p style={{ color: '#888', fontSize: 13, margin: '0 0 8px' }}>Try asking:</p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <p className="agent-suggestions__hint">Try asking:</p>
+            <div className="agent-suggestions__list">
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
@@ -171,31 +160,22 @@ export default function AgentPage() {
             {isLoading ? (
               <div className="agent-message agent-message--agent">
                 <span className="agent-message__label">🤖 Agent</span>
-                <p style={{ margin: 0, color: '#888' }}>Loading conversation history…</p>
+                <p className="agent-message__text agent-message__text--muted">Loading conversation history…</p>
               </div>
             ) : (
               messages.map((msg, i) => (
                 <div
                   key={i}
-                  className={`agent-message agent-message--${msg.role}`}
-                  style={msg.isError ? { borderLeft: '3px solid #ff4444' } : undefined}
+                  className={`agent-message agent-message--${msg.role} ${msg.isError ? 'agent-message--error' : ''}`}
                 >
                   <span className="agent-message__label">
                     {msg.role === 'user' ? 'You' : '🤖 Agent'}
                   </span>
-                  <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{msg.text}</p>
+                  <p className="agent-message__text">{msg.text}</p>
 
                   {/* Recommended game cards */}
                   {msg.recommendedPosts?.length > 0 && (
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 10,
-                        marginTop: 10,
-                        overflowX: 'auto',
-                        paddingBottom: 4,
-                      }}
-                    >
+                    <div className="agent-recommendation-strip">
                       {msg.recommendedPosts.map((post) => (
                         <RecommendedCard key={post.id} post={post} />
                       ))}
@@ -209,9 +189,9 @@ export default function AgentPage() {
             {asking && (
               <div className="agent-message agent-message--agent">
                 <span className="agent-message__label">🤖 Agent</span>
-                <p style={{ margin: 0, color: '#888' }}>
+                <p className="agent-message__text agent-message__text--muted">
                   AI Game Agent is thinking…{' '}
-                  <span style={{ fontSize: 12, opacity: 0.6 }}>First response may take a few seconds.</span>
+                  <span className="agent-message__subtext">First response may take a few seconds.</span>
                 </p>
               </div>
             )}
@@ -219,10 +199,9 @@ export default function AgentPage() {
           </div>
 
           {/* Input row */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <div className="agent-input-row">
             <input
-              className="input"
-              style={{ flex: 1 }}
+              className="input agent-input-row__field"
               placeholder="Ask about games, ratings, recommendations…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -232,10 +211,10 @@ export default function AgentPage() {
               disabled={asking || isLoading}
             />
             <button
-              className="btn-primary"
-              style={{ padding: '0 20px', height: 46 }}
+              className={`btn-primary agent-input-row__send ${asking ? 'is-loading' : ''}`}
               onClick={() => sendMessage()}
               disabled={asking || isLoading || !input.trim()}
+              aria-busy={asking}
             >
               {asking ? '…' : 'Send'}
             </button>

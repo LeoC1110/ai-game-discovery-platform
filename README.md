@@ -1,8 +1,8 @@
-﻿# AI-Powered Game Discovery Community Platform
+﻿# AI-Powered Game Discovery Platform
 
-A full-stack game discovery platform where users can share game recommendations, browse community posts, interact through likes, comments, and bookmarks, and receive personalized suggestions from an AI Game Agent.
+A full-stack web application where users discover, share, and discuss games — backed by an AI Game Agent that delivers personalised recommendations based on real platform activity.
 
-The project combines a community web application with an AI assistant that can read platform data, call backend tools, and generate recommendations based on real user activity.
+Built as a portfolio project to demonstrate end-to-end full-stack development, GraphQL API design, MongoDB data modelling, and a production-oriented AI pipeline using LangChain and Google Gemini.
 
 ---
 
@@ -21,37 +21,84 @@ Live demo: Coming soon
 
 ---
 
+## What the Project Does
+
+Users log in, browse or post game recommendations, interact with the community, and chat with an AI agent that reads their activity to suggest what to play next.
+
+**Community side** — create and browse game posts, like / comment / bookmark games, view a leaderboard of top-rated and most-liked titles, manage a personal profile.
+
+**AI side** — an AI Game Agent answers questions, recommends games, and summarises platform trends. It only reads live data from the platform database and never invents games that do not exist.
+
+---
+
 ## Key Features
 
 ### Community Platform
 
-- User registration and login
-- Player and Admin role support
-- Create, edit, and delete game recommendation posts
-- Add game details such as genre, platform, developer, rating, tags, cover image, game link, and review
-- Browse community posts
+- User registration, login, and role management (Player / Admin)
+- Create, edit, and delete game posts with genre, platform, rating, tags, cover image, and review
 - Like, comment, and bookmark posts
-- View saved games and user activity from the profile page
-- Leaderboard for top-rated games, most-liked posts, and active contributors
+- Personal profile page with saved games and activity summary
+- Leaderboard: top-rated games, most-liked posts, most active contributors
 
 ### AI Game Agent
 
-Built a memory-based multi-agent AI pipeline with context management, conversation summarization, recommendation extraction, and response evaluation.
+A modular 6-step sequential pipeline powered by LangChain and Google Gemini. Each step is a separate module with a single responsibility.
 
-The AI Agent helps users discover games and understand community activity. It can:
+**What the agent can do:**
+- Recommend games based on the user's bookmarks and community trends
+- Summarise what the community is currently playing
+- Answer leaderboard and rating questions
+- Hold a multi-turn conversation with rolling context (remembers recent topics)
+- Search the web for game info not stored on the platform (via Tavily, optional)
+- Skip Gemini entirely for simple greetings (instant fast-path response)
 
-- Recommend games based on user bookmarks and platform activity via a modular 6-step pipeline
-- Classify intent (bookmarks, leaderboard, community, game recommendations, general chat) without a Gemini call
-- Extract and enrich structured `recommendedPosts` from every AI response
-- Skip Gemini entirely for simple greetings (fast-path)
-- Maintain per-user conversation context with topic tracking and rolling 5-turn summaries stored in `UserMemory`
-- Evaluate each response for grounding, hallucinations, and safety — and run a one-pass reflection correction when issues are detected
-- Search community posts by genre or tag
-- Use optional web search for game information not stored in the platform
+**Built-in quality controls:**
+- Every response is evaluated for hallucinations (game titles not in the database are automatically removed)
+- Safety check on every reply; a one-pass reflection correction is triggered when issues are detected
+- Per-user long-term preference profile — the agent adapts recommendations as it learns the user's taste
 
-The AI Agent is powered by LangChain and Google Gemini. All API keys are handled server-side — never exposed to the frontend.
+---
 
-See [CHANGELOG.md](./CHANGELOG.md) for a detailed breakdown of the pipeline architecture, evaluation logic, and update history.
+## AI Pipeline Architecture
+
+```
+User message (GraphQL resolver)
+        │
+        ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │  Step 1 │ Conversation Manager                              │
+ │         │ Load history, turn count, rolling summary,        │
+ │         │ and user preference profile — all in parallel     │
+ ├─────────────────────────────────────────────────────────────┤
+ │  Step 2 │ Router Agent (rule-based, zero LLM cost)          │
+ │         │ Classifies intent into one of 5 categories:       │
+ │         │ game_recommendation · bookmark_analysis ·         │
+ │         │ community_summary · leaderboard_query ·           │
+ │         │ general_chat                                       │
+ ├─────────────────────────────────────────────────────────────┤
+ │  Step 3 │ Platform Tools                                     │
+ │         │ Fetches DB data matching the intent               │
+ │         │ (bookmarks / community / leaderboard / web search)│
+ ├─────────────────────────────────────────────────────────────┤
+ │  Step 4 │ Answer Agent — single Gemini call                 │
+ │         │ Generates a grounded reply using platform data    │
+ │         │ and the user's preference profile                 │
+ ├─────────────────────────────────────────────────────────────┤
+ │  Step 5 │ Validator Agent                                    │
+ │         │ Structural check + hallucination / safety eval    │
+ │         │ Triggers one reflection pass if issues found      │
+ ├─────────────────────────────────────────────────────────────┤
+ │  Step 6 │ Save & Return                                      │
+ │         │ Persists exchange; every 5 turns compresses        │
+ │         │ history into a rolling UserMemory summary          │
+ └─────────────────────────────────────────────────────────────┘
+        │
+        ▼
+  { answer, recommendedPosts, intent, evaluation }
+```
+
+Every Gemini call receives the user's preference profile alongside platform data, so recommendations personalise over time without any vector database.
 
 ---
 
@@ -59,191 +106,130 @@ See [CHANGELOG.md](./CHANGELOG.md) for a detailed breakdown of the pipeline arch
 
 | Layer | Technologies |
 |---|---|
-| Frontend | React, Vite, Apollo Client |
-| Backend | Node.js, GraphQL, Apollo Server |
+| Frontend | React 18, Vite, Apollo Client, Three.js |
+| Backend | Node.js, Apollo Server, GraphQL |
 | Database | MongoDB, Mongoose |
 | Authentication | JWT, bcrypt |
-| AI / LLM | LangChain, Google Gemini API |
-| External API | Tavily Search API |
-| Architecture | Monorepo, npm workspaces |
+| AI / LLM | LangChain, Google Gemini (`gemini-2.5-flash`) |
+| Web Search | Tavily Search API (optional) |
+| Testing | Vitest + React Testing Library, Node `node:test` |
+| Monorepo | npm workspaces |
 
 ---
 
 ## Project Structure
 
-```txt
+```
 apps/
-  auth-frontend/        # Main platform frontend
-                        # Auth, dashboard, posts, community,
-                        # bookmarks, AI agent, profile, leaderboard
-
-  progress-frontend/    # Secondary frontend module
-                        # Progress and leaderboard-related views
+  auth-frontend/      # Main React frontend
+                      # Auth, posts, community, AI agent chat,
+                      # bookmarks, profile, leaderboard
 
 packages/
-  auth-service/         # Main backend API service
-                        # GraphQL API, MongoDB models, JWT auth,
-                        # community features, AI agent integration
+  auth-service/       # Main Node.js backend
+                      # GraphQL API, MongoDB models, JWT auth,
+                      # AI pipeline (6 modules under ai/)
+                      # User memory and preference services
 
-  progress-service/     # Progress-related backend service
-                        # Experience and achievement features
+  progress-service/   # Progress / achievement backend service
 
 shared/
-  jwt/
-    index.js            # Shared JWT sign/verify helper
+  jwt/                # Shared JWT sign/verify helper
 ```
-
-> **Note:** Some folder names such as `auth-frontend` and `auth-service` are from the original monorepo scaffold. They act as the main platform frontend and backend service.
-
----
-
-## AI Mock Mode
-
-When the Gemini free-tier quota is exhausted, run with `AI_MOCK_MODE=true` to skip all Gemini calls and return deterministic responses for local testing.
-
-```bash
-npm run dev:auth:mock   # mock mode — no Gemini calls
-npm run dev:auth:real   # real Gemini mode
-```
-
-See [CHANGELOG.md](./CHANGELOG.md) for full mock mode documentation and behaviour details.
 
 ---
 
 ## Quick Start
 
-### 1. Clone the repository
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/LeoC1110/ai-game-discovery-platform.git
 cd ai-game-discovery-platform
-```
-
-### 2. Install dependencies
-
-```bash
 npm install
 ```
 
-### 3. Set up environment variables
+### 2. Configure environment variables
 
-Create `.env` files based on the provided `.env.example` files.
-
-Example for `packages/auth-service/.env`:
+Create `packages/auth-service/.env`:
 
 ```env
 MONGODB_URI=your_mongodb_uri_here
 JWT_SECRET=your_jwt_secret_here
 GOOGLE_API_KEY=your_gemini_api_key_here
 AI_MODEL=gemini-2.5-flash-lite
-AI_MAX_HISTORY_MESSAGES=10
-AI_MAX_PLATFORM_POSTS=10
 PORT=4001
 
-# Optional: enables web search tool
+# Optional — enables web search in general chat
 TAVILY_API_KEY=your_tavily_api_key_here
 ```
 
-### 4. Start MongoDB
+### 3. Start MongoDB
 
-Use either a local MongoDB instance or MongoDB Atlas.
+Local default: `mongodb://localhost:27017`  
+Or use a MongoDB Atlas connection string in `MONGODB_URI`.
 
-Default local connection: `mongodb://localhost:27017`
-
-### 5. Run the backend and frontend
-
-Start each service in a separate terminal.
+### 4. Run the services
 
 ```bash
-# Main backend service
-npm run dev:auth
-
-# Main platform frontend
-npm run dev:auth-frontend
-
-# Optional progress backend
-npm run dev:progress
-
-# Optional progress frontend
-npm run dev:progress-frontend
+npm run dev:auth            # Backend  →  http://localhost:4001/graphql
+npm run dev:auth-frontend   # Frontend →  http://localhost:5173
 ```
 
-**Default Local URLs:**
+**AI Mock Mode** — when the Gemini quota is exhausted, run without API calls:
 
-| App | URL |
-|---|---|
-| Platform frontend | http://localhost:5173 |
-| Platform GraphQL service | http://localhost:4001/graphql |
-| Progress GraphQL service | http://localhost:4002/graphql |
+```bash
+npm run dev:auth:mock       # deterministic responses, no Gemini calls
+```
 
 ---
 
 ## Example AI Prompts
 
-After logging in, users can try prompts such as:
-
-- Recommend games based on my bookmarks.
-- What are the most liked games right now?
-- Find multiplayer strategy games.
-- Summarize my platform activity.
-- What should I play next?
-
----
-
-## Security Notes
-
-- Real `.env` files are not committed
-- API keys and secrets are loaded server-side only
-- Gemini API calls are made from the backend, not the frontend
-- `.env.example` files only contain placeholder values
-- `node_modules/` and build output folders are excluded from version control
-- User conversation history is stored in MongoDB and is not committed to the repository
-- Passwords are hashed with bcrypt
-- JWT is used for authentication and role-based access control
-
-> **Note:** If JWT is stored in `localStorage`, consider moving to HTTP-only cookies in a future iteration to reduce XSS exposure.
+- *Recommend games based on my bookmarks.*
+- *What are the most liked games right now?*
+- *Find co-op strategy games.*
+- *What should I play next?*
+- *Summarise my platform activity.*
 
 ---
 
 ## Testing
 
-| Suite | Result | Command |
+| Suite | Coverage | Command |
 |---|---|---|
-| Frontend — Vitest + React Testing Library | 70 / 70 pass | `npm test --workspace @apps/auth-frontend` |
-| Backend — mock mode unit tests (`node:test`) | 17 / 17 pass | `npm test --workspace @services/auth` |
-| Backend — pipeline integration tests (`node:test`) | 15 / 15 pass | `npm test --workspace @services/auth` |
+| Frontend — Vitest + React Testing Library | **70 / 70 pass** | `npm test --workspace @apps/auth-frontend` |
+| Backend — unit tests (mock mode) | **17 / 17 pass** | `npm test --workspace @services/auth` |
+| Backend — pipeline integration tests | **15 / 15 pass** | `npm test --workspace @services/auth` |
 
 ---
 
-## Portfolio Purpose
+## Security
 
-This project demonstrates:
+- `.env` files are never committed; only `.env.example` placeholders are in the repo
+- All Gemini and Tavily API calls are made server-side — keys never reach the browser
+- Passwords hashed with bcrypt; sessions authenticated via JWT
+- JWT stored in `localStorage` (suitable for portfolio use; HTTP-only cookies recommended for production)
 
-- Full-stack web development with React and Node.js
-- GraphQL API design with Apollo Server
-- MongoDB data modeling with Mongoose
-- JWT authentication and role-based access control
-- Community platform features such as posts, likes, comments, and bookmarks
-- AI integration using LangChain and Google Gemini
-- Modular multi-step AI agent pipeline with intent routing, context management, and per-user memory
-- Conversation summarization and rolling context window via `UserMemory` model
-- Structured recommendation extraction from AI output with DB-backed hallucination filtering
-- Response evaluation and one-pass reflection loop (`wasReflected` flag)
-- Backend tool calling for AI-assisted recommendations
-- Rule-based AI response evaluation
-- Optional external API integration with Tavily Search
-- Secure server-side API key handling
-- Monorepo project organization with npm workspaces
-- 70/70 frontend tests + 32/32 backend tests (mock mode unit tests + pipeline integration tests)
+---
+
+## Portfolio Highlights
+
+| Skill | Implementation |
+|---|---|
+| Full-stack development | React frontend + Node.js/GraphQL backend |
+| Database design | 9 Mongoose models including `UserMemory`, `ConversationHistory`, `TournamentResult` |
+| AI pipeline design | 6-step sequential pipeline across 6 independent modules |
+| LLM integration | LangChain + Google Gemini with singleton model, timeout handling, and mock mode |
+| Context management | Rolling 5-turn conversation summaries stored in `UserMemory`; per-user preference profiles |
+| Hallucination mitigation | DB-backed title filtering removes invented games before the response reaches the frontend |
+| Response quality loop | Automated evaluation + one-pass reflection correction (`wasReflected` flag) |
+| External API integration | Tavily web search with in-memory rate limiter (30 calls/day global, 3/hour per user) |
+| Monorepo architecture | npm workspaces with shared JWT package |
+| Testing | 102 tests across frontend and backend suites |
 
 ---
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md) for:
-
-- AI Agent pipeline architecture and all recent updates
-- AI quality checks and evaluation details
-- Backend tool calling and web search
-- Feature branch history
-- Planned future improvements
+See [CHANGELOG.md](./CHANGELOG.md) for the full history of pipeline changes, evaluation logic, and feature additions.

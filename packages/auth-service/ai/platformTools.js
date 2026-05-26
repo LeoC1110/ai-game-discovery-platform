@@ -60,6 +60,76 @@ export async function getMostLikedPosts(limit = 10) {
   return `Most-liked posts (${top.length}):\n` + top.map(formatPost).join('\n');
 }
 
+// ── Web search rate limiter (protects Tavily free-tier quota) ────────────────
+// Free tier: 1 000 calls / month — 30/day global, 3/hour per user.
+const _webSearchLimiter = {
+  GLOBAL_DAILY_LIMIT: 30,
+  PER_USER_HOURLY_LIMIT: 3,
+  _global: { count: 0, resetAt: 0 },
+  _users: new Map(),
+  check(userId) {
+    const now = Date.now();
+    if (now >= this._global.resetAt) {
+      const midnight = new Date();
+      midnight.setUTCHours(24, 0, 0, 0);
+      this._global = { count: 0, resetAt: midnight.getTime() };
+    }
+    if (this._global.count >= this.GLOBAL_DAILY_LIMIT)
+      return { ok: false, reason: 'Daily web-search limit reached.' };
+    let u = this._users.get(userId);
+    if (!u || now >= u.resetAt) {
+      u = { count: 0, resetAt: now + 3_600_000 };
+      this._users.set(userId, u);
+    }
+    if (u.count >= this.PER_USER_HOURLY_LIMIT)
+      return { ok: false, reason: 'Web search limit reached for this hour.' };
+    return { ok: true };
+  },
+  increment(userId) {
+    this._global.count++;
+    const u = this._users.get(userId);
+    if (u) u.count++;
+  },
+};
+
+/**
+ * Tavily web search — only called when TAVILY_API_KEY is set.
+ * Returns formatted result text, or empty string on failure / rate limit.
+ */
+export async function searchWeb(query, userId = 'global') {
+  const check = _webSearchLimiter.check(String(userId));
+  if (!check.ok) {
+    console.warn('[platformTools:web-search] Rate limit:', check.reason);
+    return '';
+  }
+  const response = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: process.env.TAVILY_API_KEY,
+      query,
+      max_results: 3,
+      search_depth: 'basic',
+      include_answer: false,
+      include_images: false,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`Tavily API error: ${response.status}`);
+  const data = await response.json();
+  _webSearchLimiter.increment(String(userId));
+  console.log(
+    `[platformTools:web-search] "${query.slice(0, 60)}" — global today: ${_webSearchLimiter._global.count}/${_webSearchLimiter.GLOBAL_DAILY_LIMIT}`,
+  );
+  if (!data.results?.length) return '';
+  return (
+    `Web search results for "${query}":\n` +
+    data.results
+      .map((r, i) => `[${i + 1}] ${r.title}\n${(r.content ?? '').slice(0, 400)}\nSource: ${r.url}`)
+      .join('\n\n')
+  );
+}
+
 /**
  * Select and fetch the platform data most relevant to the classified intent.
  *
@@ -68,13 +138,14 @@ export async function getMostLikedPosts(limit = 10) {
  *   community_summary   → getMostLikedPosts
  *   leaderboard_query   → getTopRatedGames
  *   game_recommendation → bookmarks + most-liked community posts
- *   general_chat        → (no data needed — returns empty string)
+ *   general_chat        → Tavily web search (if TAVILY_API_KEY is set), else empty
  *
- * @param {string} intent   - one of the INTENTS constants
+ * @param {string} intent      - one of the INTENTS constants
  * @param {string} userId
+ * @param {string} userMessage - used as web-search query for general_chat
  * @returns {Promise<string>} formatted platform data for prompt injection
  */
-export async function fetchDataForIntent(intent, userId) {
+export async function fetchDataForIntent(intent, userId, userMessage = '') {
   try {
     switch (intent) {
       case INTENTS.BOOKMARK_ANALYSIS:
@@ -94,7 +165,12 @@ export async function fetchDataForIntent(intent, userId) {
         return `${bookmarks}\n\n${community}`;
       }
 
+      case INTENTS.GENERAL_CHAT:
       default:
+        // Web search for factual questions when Tavily is configured
+        if (process.env.TAVILY_API_KEY && userMessage.trim()) {
+          return await searchWeb(userMessage, userId).catch(() => '');
+        }
         return '';
     }
   } catch (err) {

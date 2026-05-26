@@ -95,9 +95,10 @@ export default function BookmarksPage() {
                     View in Community
                   </button>
                   <button
-                    className="btn-danger"
+                    className={`btn-danger ${toggling ? 'is-loading' : ''}`}
                     style={{ fontSize: 13, height: 32 }}
                     disabled={toggling}
+                    aria-busy={toggling}
                     onClick={() => toggleBookmark({ variables: { postId: post.id } })}
                     title="Remove bookmark"
                   >

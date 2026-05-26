@@ -79,7 +79,7 @@ export default function RegisterPage() {
               />
 
               <div className="auth-actions">
-                <button type="submit" className="btn-primary" disabled={loading}>
+                <button type="submit" className={`btn-primary ${loading ? 'is-loading' : ''}`} disabled={loading} aria-busy={loading}>
                   {loading ? 'Submitting…' : 'Register'}
                 </button>
                 <button type="button" className="btn-ghost" onClick={() => nav('/')}>
