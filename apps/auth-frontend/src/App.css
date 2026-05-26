@@ -1135,6 +1135,40 @@ select:focus-visible {
   color: #888;
 }
 
+.agent-message__markdown {
+  margin: 0;
+}
+
+.agent-message__markdown p {
+  margin: 0 0 0.5em 0;
+}
+
+.agent-message__markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.agent-message__markdown ul,
+.agent-message__markdown ol {
+  margin: 0.25em 0 0.5em 0;
+  padding-left: 1.4em;
+}
+
+.agent-message__markdown li {
+  margin-bottom: 0.2em;
+}
+
+.agent-message__markdown strong {
+  font-weight: 700;
+}
+
+.agent-message__markdown code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
 .agent-message__subtext {
   font-size: 12px;
   opacity: 0.6;

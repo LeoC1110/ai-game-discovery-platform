@@ -49,7 +49,7 @@ const RECO_FORMAT_RULE =
   `machine-readable block at the very end in this exact format (no extra text after it):\n` +
   `<!--RECOMMENDATIONS:[{"title":"Exact Game Title","reason":"One concise sentence why this fits the user","confidence":0.95,"matchedTags":["tag1","tag2"]}]-->\n` +
   `Rules for the block:\n` +
-  `- Use only titles that exist in the platform data above.\n` +
+  `- Use only titles from the Platform Data section — never from Web Suggestions or training knowledge.\n` +
   `- confidence is a float between 0.0 and 1.0.\n` +
   `- matchedTags are tags from the game that match the user's request.\n` +
   `- If no specific games are being recommended, omit the block entirely.`;
@@ -61,7 +61,8 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
     `Be concise, friendly, and grounded in the platform data below.\n\n` +
     `Behaviour rules:\n` +
     `- Do not invent or fabricate game titles not present in the provided data.\n` +
-    `- Base all recommendations ONLY on the platform data supplied below — never on training knowledge.\n` +
+    `- The RECOMMENDATIONS block must only include titles from the "Platform Data" section — never from Web Suggestions or training knowledge.\n` +
+    `- If "Web Suggestions" are present, you MAY mention at most 1 title from them in your prose, clearly labelled as "Also consider (not on this platform): <title>" — never put it in the RECOMMENDATIONS block.\n` +
     `- If platform data is empty, tell the user no posts are available yet and suggest they browse or add some.\n` +
     `- Format lists with bullet points or numbered items for readability.\n` +
     `- If the user states a preference (e.g. “I like RPG”), acknowledge it and use it in your reply.\n` +

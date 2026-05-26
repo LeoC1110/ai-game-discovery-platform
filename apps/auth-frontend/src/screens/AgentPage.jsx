@@ -1,5 +1,6 @@
 // src/screens/AgentPage.jsx — AI Game Agent (LangChain + Google Gemini)
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useMutation, useQuery } from '@apollo/client';
 import ThreeBackground from '../components/ThreeBackground';
 import DashboardNav from '../components/DashboardNav';
@@ -9,9 +10,9 @@ const SUGGESTIONS = [
   'Recommend games based on my bookmarks.',
   'Summarize the most liked community posts.',
   'What are the top-rated games?',
-  'Find multiplayer strategy games.',
-  'What should I play next?',
-  'Summarize reviews for a popular game.',
+  'Find me a good co-op or multiplayer game.',
+  'What should I play next based on my taste?',
+  'Which games are trending in the community?',
 ];
 
 // ── Small recommendation card ──────────────────────────────────────────────────
@@ -171,7 +172,13 @@ export default function AgentPage() {
                   <span className="agent-message__label">
                     {msg.role === 'user' ? 'You' : '🤖 Agent'}
                   </span>
-                  <p className="agent-message__text">{msg.text}</p>
+                  {msg.role === 'agent' ? (
+                    <div className="agent-message__markdown">
+                      <ReactMarkdown>{msg.text}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="agent-message__text">{msg.text}</p>
+                  )}
 
                   {/* Recommended game cards */}
                   {msg.recommendedPosts?.length > 0 && (

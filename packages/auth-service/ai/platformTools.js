@@ -162,7 +162,20 @@ export async function fetchDataForIntent(intent, userId, userMessage = '') {
           getMyBookmarks(userId),
           getMostLikedPosts(5),
         ]);
-        return `${bookmarks}\n\n${community}`;
+        let result = `${bookmarks}\n\n${community}`;
+
+        // Supplement with a web search when the user asks for something
+        // specific (e.g. a genre, play-style) that may not exist on the platform.
+        if (process.env.TAVILY_API_KEY && userMessage.trim()) {
+          const webData = await searchWeb(`best ${userMessage}`, userId).catch(() => '');
+          if (webData) {
+            result +=
+              `\n\n--- Web Suggestions (games not on this platform) ---\n` +
+              `${webData}\n` +
+              `--- End Web Suggestions ---`;
+          }
+        }
+        return result;
       }
 
       case INTENTS.GENERAL_CHAT:

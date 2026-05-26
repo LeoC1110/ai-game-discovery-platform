@@ -5,6 +5,45 @@ New features and updates should be added under the relevant version or date sect
 
 ---
 
+## [2026-05-26] — Markdown Rendering, Tavily for Game Recommendations, and UI Prompt Fixes
+
+### `AgentPage.jsx` — Markdown Rendering for Agent Responses
+
+Installed `react-markdown` in `apps/auth-frontend` and applied it to AI agent chat bubbles.
+
+- Agent responses now render full Markdown: **bold**, *italic*, bullet lists, numbered lists, and inline `code`
+- User messages remain as plain `<p>` text (users do not write Markdown)
+- Added `.agent-message__markdown` CSS class in `App.css` with scoped styles for all rendered Markdown elements (`p`, `ul`, `ol`, `li`, `strong`, `code`)
+
+### `AgentPage.jsx` — Suggested Prompt Fixes
+
+Audited all 6 quick-start suggestion buttons against the `routerAgent.js` pattern table.
+
+Fixed a routing bug in the sixth prompt: `"Summarize reviews for a popular game."` matched **no** named intent (fell through to `GENERAL_CHAT`, skipping all platform data). Replaced with `"Which games are trending in the community?"` which correctly routes to `COMMUNITY_SUMMARY` via `/trending/i`.
+
+Updated prompts:
+- `"Find multiplayer strategy games."` → `"Find me a good co-op or multiplayer game."` (more conversational)
+- `"What should I play next?"` → `"What should I play next based on my taste?"` (signals use of user memory)
+- `"Summarize reviews for a popular game."` → `"Which games are trending in the community?"` (fixes routing bug)
+
+All 6 prompts now map to a named intent and will fetch real platform data.
+
+### `platformTools.js` — Tavily Web Search Extended to Game Recommendations
+
+Previously Tavily was only called for `GENERAL_CHAT` intent. It is now also called for `GAME_RECOMMENDATION` when `TAVILY_API_KEY` is configured, supplementing platform data with one web-sourced game suggestion.
+
+The web result is appended under a clearly labelled `--- Web Suggestions (games not on this platform) ---` section so Gemini can distinguish it from DB data.
+
+### `answerAgent.js` — System Prompt Rules Updated
+
+System prompt behaviour rules updated to match the new two-source data layout:
+
+- **RECOMMENDATIONS block** (drives the card UI) is restricted to titles from the `Platform Data` section only — the `recommendationExtractor.js` hallucination guard enforces this at extraction time
+- **Web Suggestions** may contribute at most 1 title to the prose response, clearly labelled `"Also consider (not on this platform): <title>"`
+- `RECO_FORMAT_RULE` updated to say "Platform Data section — never from Web Suggestions or training knowledge"
+
+---
+
 ## [2026-05-26] — Pipeline Cleanup, User Memory Wiring, and README Rewrite
 
 ### `aiAgentService.js` — Dead Code Removal
