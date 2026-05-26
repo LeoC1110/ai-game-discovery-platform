@@ -32,20 +32,31 @@ Built as a portfolio project to demonstrate end-to-end full-stack development, G
 
 ## Demo Preview
 
+### AI Game Agent
+
+The core feature of the platform — a 6-step LangChain pipeline powered by Google Gemini that reads live platform data to deliver grounded, personalised game recommendations.
+
+| Agent Introduction | Bookmark-Based Recommendations |
+|:-----------------:|:------------------------------:|
+| ![AI Agent Intro](./docs/screenshots/01-ai-agent-intro.jpg) | ![Bookmark Recommendations](./docs/screenshots/02-ai-agent-bookmark-recommendation.jpg) |
+| *The agent greets users and explains its capabilities* | *Analyses the user's bookmarks to suggest what to play next* |
+
+| Genre-Specific Recommendations | Multi-Turn Conversation |
+|:------------------------------:|:----------------------:|
+| ![Roguelike Recommendations](./docs/screenshots/03-ai-agent-roguelike-recommendation.jpg) | ![Follow-Up Answer](./docs/screenshots/04-ai-agent-follow-up-answer.jpg) |
+| *Finds games matching a specific genre from real platform posts* | *Remembers previous context and answers follow-up questions* |
+
+### Community Platform
+
 | Create Post | Community Feed |
 |:-----------:|:--------------:|
 | ![Create Post Form](./docs/screenshots/08-create-post-form.jpg) | ![Community Feed](./docs/screenshots/06-community-feed.jpg) |
 | *Create game posts with title, genre, platform, rating, tags, review, and cover image* | *Browse community recommendations with ratings, tags, likes, and comments* |
 
-| AI Game Agent | Leaderboard |
-|:-------------:|:-----------:|
-| ![AI Game Agent](./docs/screenshots/02-ai-agent-bookmark-recommendation.jpg) | ![Leaderboard](./docs/screenshots/07-leaderboard.jpg) |
-| *AI agent uses live platform data to generate grounded, personalised recommendations* | *Top-rated games and most active community contributors* |
-
-| Bookmarks |
-|:---------:|
-| ![Bookmarks](./docs/screenshots/05-bookmarks.jpg) |
-| *Save and view bookmarked games in one place* |
+| Bookmarks | Leaderboard |
+|:---------:|:-----------:|
+| ![Bookmarks](./docs/screenshots/05-bookmarks.jpg) | ![Leaderboard](./docs/screenshots/07-leaderboard.jpg) |
+| *Save and view bookmarked games in one place* | *Top-rated games and most active community contributors* |
 
 ---
 
