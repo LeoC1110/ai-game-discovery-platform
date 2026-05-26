@@ -1,23 +1,51 @@
 ﻿# AI-Powered Game Discovery Platform
 
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-LTS-339933?logo=nodedotjs&logoColor=white)
+![GraphQL](https://img.shields.io/badge/GraphQL-Apollo-E10098?logo=graphql&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-47A248?logo=mongodb&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-Gemini-1C3C3C?logo=langchain&logoColor=white)
+![Tests](https://img.shields.io/badge/Tests-102%20passing-brightgreen)
+
 A full-stack web application where users discover, share, and discuss games — backed by an AI Game Agent that delivers personalised recommendations based on real platform activity.
 
 Built as a portfolio project to demonstrate end-to-end full-stack development, GraphQL API design, MongoDB data modelling, and a production-oriented AI pipeline using LangChain and Google Gemini.
 
 ---
 
+## Table of Contents
+
+- [Demo Preview](#demo-preview)
+- [What the Project Does](#what-the-project-does)
+- [Key Features](#key-features)
+- [AI Pipeline Architecture](#ai-pipeline-architecture)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+- [Example AI Prompts](#example-ai-prompts)
+- [Testing](#testing)
+- [Security](#security)
+- [Portfolio Highlights](#portfolio-highlights)
+- [Changelog](#changelog)
+
+---
+
 ## Demo Preview
 
-> Screenshots or a short demo video can be added here.
+| Create Post | Community Feed |
+|:-----------:|:--------------:|
+| ![Create Post Form](./docs/screenshots/08-create-post-form.jpg) | ![Community Feed](./docs/screenshots/06-community-feed.jpg) |
+| *Create game posts with title, genre, platform, rating, tags, review, and cover image* | *Browse community recommendations with ratings, tags, likes, and comments* |
 
-<!-- Replace these with real screenshots after you add them to the repo -->
+| AI Game Agent | Leaderboard |
+|:-------------:|:-----------:|
+| ![AI Game Agent](./docs/screenshots/02-ai-agent-bookmark-recommendation.jpg) | ![Leaderboard](./docs/screenshots/07-leaderboard.jpg) |
+| *AI agent uses live platform data to generate grounded, personalised recommendations* | *Top-rated games and most active community contributors* |
 
-![Community Feed](./docs/screenshots/community-feed.png)
-![AI Game Agent](./docs/screenshots/ai-agent.png)
-![Recommendation Result](./docs/screenshots/recommendation-result.png)
-
-Demo video: Coming soon  
-Live demo: Coming soon
+| Bookmarks |
+|:---------:|
+| ![Bookmarks](./docs/screenshots/05-bookmarks.jpg) |
+| *Save and view bookmarked games in one place* |
 
 ---
 
@@ -25,9 +53,8 @@ Live demo: Coming soon
 
 Users log in, browse or post game recommendations, interact with the community, and chat with an AI agent that reads their activity to suggest what to play next.
 
-**Community side** — create and browse game posts, like / comment / bookmark games, view a leaderboard of top-rated and most-liked titles, manage a personal profile.
-
-**AI side** — an AI Game Agent answers questions, recommends games, and summarises platform trends. It only reads live data from the platform database and never invents games that do not exist.
+- **Community side** — create and browse game posts, like / comment / bookmark games, view a leaderboard of top-rated and most-liked titles, manage a personal profile.
+- **AI side** — an AI Game Agent answers questions, recommends games, and summarises platform trends. It only reads live data from the platform database and never invents games that do not exist.
 
 ---
 
@@ -46,6 +73,7 @@ Users log in, browse or post game recommendations, interact with the community, 
 A modular 6-step sequential pipeline powered by LangChain and Google Gemini. Each step is a separate module with a single responsibility.
 
 **What the agent can do:**
+
 - Recommend games based on the user's bookmarks and community trends
 - Summarise what the community is currently playing
 - Answer leaderboard and rating questions
@@ -54,7 +82,8 @@ A modular 6-step sequential pipeline powered by LangChain and Google Gemini. Eac
 - Skip Gemini entirely for simple greetings (instant fast-path response)
 
 **Built-in quality controls:**
-- Every response is evaluated for hallucinations (game titles not in the database are automatically removed)
+
+- Every response is evaluated for hallucinations — game titles not in the database are automatically removed
 - Safety check on every reply; a one-pass reflection correction is triggered when issues are detected
 - Per-user long-term preference profile — the agent adapts recommendations as it learns the user's taste
 
@@ -71,7 +100,7 @@ User message (GraphQL resolver)
  │         │ Load history, turn count, rolling summary,        │
  │         │ and user preference profile — all in parallel     │
  ├─────────────────────────────────────────────────────────────┤
- │  Step 2 │ Router Agent (rule-based, zero LLM cost)          │
+ │  Step 2 │ Router Agent  (rule-based, zero LLM cost)         │
  │         │ Classifies intent into one of 5 categories:       │
  │         │ game_recommendation · bookmark_analysis ·         │
  │         │ community_summary · leaderboard_query ·           │
@@ -81,7 +110,7 @@ User message (GraphQL resolver)
  │         │ Fetches DB data matching the intent               │
  │         │ (bookmarks / community / leaderboard / web search)│
  ├─────────────────────────────────────────────────────────────┤
- │  Step 4 │ Answer Agent — single Gemini call                 │
+ │  Step 4 │ Answer Agent  (single Gemini call)                │
  │         │ Generates a grounded reply using platform data    │
  │         │ and the user's preference profile                 │
  ├─────────────────────────────────────────────────────────────┤
@@ -98,7 +127,7 @@ User message (GraphQL resolver)
   { answer, recommendedPosts, intent, evaluation }
 ```
 
-Every Gemini call receives the user's preference profile alongside platform data, so recommendations personalise over time without any vector database.
+> Every Gemini call receives the user's preference profile alongside platform data, so recommendations personalise over time without any vector database.
 
 ---
 
@@ -166,8 +195,8 @@ TAVILY_API_KEY=your_tavily_api_key_here
 
 ### 3. Start MongoDB
 
-Local default: `mongodb://localhost:27017`  
-Or use a MongoDB Atlas connection string in `MONGODB_URI`.
+Local default: `mongodb://localhost:27017`
+Use a MongoDB Atlas connection string in `MONGODB_URI` for a cloud database.
 
 ### 4. Run the services
 
@@ -176,15 +205,16 @@ npm run dev:auth            # Backend  →  http://localhost:4001/graphql
 npm run dev:auth-frontend   # Frontend →  http://localhost:5173
 ```
 
-**AI Mock Mode** — when the Gemini quota is exhausted, run without API calls:
-
-```bash
-npm run dev:auth:mock       # deterministic responses, no Gemini calls
-```
+> **AI Mock Mode** — when the Gemini quota is exhausted, run without API calls:
+> ```bash
+> npm run dev:auth:mock     # deterministic responses, no Gemini calls
+> ```
 
 ---
 
 ## Example AI Prompts
+
+> Try these in the AI agent chat to see the pipeline in action.
 
 - *Recommend games based on my bookmarks.*
 - *What are the most liked games right now?*
@@ -196,8 +226,8 @@ npm run dev:auth:mock       # deterministic responses, no Gemini calls
 
 ## Testing
 
-| Suite | Coverage | Command |
-|---|---|---|
+| Suite | Result | Command |
+|---|:---:|---|
 | Frontend — Vitest + React Testing Library | **70 / 70 pass** | `npm test --workspace @apps/auth-frontend` |
 | Backend — unit tests (mock mode) | **17 / 17 pass** | `npm test --workspace @services/auth` |
 | Backend — pipeline integration tests | **15 / 15 pass** | `npm test --workspace @services/auth` |
