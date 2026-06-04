@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const authAppUrl = env.VITE_AUTH_APP_URL ||
     (mode === 'production'
-      ? 'https://auth-frontend-production-d57e.up.railway.app/'
+      ? 'https://game-discovery-auth.up.railway.app/'
       : 'http://localhost:5173/');
 
   return {
@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
         auth_frontend:
           process.env.VITE_AUTH_REMOTE_URL ||
           (mode === 'production'
-            ? 'https://auth-frontend-production-d57e.up.railway.app/assets/remoteEntry.js'
+            ? 'https://game-discovery-auth.up.railway.app/assets/remoteEntry.js'
             : 'http://localhost:5173/assets/remoteEntry.js'),
       },
       shared: {
