@@ -17,14 +17,18 @@ import { warmUpAIAgent } from './services/aiAgentService.js';
 // ====== App ======
 const app = express();
 
-// CORS: allow local frontend & Apollo Studio Sandbox
-app.use(
-  cors({
-    origin: [
+// CORS: allow configured origins + local dev defaults
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [
       'http://localhost:5173',
       'http://localhost:5174',
       'https://studio.apollographql.com',
-    ],
+    ];
+
+app.use(
+  cors({
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [

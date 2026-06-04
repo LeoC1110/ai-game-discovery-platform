@@ -12,13 +12,17 @@ import { getAuthContext } from './middleware/auth.js';
 
 const app = express();
 
-app.use(
-  cors({
-    origin: [
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [
       'http://localhost:5173',
       'http://localhost:5174',
       'https://studio.apollographql.com',
-    ],
+    ];
+
+app.use(
+  cors({
+    origin: allowedOrigins,
     credentials: true,
   }),
 );
