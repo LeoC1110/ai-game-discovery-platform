@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => ({
       remotes: {
         auth_frontend:
           process.env.VITE_AUTH_REMOTE_URL ||
-          (process.env.NODE_ENV === 'production'
+          (mode === 'production'
             ? 'https://auth-frontend-production-d57e.up.railway.app/assets/remoteEntry.js'
             : 'http://localhost:5173/assets/remoteEntry.js'),
       },
