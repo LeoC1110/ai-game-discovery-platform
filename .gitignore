@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.vite/
 
 # Environment variable files — NEVER commit these
 .env
