@@ -16,12 +16,11 @@ COPY apps/auth-frontend/   ./apps/auth-frontend/
 
 RUN npm run build --workspace @apps/auth-frontend
 
-# ── Stage 2: Serve ───────────────────────────────────────────────
-FROM node:22-alpine
-WORKDIR /app
+# ── Stage 2: Serve with nginx ───────────────────────────────────
+FROM nginx:alpine
 
-RUN npm install -g serve
+COPY --from=builder /workspace/apps/auth-frontend/dist /usr/share/nginx/html
+COPY apps/auth-frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
-COPY --from=builder /workspace/apps/auth-frontend/dist ./dist
-
-CMD ["sh", "-c", "serve dist -s -l tcp://0.0.0.0:${PORT:-3000}"]
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
