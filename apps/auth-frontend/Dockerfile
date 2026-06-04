@@ -24,4 +24,4 @@ RUN npm install -g serve
 
 COPY --from=builder /workspace/apps/auth-frontend/dist ./dist
 
-CMD ["sh", "-c", "serve dist -s -l ${PORT:-3000}"]
+CMD ["sh", "-c", "serve dist -s -l tcp://0.0.0.0:${PORT:-3000}"]

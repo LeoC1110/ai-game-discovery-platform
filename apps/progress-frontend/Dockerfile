@@ -29,4 +29,4 @@ RUN npm install -g serve
 COPY --from=builder /workspace/apps/progress-frontend/dist ./dist
 
 # Railway injects $PORT at runtime; default to 3000 for local testing
-CMD ["sh", "-c", "serve dist -s -l ${PORT:-3000}"]
+CMD ["sh", "-c", "serve dist -s -l tcp://0.0.0.0:${PORT:-3000}"]
