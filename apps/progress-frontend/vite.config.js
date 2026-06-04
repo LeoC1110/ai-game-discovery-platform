@@ -2,14 +2,16 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import federation from '@originjs/vite-plugin-federation';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     federation({
       name: 'progress_frontend',
       filename: 'remoteEntry.js',
       remotes: {
-        auth_frontend: 'http://localhost:5173/assets/remoteEntry.js',
+        auth_frontend:
+          process.env.VITE_AUTH_REMOTE_URL ||
+          'http://localhost:5173/assets/remoteEntry.js',
       },
       shared: {
         react: { singleton: true, eager: true },
@@ -32,4 +34,4 @@ export default defineConfig({
     minify: false,
     cssCodeSplit: false,
   },
-});
+}));
