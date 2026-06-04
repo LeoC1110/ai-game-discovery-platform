@@ -4,6 +4,10 @@ import federation from '@originjs/vite-plugin-federation';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const graphqlUri = env.VITE_GRAPHQL_URI ||
+    (mode === 'production'
+      ? 'https://progress-service-production-9afc.up.railway.app/graphql'
+      : 'http://localhost:4002/graphql');
   const authAppUrl = env.VITE_AUTH_APP_URL ||
     (mode === 'production'
       ? 'https://game-discovery-auth.up.railway.app/'
@@ -45,6 +49,7 @@ export default defineConfig(({ mode }) => {
   },
   define: {
     'import.meta.env.VITE_AUTH_APP_URL': JSON.stringify(authAppUrl),
+    'import.meta.env.VITE_GRAPHQL_URI': JSON.stringify(graphqlUri),
   },
 };
 });

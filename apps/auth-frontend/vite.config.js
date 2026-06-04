@@ -1,10 +1,17 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import federation from '@originjs/vite-plugin-federation';
 // eslint-disable-next-line no-undef
 const isTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const graphqlUri = env.VITE_GRAPHQL_URI ||
+    (mode === 'production'
+      ? 'https://auth-service-production-3ff0.up.railway.app/graphql'
+      : 'http://localhost:4001/graphql');
+
+  return {
   plugins: [
     react(),
     ...(isTest ? [] : [federation({
@@ -34,6 +41,9 @@ export default defineConfig({
     minify: false,
     cssCodeSplit: false,
   },
+  define: {
+    'import.meta.env.VITE_GRAPHQL_URI': JSON.stringify(graphqlUri),
+  },
   test: {
     globals: true,
     environment: 'jsdom',
@@ -45,4 +55,5 @@ export default defineConfig({
       include: ['src/screens/**', 'src/components/**'],
     },
   },
+  };
 });
