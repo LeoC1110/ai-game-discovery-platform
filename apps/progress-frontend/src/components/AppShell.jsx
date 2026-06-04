@@ -26,7 +26,7 @@ export default function AppShell({ children }) {
           <NavLink to="/achievements" className={({ isActive }) => isActive ? 'nav-link nav-link--active' : 'nav-link'}>
             Achievements
           </NavLink>
-          <a className="nav-link" href="http://localhost:5173/logout">Logout</a>
+          <a className="nav-link" href={`${import.meta.env.VITE_AUTH_APP_URL}logout`}>Logout</a>
         </nav>
         <main className="app-shell__main">{children}</main>
       </div>
