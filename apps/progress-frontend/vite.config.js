@@ -11,7 +11,9 @@ export default defineConfig(({ mode }) => ({
       remotes: {
         auth_frontend:
           process.env.VITE_AUTH_REMOTE_URL ||
-          'http://localhost:5173/assets/remoteEntry.js',
+          (process.env.NODE_ENV === 'production'
+            ? 'https://auth-frontend-production-d57e.up.railway.app/assets/remoteEntry.js'
+            : 'http://localhost:5173/assets/remoteEntry.js'),
       },
       shared: {
         react: { singleton: true, eager: true },
