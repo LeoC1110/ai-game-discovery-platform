@@ -37,6 +37,9 @@ export const NO_BOOKMARKS_RESPONSE =
 export const GENERIC_ERROR_RESPONSE =
   'Something went wrong with the AI service. Please try again in a moment.';
 
+/** Easter egg — returned when the user mentions 原神 + 牛逼. */
+export const GENSHIN_RESPONSE = '原神牛逼！';
+
 /** Returned when the Gemini API quota is exceeded (HTTP 429). */
 export const QUOTA_EXCEEDED_RESPONSE =
   "The AI service has reached its daily request limit. " +
