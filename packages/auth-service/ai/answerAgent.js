@@ -74,7 +74,11 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
 
   if (platformData) {
     prompt += `\n--- Platform Data ---\n${platformData}\n--- End Platform Data ---\n`;
-  } else {
+  } else if (intent !== INTENTS.GENERAL_CHAT) {
+    // For non-conversational intents (recommendations, bookmarks, etc.),
+    // tell Gemini there is no data so it doesn't invent games.
+    // For general_chat (e.g. "who are you", "I like you") we skip this
+    // instruction so Gemini can respond naturally without deflecting.
     prompt += `\nPlatform data: No community posts are available yet. Ask the user to create or bookmark some posts first.\n`;
   }
 
