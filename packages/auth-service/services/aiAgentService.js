@@ -19,7 +19,7 @@ function logAIError(step, err) {
   if (err?.status != null)  console.error('[AI]   error.status :', err.status);
   if (err?.code != null)    console.error('[AI]   error.code   :', err.code);
   if (err?.statusCode != null) console.error('[AI]   statusCode  :', err.statusCode);
-  console.error('[AI]   model used   :', process.env.AI_MODEL ?? 'gemini-1.5-flash');
+  console.error('[AI]   model used   :', process.env.AI_MODEL ?? 'gemini-3.1-flash-lite');
 }
 
 // ── Singleton Gemini model ────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ function getModel() {
   if (!key || !key.trim()) {
     throw new Error('GOOGLE_API_KEY is missing in backend environment variables.');
   }
-  const modelName = process.env.AI_MODEL ?? 'gemini-1.5-flash';
+  const modelName = process.env.AI_MODEL ?? 'gemini-3.1-flash-lite';
   console.log('[AI] Creating model instance:', modelName);
   _model = new ChatGoogleGenerativeAI({
     model: modelName,
@@ -60,7 +60,7 @@ export async function geminiHealthTest() {
   if (!key || !key.trim()) {
     return 'HEALTH CHECK FAILED: GOOGLE_API_KEY is missing in backend environment variables.';
   }
-  const modelName = process.env.AI_MODEL ?? 'gemini-1.5-flash';
+  const modelName = process.env.AI_MODEL ?? 'gemini-3.1-flash-lite';
   console.log('[AI] Health test — model:', modelName);
   try {
     // Create a fresh model instance (not the singleton) so we can test independently

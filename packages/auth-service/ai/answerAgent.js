@@ -18,7 +18,7 @@ export function getModel() {
   if (_model) return _model;
   const key = process.env.GOOGLE_API_KEY;
   if (!key?.trim()) throw new Error('GOOGLE_API_KEY is missing in backend environment variables.');
-  const modelName = process.env.AI_MODEL ?? 'gemini-2.5-flash';
+  const modelName = process.env.AI_MODEL ?? 'gemini-3.1-flash-lite';
   console.log('[answerAgent] Creating model:', modelName);
   _model = new ChatGoogleGenerativeAI({
     model: modelName,
