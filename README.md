@@ -1,5 +1,7 @@
 ﻿# AI-Powered Game Discovery Platform
 
+🚀 **Live Demo:** [https://game-discovery-auth.up.railway.app/login](https://game-discovery-auth.up.railway.app/login)
+
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-LTS-339933?logo=nodedotjs&logoColor=white)
 ![GraphQL](https://img.shields.io/badge/GraphQL-Apollo-E10098?logo=graphql&logoColor=white)
