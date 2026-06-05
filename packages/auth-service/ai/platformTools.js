@@ -108,9 +108,9 @@ export async function searchWeb(query, userId = 'global') {
     body: JSON.stringify({
       api_key: process.env.TAVILY_API_KEY,
       query,
-      max_results: 3,
+      max_results: 2,
       search_depth: 'basic',
-      include_answer: false,
+      include_answer: true,
       include_images: false,
     }),
     signal: AbortSignal.timeout(10_000),
@@ -121,13 +121,18 @@ export async function searchWeb(query, userId = 'global') {
   console.log(
     `[platformTools:web-search] "${query.slice(0, 60)}" — global today: ${_webSearchLimiter._global.count}/${_webSearchLimiter.GLOBAL_DAILY_LIMIT}`,
   );
-  if (!data.results?.length) return '';
-  return (
-    `Web search results for "${query}":\n` +
-    data.results
-      .map((r, i) => `[${i + 1}] ${r.title}\n${(r.content ?? '').slice(0, 400)}\nSource: ${r.url}`)
-      .join('\n\n')
-  );
+  if (!data.results?.length && !data.answer) return '';
+  let output = `Web search results for "${query}":\n`;
+  // Tavily's direct answer is the most token-efficient summary — use it first
+  if (data.answer) {
+    output += `Summary: ${data.answer}\n\n`;
+  }
+  if (data.results?.length) {
+    output += data.results
+      .map((r, i) => `[${i + 1}] ${r.title}\n${(r.content ?? '').slice(0, 200)}\nSource: ${r.url}`)
+      .join('\n\n');
+  }
+  return output;
 }
 
 /**
