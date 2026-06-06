@@ -9,10 +9,12 @@ const { Schema, model } = mongoose;
  */
 const userSchema = new Schema(
   {
-    username: { type: String, required: true, unique: true, index: true },
-    email:    { type: String, required: true, unique: true, index: true },
-    passwordHash: { type: String, required: true },
-  role:    { type: String, enum: ['Admin', 'Player'], default: 'Player' },
+    username:             { type: String, required: true, unique: true, index: true },
+    email:                { type: String, required: true, unique: true, index: true },
+    passwordHash:         { type: String, required: true },
+    role:                 { type: String, enum: ['Admin', 'Player'], default: 'Player' },
+    resetPasswordToken:   { type: String, default: undefined },
+    resetPasswordExpires: { type: Date,   default: undefined },
   },
   {
     timestamps: true,

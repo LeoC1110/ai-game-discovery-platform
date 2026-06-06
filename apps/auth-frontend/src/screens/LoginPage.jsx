@@ -1,4 +1,3 @@
-// src/screens/LoginPage.jsx
 import React, { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { Link, useNavigate } from 'react-router-dom';
@@ -31,7 +30,6 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [msg, setMsg] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const [showResetMsg, setShowResetMsg] = useState(false);
   const [login, { loading }] = useMutation(LOGIN);
 
   const onSubmit = async (e) => {
@@ -128,13 +126,9 @@ export default function LoginPage() {
                 />
                 <span>Remember me</span>
               </label>
-              <button
-                type="button"
-                className="login-reset-link"
-                onClick={() => setShowResetMsg((v) => !v)}
-              >
+              <Link to="/forgot-password" className="login-reset-link">
                 Reset my password
-              </button>
+              </Link>
             </div>
 
             {showResetMsg && (

@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { GraphQLError } from 'graphql';
 import User from '../models/User.js';
 import Game from '../models/Game.js';
@@ -808,6 +809,77 @@ export const resolvers = {
 
       await populateResult(result);
       return result;
+    },
+
+    // ── Password reset ──────────────────────────────────────────────────────
+    requestPasswordReset: async (_parent, { email }) => {
+      const lookup = (email || '').trim().toLowerCase();
+      if (!lookup) {
+        return { ok: false, message: 'Please provide a valid email address.', resetToken: null };
+      }
+
+      const user = await User.findOne({ email: lookup });
+
+      // Always return the same generic message so we don't reveal whether
+      // an email exists in the database (prevents user enumeration).
+      const genericMsg =
+        'If this email is registered, a reset link has been generated. Check the token below (demo mode — in production this is sent by email).';
+
+      if (!user) {
+        // Return ok:true with no token to avoid leaking registration status.
+        return { ok: true, message: genericMsg, resetToken: null };
+      }
+
+      // Generate a cryptographically secure 32-byte token.
+      const plainToken = crypto.randomBytes(32).toString('hex');
+
+      // Store only the SHA-256 hash of the token in the database.
+      const hashedToken = crypto.createHash('sha256').update(plainToken).digest('hex');
+
+      user.resetPasswordToken = hashedToken;
+      user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      await user.save();
+
+      // DEMO: return the plain token so the frontend can display it.
+      // In production: send an email with a link containing `plainToken`
+      // and return { ok: true, message: genericMsg, resetToken: null }.
+      return { ok: true, message: genericMsg, resetToken: plainToken };
+    },
+
+    resetPassword: async (_parent, { token, newPassword }, { res }) => {
+      const trimmedToken = (token || '').trim();
+      const trimmedPwd   = (newPassword || '').trim();
+
+      if (!trimmedToken) {
+        return { ok: false, message: 'Reset token is missing.', token: null, user: null };
+      }
+      if (!trimmedPwd || trimmedPwd.length < 6) {
+        return { ok: false, message: 'Password must be at least 6 characters.', token: null, user: null };
+      }
+
+      const hashedToken = crypto.createHash('sha256').update(trimmedToken).digest('hex');
+
+      const user = await User.findOne({
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { $gt: Date.now() },
+      });
+
+      if (!user) {
+        return {
+          ok: false,
+          message: 'This reset link is invalid or has expired. Please request a new one.',
+          token: null,
+          user: null,
+        };
+      }
+
+      // Hash the new password and persist it; then clear the reset token fields.
+      user.passwordHash = await bcrypt.hash(trimmedPwd, 12);
+      user.resetPasswordToken   = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+
+      return authSuccess(user, res, 'Password reset successful. You are now logged in.');
     },
   },
   Game: {

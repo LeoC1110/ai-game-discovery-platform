@@ -11,6 +11,8 @@ import './App.css';
 import LoginPage from './screens/LoginPage.jsx';
 import RegisterPage from './screens/RegisterPage.jsx';
 import LogoutPage from './screens/LogoutPage.jsx';
+import ForgotPasswordPage from './screens/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './screens/ResetPasswordPage.jsx';
 import HomePage from './screens/HomePage.jsx';
 import PostPage from './screens/PostPage.jsx';
 import CommunityPage from './screens/CommunityPage.jsx';
@@ -28,6 +30,9 @@ createRoot(document.getElementById('root')).render(
           <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<RequireAuth />}>
             <Route path="/home" element={<HomePage />} />
             <Route path="/post" element={<PostPage />} />

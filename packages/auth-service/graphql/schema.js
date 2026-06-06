@@ -18,6 +18,17 @@ export const typeDefs = /* GraphQL */ `
     user: User
   }
 
+  """密码重置流程返回值"""
+  type PasswordResetPayload {
+    ok: Boolean!
+    message: String!
+    """
+    DEMO ONLY — the plain-text reset token.
+    In production this field is omitted and the token is delivered by email.
+    """
+    resetToken: String
+  }
+
   input RegisterInput {
     username: String!
     email: String!
@@ -299,5 +310,7 @@ export const typeDefs = /* GraphQL */ `
     featurePost(id: ID!, featured: Boolean!): GamePost!
     updatePreference(input: UpdatePreferenceInput!): UserPreference!
     clearPreferences: Boolean!
+    requestPasswordReset(email: String!): PasswordResetPayload!
+    resetPassword(token: String!, newPassword: String!): AuthPayload!
   }
 `;
