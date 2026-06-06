@@ -30,6 +30,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [msg, setMsg] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [login, { loading }] = useMutation(LOGIN);
 
   const onSubmit = async (e) => {
@@ -134,14 +135,24 @@ export default function LoginPage() {
               required
             />
 
-            <input
-              className="input"
-              name="password"
-              type="password"
-              placeholder="Password"
-              autoComplete="current-password"
-              required
-            />
+            <div className="password-input-wrap">
+              <input
+                className="input password-input"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                autoComplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowPassword((v) => !v)}
+              >
+                👁
+              </button>
+            </div>
 
             <div className="login-form-extras">
               <label className="login-remember">
