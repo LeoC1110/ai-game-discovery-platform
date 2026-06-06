@@ -48,6 +48,8 @@ const requireUser = (user) => {
 const GAME_SOURCE_TYPES = new Set(['LocalMeta', 'ExternalLink', 'Embeddable']);
 const TOURNAMENT_STATUSES = new Set(['Upcoming', 'Ongoing', 'Completed']);
 const TOURNAMENT_LAUNCH_TYPES = new Set(['Local', 'ExternalLink', 'Embeddable']);
+const POST_TYPES = new Set(['GAME', 'IDEA']);
+const IDEA_TEXT_REGEX = /^[\p{L}\p{N}\p{P}\p{S}\p{Z}\r\n\t]+$/u;
 
 const requireAdmin = (user) => {
   if (user?.role !== 'Admin') {
@@ -630,22 +632,41 @@ export const resolvers = {
     },
     createPost: async (_parent, { input }, { user }) => {
       const current = requireUser(user);
-      if (!input.title?.trim()) throw new GraphQLError('Title is required', { extensions: { code: 'BAD_USER_INPUT' } });
-      if (!input.review?.trim()) throw new GraphQLError('Review is required', { extensions: { code: 'BAD_USER_INPUT' } });
+      const postType = POST_TYPES.has(input.postType) ? input.postType : 'GAME';
+      if (!input.review?.trim()) throw new GraphQLError('Content is required', { extensions: { code: 'BAD_USER_INPUT' } });
+
+      if (postType === 'GAME' && !input.title?.trim()) {
+        throw new GraphQLError('Title is required', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+
+      if (postType === 'IDEA') {
+        const ideaText = input.review.trim();
+        if (!ideaText) {
+          throw new GraphQLError('Idea content cannot be empty', { extensions: { code: 'BAD_USER_INPUT' } });
+        }
+        if (ideaText.length > 500) {
+          throw new GraphQLError('Idea content must be 500 characters or less', { extensions: { code: 'BAD_USER_INPUT' } });
+        }
+        if (!IDEA_TEXT_REGEX.test(ideaText)) {
+          throw new GraphQLError('Idea content can contain text and emoji only', { extensions: { code: 'BAD_USER_INPUT' } });
+        }
+      }
+
       let tags = input.tags || [];
       if (typeof tags === 'string') tags = tags.split(',').map((t) => t.trim()).filter(Boolean);
       const isFeatured = input.featured === true && current.role === 'Admin';
       const post = await GamePost.create({
-        title: input.title.trim(),
-        genre: input.genre?.trim() || undefined,
-        platform: input.platform?.trim() || undefined,
-        developer: input.developer?.trim() || undefined,
-        releaseYear: input.releaseYear || undefined,
-        gameType: input.gameType?.trim() || undefined,
-        rating: input.rating || undefined,
-        coverImageUrl: input.coverImageUrl?.trim() || undefined,
-        gameLink: input.gameLink?.trim() || undefined,
-        tags,
+        postType,
+        title: postType === 'IDEA' ? 'Share Your Idea' : input.title.trim(),
+        genre: postType === 'IDEA' ? undefined : input.genre?.trim() || undefined,
+        platform: postType === 'IDEA' ? undefined : input.platform?.trim() || undefined,
+        developer: postType === 'IDEA' ? undefined : input.developer?.trim() || undefined,
+        releaseYear: postType === 'IDEA' ? undefined : input.releaseYear || undefined,
+        gameType: postType === 'IDEA' ? undefined : input.gameType?.trim() || undefined,
+        rating: postType === 'IDEA' ? undefined : input.rating || undefined,
+        coverImageUrl: postType === 'IDEA' ? undefined : input.coverImageUrl?.trim() || undefined,
+        gameLink: postType === 'IDEA' ? undefined : input.gameLink?.trim() || undefined,
+        tags: postType === 'IDEA' ? [] : tags,
         review: input.review.trim(),
         postedBy: current._id,
         featured: isFeatured,
@@ -673,17 +694,26 @@ export const resolvers = {
       if (post.postedBy.toString() !== current._id.toString() && current.role !== 'Admin') {
         throw new GraphQLError('Not authorized', { extensions: { code: 'FORBIDDEN' } });
       }
-      if (input.title !== undefined) post.title = input.title.trim();
-      if (input.genre !== undefined) post.genre = input.genre?.trim() || undefined;
-      if (input.platform !== undefined) post.platform = input.platform?.trim() || undefined;
-      if (input.developer !== undefined) post.developer = input.developer?.trim() || undefined;
-      if (input.releaseYear !== undefined) post.releaseYear = input.releaseYear || undefined;
-      if (input.gameType !== undefined) post.gameType = input.gameType?.trim() || undefined;
-      if (input.rating !== undefined) post.rating = input.rating || undefined;
-      if (input.coverImageUrl !== undefined) post.coverImageUrl = input.coverImageUrl?.trim() || undefined;
-      if (input.gameLink !== undefined) post.gameLink = input.gameLink?.trim() || undefined;
-      if (input.review !== undefined) post.review = input.review.trim();
-      if (input.tags !== undefined) {
+      const isIdeaPost = post.postType === 'IDEA';
+      if (!isIdeaPost && input.title !== undefined) post.title = input.title.trim();
+      if (!isIdeaPost && input.genre !== undefined) post.genre = input.genre?.trim() || undefined;
+      if (!isIdeaPost && input.platform !== undefined) post.platform = input.platform?.trim() || undefined;
+      if (!isIdeaPost && input.developer !== undefined) post.developer = input.developer?.trim() || undefined;
+      if (!isIdeaPost && input.releaseYear !== undefined) post.releaseYear = input.releaseYear || undefined;
+      if (!isIdeaPost && input.gameType !== undefined) post.gameType = input.gameType?.trim() || undefined;
+      if (!isIdeaPost && input.rating !== undefined) post.rating = input.rating || undefined;
+      if (!isIdeaPost && input.coverImageUrl !== undefined) post.coverImageUrl = input.coverImageUrl?.trim() || undefined;
+      if (!isIdeaPost && input.gameLink !== undefined) post.gameLink = input.gameLink?.trim() || undefined;
+      if (input.review !== undefined) {
+        const nextReview = input.review.trim();
+        if (!nextReview) throw new GraphQLError('Content is required', { extensions: { code: 'BAD_USER_INPUT' } });
+        if (isIdeaPost) {
+          if (nextReview.length > 500) throw new GraphQLError('Idea content must be 500 characters or less', { extensions: { code: 'BAD_USER_INPUT' } });
+          if (!IDEA_TEXT_REGEX.test(nextReview)) throw new GraphQLError('Idea content can contain text and emoji only', { extensions: { code: 'BAD_USER_INPUT' } });
+        }
+        post.review = nextReview;
+      }
+      if (!isIdeaPost && input.tags !== undefined) {
         let tags = input.tags || [];
         if (typeof tags === 'string') tags = tags.split(',').map((t) => t.trim()).filter(Boolean);
         post.tags = tags;
@@ -922,6 +952,7 @@ export const resolvers = {
   },
   GamePost: {
     id: (parent) => parent.id || parent._id?.toString(),
+    postType: (parent) => parent.postType || 'GAME',
     postedBy: async (parent) => {
       if (parent.postedBy?.username) return safeUser(parent.postedBy);
       const populated = await GamePost.findById(parent._id).populate('postedBy');

@@ -13,6 +13,7 @@ const CommentSchema = new Schema(
 
 const GamePostSchema = new Schema(
   {
+    postType: { type: String, enum: ['GAME', 'IDEA'], default: 'GAME', index: true },
     title: { type: String, required: true, trim: true },
     genre: { type: String, trim: true },
     platform: { type: String, trim: true },

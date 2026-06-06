@@ -37,10 +37,11 @@ function StarRating({ value }) {
 function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, onEdit, onFeature }) {
   const isOwner = currentUser?.id === post.postedBy?.id;
   const isAdmin = currentUser?.role === 'Admin';
+  const isIdea = post.postType === 'IDEA';
 
   return (
-    <div className="community-card card">
-      {post.coverImageUrl && (
+    <div className={`community-card card ${isIdea ? 'community-card--idea' : ''}`}>
+      {!isIdea && post.coverImageUrl && (
         <img
           src={post.coverImageUrl}
           alt={post.title}
@@ -50,20 +51,28 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
       )}
       <div className="community-card__body">
         <div className="community-card__top">
-          <h3 className="community-card__title">
-            {post.title}
-            {post.featured && (
-              <span className="badge badge--featured community-card__featured">⭐ Featured</span>
-            )}
-          </h3>
-          <StarRating value={post.rating} />
+          {isIdea ? (
+            <h3 className="community-card__title community-card__title--idea">
+              Share Your Idea
+            </h3>
+          ) : (
+            <h3 className="community-card__title">
+              {post.title}
+              {post.featured && (
+                <span className="badge badge--featured community-card__featured">⭐ Featured</span>
+              )}
+            </h3>
+          )}
+          {!isIdea && <StarRating value={post.rating} />}
         </div>
-        <div className="community-card__meta">
-          {post.genre && <span className="badge">{post.genre}</span>}
-          {post.platform && <span className="badge">{post.platform}</span>}
-          {post.gameType && <span className="badge badge--dim">{post.gameType}</span>}
-        </div>
-        {post.tags?.length > 0 && (
+        {!isIdea && (
+          <div className="community-card__meta">
+            {post.genre && <span className="badge">{post.genre}</span>}
+            {post.platform && <span className="badge">{post.platform}</span>}
+            {post.gameType && <span className="badge badge--dim">{post.gameType}</span>}
+          </div>
+        )}
+        {!isIdea && post.tags?.length > 0 && (
           <div className="community-card__tags">
             {post.tags.map((t) => (
               <span key={t} className="tag">#{t}</span>
@@ -139,6 +148,7 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
 }
 
 function EditModal({ post, onClose, onSaved }) {
+  const isIdea = post.postType === 'IDEA';
   const [form, setForm] = useState({
     title: post.title || '',
     genre: post.genre || '',
@@ -164,23 +174,24 @@ function EditModal({ post, onClose, onSaved }) {
 
   const submit = (e) => {
     e.preventDefault();
-    if (!form.title.trim()) { setErrMsg('Title is required'); return; }
-    if (!form.review.trim()) { setErrMsg('Review is required'); return; }
+    if (!isIdea && !form.title.trim()) { setErrMsg('Title is required'); return; }
+    if (!form.review.trim()) { setErrMsg(isIdea ? 'Content is required' : 'Review is required'); return; }
+    if (isIdea && form.review.trim().length > 500) { setErrMsg('Idea content must be 500 characters or less'); return; }
     const tags = form.tags.split(',').map((t) => t.trim()).filter(Boolean);
     editPost({
       variables: {
         id: post.id,
         input: {
-          title: form.title.trim(),
-          genre: form.genre || undefined,
-          platform: form.platform || undefined,
-          developer: form.developer || undefined,
-          releaseYear: form.releaseYear ? Number(form.releaseYear) : undefined,
-          gameType: form.gameType || undefined,
-          rating: form.rating ? Number(form.rating) : undefined,
-          coverImageUrl: form.coverImageUrl || undefined,
-          gameLink: form.gameLink || undefined,
-          tags: tags.length ? tags : undefined,
+          title: isIdea ? undefined : form.title.trim(),
+          genre: isIdea ? undefined : form.genre || undefined,
+          platform: isIdea ? undefined : form.platform || undefined,
+          developer: isIdea ? undefined : form.developer || undefined,
+          releaseYear: isIdea ? undefined : form.releaseYear ? Number(form.releaseYear) : undefined,
+          gameType: isIdea ? undefined : form.gameType || undefined,
+          rating: isIdea ? undefined : form.rating ? Number(form.rating) : undefined,
+          coverImageUrl: isIdea ? undefined : form.coverImageUrl || undefined,
+          gameLink: isIdea ? undefined : form.gameLink || undefined,
+          tags: isIdea ? undefined : tags.length ? tags : undefined,
           review: form.review.trim(),
         },
       },
@@ -191,34 +202,38 @@ function EditModal({ post, onClose, onSaved }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box modal-box--edit" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>✕</button>
-        <h2 className="modal-title">Edit Post</h2>
+        <h2 className="modal-title">{isIdea ? 'Edit Idea' : 'Edit Post'}</h2>
         {errMsg && <div className="msg-error msg-error--spaced">{errMsg}</div>}
         <form onSubmit={submit} className="community-edit-form">
-          <div className="community-edit-form__grid">
-            <label className="community-form-label">
-              Game Title *
-              <input className="input" name="title" value={form.title} onChange={handle} required />
-            </label>
-            <label className="community-form-label">
-              Genre
-              <input className="input" name="genre" value={form.genre} onChange={handle} />
-            </label>
-            <label className="community-form-label">
-              Platform
-              <input className="input" name="platform" value={form.platform} onChange={handle} />
-            </label>
-            <label className="community-form-label">
-              Rating (1-10)
-              <input className="input" name="rating" type="number" min="1" max="10" value={form.rating} onChange={handle} />
-            </label>
-          </div>
+          {!isIdea && (
+            <>
+              <div className="community-edit-form__grid">
+                <label className="community-form-label">
+                  Game Title *
+                  <input className="input" name="title" value={form.title} onChange={handle} required />
+                </label>
+                <label className="community-form-label">
+                  Genre
+                  <input className="input" name="genre" value={form.genre} onChange={handle} />
+                </label>
+                <label className="community-form-label">
+                  Platform
+                  <input className="input" name="platform" value={form.platform} onChange={handle} />
+                </label>
+                <label className="community-form-label">
+                  Rating (1-10)
+                  <input className="input" name="rating" type="number" min="1" max="10" value={form.rating} onChange={handle} />
+                </label>
+              </div>
+              <label className="community-form-label">
+                Tags (comma-separated)
+                <input className="input" name="tags" value={form.tags} onChange={handle} />
+              </label>
+            </>
+          )}
           <label className="community-form-label">
-            Tags (comma-separated)
-            <input className="input" name="tags" value={form.tags} onChange={handle} />
-          </label>
-          <label className="community-form-label">
-            Review *
-            <textarea className="input textarea community-review-input" name="review" value={form.review} onChange={handle} rows={4} required />
+            {isIdea ? 'Idea content *' : 'Review *'}
+            <textarea className="input textarea community-review-input" name="review" value={form.review} onChange={handle} rows={4} required maxLength={isIdea ? 500 : undefined} />
           </label>
           <div className="community-edit-form__actions">
             <button className={`btn-primary community-edit-form__submit ${loading ? 'is-loading' : ''}`} type="submit" disabled={loading} aria-busy={loading}>
@@ -235,6 +250,7 @@ function EditModal({ post, onClose, onSaved }) {
 function PostModal({ post, currentUser, onClose, onRefetch }) {
   const [commentText, setCommentText] = useState('');
   const isAdmin = currentUser?.role === 'Admin';
+  const isIdea = post.postType === 'IDEA';
 
   const formatCommentDate = (iso) => {
     if (!iso) return '';
@@ -265,26 +281,28 @@ function PostModal({ post, currentUser, onClose, onRefetch }) {
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>✕</button>
         <h2 className="modal-title">
-          {post.title}
+          {isIdea ? 'Share Your Idea' : post.title}
           {post.featured && <span className="badge badge--featured community-modal__featured">⭐ Featured</span>}
         </h2>
-        {post.coverImageUrl && (
+        {!isIdea && post.coverImageUrl && (
           <img src={post.coverImageUrl} alt={post.title} className="community-modal__cover" onError={(e) => { e.target.style.display = 'none'; }} />
         )}
-        <StarRating value={post.rating} />
-        <div className="community-modal__meta">
-          {post.genre && <span className="badge">{post.genre}</span>}
-          {post.platform && <span className="badge">{post.platform}</span>}
-          {post.developer && <span className="badge badge--dim">{post.developer}</span>}
-          {post.releaseYear && <span className="badge badge--dim">{post.releaseYear}</span>}
-        </div>
-        {post.tags?.length > 0 && (
+        {!isIdea && <StarRating value={post.rating} />}
+        {!isIdea && (
+          <div className="community-modal__meta">
+            {post.genre && <span className="badge">{post.genre}</span>}
+            {post.platform && <span className="badge">{post.platform}</span>}
+            {post.developer && <span className="badge badge--dim">{post.developer}</span>}
+            {post.releaseYear && <span className="badge badge--dim">{post.releaseYear}</span>}
+          </div>
+        )}
+        {!isIdea && post.tags?.length > 0 && (
           <div className="community-modal__tags">
             {post.tags.map((t) => <span key={t} className="tag">#{t}</span>)}
           </div>
         )}
         <p className="community-modal__review">{post.review}</p>
-        {post.gameLink && (
+        {!isIdea && post.gameLink && (
           <a href={post.gameLink} target="_blank" rel="noopener noreferrer" className="btn-ghost community-modal__link">
             Game Link ↗
           </a>

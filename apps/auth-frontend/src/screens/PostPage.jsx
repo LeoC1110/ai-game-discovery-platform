@@ -23,26 +23,23 @@ const INITIAL_FORM = {
   featured: false,
 };
 
+const IDEA_TEXT_REGEX = /^[\p{L}\p{N}\p{P}\p{S}\p{Z}\r\n\t]+$/u;
+
 export default function PostPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState(INITIAL_FORM);
   const [message, setMessage] = useState(null);
   const [coverPreview, setCoverPreview] = useState(null);
+  const [showPostChoice, setShowPostChoice] = useState(false);
+  const [showIdeaModal, setShowIdeaModal] = useState(false);
+  const [ideaContent, setIdeaContent] = useState('');
+  const [ideaMessage, setIdeaMessage] = useState(null);
   const fileInputRef = React.useRef(null);
 
   const { data: meData } = useQuery(ME_QUERY, { fetchPolicy: 'cache-first' });
   const isAdmin = meData?.me?.role === 'Admin';
 
-  const [createPost, { loading }] = useMutation(CREATE_POST, {
-    onCompleted: () => {
-      setForm(INITIAL_FORM);
-      setMessage({ type: 'success', text: 'Post published! Redirecting to Community...' });
-      setTimeout(() => navigate('/community'), 1500);
-    },
-    onError: (err) => {
-      setMessage({ type: 'error', text: err.message });
-    },
-  });
+  const [createPost, { loading }] = useMutation(CREATE_POST);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -70,8 +67,7 @@ export default function PostPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const publishGamePost = async () => {
     setMessage(null);
     if (!form.title.trim()) {
       setMessage({ type: 'error', text: 'Game title is required.' });
@@ -86,24 +82,71 @@ export default function PostPage() {
       .map((t) => t.trim())
       .filter(Boolean);
 
-    await createPost({
-      variables: {
-        input: {
-          title: form.title.trim(),
-          genre: form.genre || undefined,
-          platform: form.platform || undefined,
-          developer: form.developer || undefined,
-          releaseYear: form.releaseYear ? Number(form.releaseYear) : undefined,
-          gameType: form.gameType || undefined,
-          rating: form.rating ? Number(form.rating) : undefined,
-          coverImageUrl: form.coverImageUrl || undefined,
-          gameLink: form.gameLink || undefined,
-          tags: tags.length ? tags : undefined,
-          review: form.review.trim(),
-          featured: isAdmin ? form.featured : undefined,
+    try {
+      await createPost({
+        variables: {
+          input: {
+            postType: 'GAME',
+            title: form.title.trim(),
+            genre: form.genre || undefined,
+            platform: form.platform || undefined,
+            developer: form.developer || undefined,
+            releaseYear: form.releaseYear ? Number(form.releaseYear) : undefined,
+            gameType: form.gameType || undefined,
+            rating: form.rating ? Number(form.rating) : undefined,
+            coverImageUrl: form.coverImageUrl || undefined,
+            gameLink: form.gameLink || undefined,
+            tags: tags.length ? tags : undefined,
+            review: form.review.trim(),
+            featured: isAdmin ? form.featured : undefined,
+          },
         },
-      },
-    });
+      });
+      setForm(INITIAL_FORM);
+      setMessage({ type: 'success', text: 'Game post published! Redirecting to Community...' });
+      setTimeout(() => navigate('/community'), 1200);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+  };
+
+  const publishIdeaPost = async () => {
+    setIdeaMessage(null);
+    const content = ideaContent.trim();
+    if (!content) {
+      setIdeaMessage({ type: 'error', text: 'Content cannot be empty.' });
+      return;
+    }
+    if (content.length > 500) {
+      setIdeaMessage({ type: 'error', text: 'Content must be 500 characters or less.' });
+      return;
+    }
+    if (!IDEA_TEXT_REGEX.test(content)) {
+      setIdeaMessage({ type: 'error', text: 'Only text and emoji are allowed.' });
+      return;
+    }
+
+    try {
+      await createPost({
+        variables: {
+          input: {
+            postType: 'IDEA',
+            review: content,
+          },
+        },
+      });
+      setShowIdeaModal(false);
+      setIdeaContent('');
+      setMessage({ type: 'success', text: 'Idea published! Redirecting to Community...' });
+      setTimeout(() => navigate('/community'), 1200);
+    } catch (err) {
+      setIdeaMessage({ type: 'error', text: err.message });
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setShowPostChoice(true);
   };
 
   return (
@@ -114,6 +157,16 @@ export default function PostPage() {
         <p className="page-subtitle post-subtitle">
           Share a game recommendation with the community.
         </p>
+
+        <div className="post-main-actions">
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setShowIdeaModal(true)}
+          >
+            Share Your Idea
+          </button>
+        </div>
 
         <div className="post-grid" style={{ gridTemplateColumns: '1fr' }}>
           <div className="post-card">
@@ -244,7 +297,14 @@ export default function PostPage() {
 
               <div className="post-form__footer">
                 <button className={`btn-primary ${loading ? 'is-loading' : ''}`} type="submit" disabled={loading} aria-busy={loading} style={{ flex: 1 }}>
-                  {loading ? 'Publishing...' : 'Publish Post'}
+                  {loading ? 'Publishing...' : 'Post'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => setShowIdeaModal(true)}
+                >
+                  Share Your Idea
                 </button>
                 <button
                   type="button"
@@ -263,6 +323,83 @@ export default function PostPage() {
           </div>
         </div>
       </div>
+
+      {showPostChoice && (
+        <div className="modal-overlay" onClick={() => setShowPostChoice(false)}>
+          <div className="modal-box post-choice-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowPostChoice(false)}>✕</button>
+            <h2 className="modal-title">Choose what to publish</h2>
+            <p className="post-choice-modal__desc">
+              Pick one posting mode below.
+            </p>
+            <div className="post-choice-modal__actions">
+              <button
+                type="button"
+                className={`btn-primary ${loading ? 'is-loading' : ''}`}
+                disabled={loading}
+                aria-busy={loading}
+                onClick={async () => {
+                  setShowPostChoice(false);
+                  await publishGamePost();
+                }}
+              >
+                Post a Game
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => {
+                  setShowPostChoice(false);
+                  setShowIdeaModal(true);
+                }}
+              >
+                Share Your Idea
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showIdeaModal && (
+        <div className="modal-overlay" onClick={() => setShowIdeaModal(false)}>
+          <div className="modal-box post-idea-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowIdeaModal(false)}>✕</button>
+            <h2 className="modal-title">Share Your Idea</h2>
+            <p className="post-idea-modal__desc">
+              Text and emoji only. Max 500 characters.
+            </p>
+            <textarea
+              className="input textarea post-idea-modal__input"
+              value={ideaContent}
+              onChange={(e) => setIdeaContent(e.target.value)}
+              maxLength={500}
+              placeholder="Write your thought, feedback, or game idea..."
+            />
+            <div className="post-idea-modal__count">{ideaContent.length}/500</div>
+
+            {ideaMessage && (
+              <div className={ideaMessage.type === 'error' ? 'msg-error' : 'msg-success'} role="alert">
+                {ideaMessage.text}
+              </div>
+            )}
+
+            <div className="post-idea-modal__actions">
+              <button type="button" className="btn-ghost" onClick={() => setShowIdeaModal(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`btn-primary ${loading ? 'is-loading' : ''}`}
+                disabled={loading}
+                aria-busy={loading}
+                onClick={publishIdeaPost}
+              >
+                {loading ? 'Publishing...' : 'Publish'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

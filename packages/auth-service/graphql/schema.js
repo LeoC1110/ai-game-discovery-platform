@@ -154,8 +154,14 @@ export const typeDefs = /* GraphQL */ `
     likeCount: Int!
   }
 
+  enum PostType {
+    GAME
+    IDEA
+  }
+
   type GamePost {
     id: ID!
+    postType: PostType!
     title: String!
     genre: String
     platform: String
@@ -182,7 +188,8 @@ export const typeDefs = /* GraphQL */ `
   }
 
   input CreatePostInput {
-    title: String!
+    postType: PostType
+    title: String
     genre: String
     platform: String
     developer: String

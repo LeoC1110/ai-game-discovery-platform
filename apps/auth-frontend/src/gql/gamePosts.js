@@ -3,6 +3,7 @@ import { gql } from '@apollo/client';
 export const POST_FRAGMENT = gql`
   fragment PostFields on GamePost {
     id
+    postType
     title
     genre
     platform
@@ -54,6 +55,7 @@ export const GET_POST = gql`
   query GetPost($id: ID!) {
     getPost(id: $id) {
       id
+      postType
       title
       genre
       platform

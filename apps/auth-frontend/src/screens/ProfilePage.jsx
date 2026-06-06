@@ -1,7 +1,6 @@
 // src/screens/ProfilePage.jsx — User profile with own posts and bookmarks
 import React, { useState } from 'react';
 import { useQuery, useMutation, gql } from '@apollo/client';
-import ThreeBackground from '../components/ThreeBackground';
 import DashboardNav from '../components/DashboardNav';
 import { MY_POSTS, BOOKMARKED_POSTS, DELETE_POST } from '../gql/gamePosts';
 
@@ -24,18 +23,22 @@ function StarRating({ value }) {
 }
 
 function PostRow({ post, isOwner, onDelete, deleting }) {
+  const isIdea = post.postType === 'IDEA';
   return (
     <div className="community-card card" style={{ marginBottom: 0 }}>
       <div className="community-card__body">
         <div className="community-card__top">
-          <h3 className="community-card__title" style={{ fontSize: 16 }}>{post.title}</h3>
-          <StarRating value={post.rating} />
+          <h3 className="community-card__title" style={{ fontSize: 16 }}>
+            {isIdea ? 'Share Your Idea' : post.title}
+          </h3>
+          {!isIdea && <StarRating value={post.rating} />}
         </div>
         <div className="community-card__meta">
-          {post.genre && <span className="badge">{post.genre}</span>}
-          {post.platform && <span className="badge">{post.platform}</span>}
+          <span className="badge badge--dim">{isIdea ? 'IDEA' : 'GAME'}</span>
+          {!isIdea && post.genre && <span className="badge">{post.genre}</span>}
+          {!isIdea && post.platform && <span className="badge">{post.platform}</span>}
         </div>
-        {post.tags?.length > 0 && (
+        {!isIdea && post.tags?.length > 0 && (
           <div className="community-card__tags">
             {post.tags.map((t) => <span key={t} className="tag">#{t}</span>)}
           </div>
@@ -80,11 +83,11 @@ export default function ProfilePage() {
   const me = meData?.me;
   const myPosts = postsData?.myPosts ?? [];
   const bookmarked = bookmarkData?.bookmarkedPosts ?? [];
+  const myIdeaPosts = myPosts.filter((p) => p.postType === 'IDEA');
+  const myGamePosts = myPosts.filter((p) => p.postType !== 'IDEA');
 
   return (
     <div className="app-root">
-      <ThreeBackground />
-      <div className="bg-vignette" />
       <div className="app-container">
         <DashboardNav />
         <h1 className="app-title">My Profile</h1>
@@ -112,6 +115,7 @@ export default function ProfilePage() {
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
                 <span className="badge">{me.role || 'Player'}</span>
                 <span className="badge badge--dim">Posts: {myPosts.length}</span>
+                <span className="badge badge--dim">Ideas: {myIdeaPosts.length}</span>
                 <span className="badge badge--dim">Bookmarks: {bookmarked.length}</span>
                 {me.createdAt && (
                   <span className="badge badge--dim">
@@ -148,21 +152,46 @@ export default function ProfilePage() {
                 <p>You haven't posted anything yet.</p>
               </div>
             )}
-            <div className="community-grid">
-              {myPosts.map((post) => (
-                <PostRow
-                  key={post.id}
-                  post={post}
-                  isOwner={true}
-                  onDelete={(id) => {
-                    if (window.confirm('Delete this post?')) {
-                      deletePost({ variables: { id } });
-                    }
-                  }}
-                  deleting={deleting}
-                />
-              ))}
-            </div>
+            {!postsLoading && myIdeaPosts.length > 0 && (
+              <>
+                <h3 style={{ margin: '0 0 12px' }}>My Ideas</h3>
+                <div className="community-grid" style={{ marginBottom: 18 }}>
+                  {myIdeaPosts.map((post) => (
+                    <PostRow
+                      key={post.id}
+                      post={post}
+                      isOwner={true}
+                      onDelete={(id) => {
+                        if (window.confirm('Delete this post?')) {
+                          deletePost({ variables: { id } });
+                        }
+                      }}
+                      deleting={deleting}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+            {!postsLoading && myGamePosts.length > 0 && (
+              <>
+                <h3 style={{ margin: '0 0 12px' }}>My Game Posts</h3>
+                <div className="community-grid">
+                  {myGamePosts.map((post) => (
+                    <PostRow
+                      key={post.id}
+                      post={post}
+                      isOwner={true}
+                      onDelete={(id) => {
+                        if (window.confirm('Delete this post?')) {
+                          deletePost({ variables: { id } });
+                        }
+                      }}
+                      deleting={deleting}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
