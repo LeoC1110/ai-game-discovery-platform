@@ -2,7 +2,6 @@
 // games is the primary catalog resource, comparable to a public store surface.
 import React, { useMemo, useState } from 'react';
 import { gql, useQuery } from '@apollo/client';
-import ThreeBackground from '../components/ThreeBackground';
 import DashboardNav from '../components/DashboardNav';
 import './PlayNow.css';
 
@@ -109,8 +108,6 @@ export default function PlayNowPage() {
 
   return (
     <div className="app-root">
-      <ThreeBackground />
-      <div className="bg-vignette" />
 
       <div className="app-container playnow">
         <DashboardNav />

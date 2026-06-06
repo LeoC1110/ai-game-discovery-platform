@@ -2,16 +2,15 @@
 import React from 'react';
 import { useQuery, useMutation } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
-import ThreeBackground from '../components/ThreeBackground';
 import DashboardNav from '../components/DashboardNav';
 import { BOOKMARKED_POSTS, TOGGLE_BOOKMARK } from '../gql/gamePosts';
 
 function StarRating({ value }) {
-  if (!value) return <span style={{ color: '#666', fontSize: 13 }}>No rating</span>;
+  if (!value) return <span style={{ color: '#6e6e73', fontSize: 13 }}>No rating</span>;
   return (
-    <span style={{ color: '#ffd60a', fontWeight: 700, fontSize: 14 }}>
+    <span style={{ color: '#c87000', fontWeight: 700, fontSize: 14 }}>
       {'★'.repeat(Math.round(value / 2))}{'☆'.repeat(5 - Math.round(value / 2))}
-      <span style={{ color: '#aaa', marginLeft: 4, fontSize: 13 }}>{value}/10</span>
+      <span style={{ color: '#6e6e73', marginLeft: 4, fontSize: 13 }}>{value}/10</span>
     </span>
   );
 }
@@ -30,8 +29,6 @@ export default function BookmarksPage() {
 
   return (
     <div className="app-root">
-      <ThreeBackground />
-      <div className="bg-vignette" />
       <div className="app-container">
         <DashboardNav />
         <h1 className="app-title">Bookmarks</h1>

@@ -1,7 +1,6 @@
 ﻿// src/screens/LeaderboardPage.jsx — Community leaderboard based on GamePost data
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@apollo/client';
-import ThreeBackground from '../components/ThreeBackground';
 import DashboardNav from '../components/DashboardNav';
 import { ALL_POSTS } from '../gql/gamePosts';
 
@@ -73,8 +72,6 @@ export default function LeaderboardPage() {
 
   return (
     <div className="app-root">
-      <ThreeBackground />
-      <div className="bg-vignette" />
       <div className="app-container">
         <DashboardNav />
         <h1 className="app-title">Leaderboard</h1>

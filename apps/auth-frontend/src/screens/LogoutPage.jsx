@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { useMutation } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import { LOGOUT } from '../gql/logout.js';
-import ThreeBackground from '../components/ThreeBackground';
 
 export default function LogoutPage() {
   const navigate = useNavigate();
@@ -25,8 +24,6 @@ export default function LogoutPage() {
 
   return (
     <div className="app-root">
-      <ThreeBackground />
-      <div className="bg-vignette" />
       <div className="app-container">
         <div className="card" style={{ maxWidth: 360, margin: '80px auto', textAlign: 'center' }}>
           <div className="auth-flow__status" role="status">

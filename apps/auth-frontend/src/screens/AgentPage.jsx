@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useMutation, useQuery } from '@apollo/client';
-import ThreeBackground from '../components/ThreeBackground';
 import DashboardNav from '../components/DashboardNav';
 import { ASK_AI, CLEAR_AI_HISTORY, MY_AI_HISTORY } from '../gql/askAI';
 
@@ -117,8 +116,6 @@ export default function AgentPage() {
 
   return (
     <div className="app-root">
-      <ThreeBackground />
-      <div className="bg-vignette" />
       <div className="app-container">
         <DashboardNav />
 

@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, gql } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
-import ThreeBackground from '../components/ThreeBackground';
 import DashboardNav from '../components/DashboardNav';
 import { CREATE_POST } from '../gql/gamePosts';
 import './Post.css';
@@ -109,8 +108,6 @@ export default function PostPage() {
 
   return (
     <div className="app-root">
-      <ThreeBackground />
-      <div className="bg-vignette" />
       <div className="app-container">
         <DashboardNav />
         <h1 className="app-title">Post a Game</h1>

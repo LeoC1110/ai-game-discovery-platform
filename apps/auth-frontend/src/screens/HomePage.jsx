@@ -2,7 +2,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { gql, useQuery, useMutation } from '@apollo/client';
-import ThreeBackground from '../components/ThreeBackground';
 import DashboardNav from '../components/DashboardNav';
 import { LOGOUT } from '../gql/logout.js';
 
@@ -71,9 +70,6 @@ export default function HomePage() {
 
   return (
     <div className="app-root">
-      <ThreeBackground />
-      <div className="bg-vignette" />
-
       <div className="app-container">
         <header className="home-header">
           <div className="home-header__top">

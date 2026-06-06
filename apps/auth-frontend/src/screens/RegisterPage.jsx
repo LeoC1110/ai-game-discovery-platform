@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import { REGISTER_USER } from '../gql/register';
-import ThreeBackground from '../components/ThreeBackground';
 
 export default function RegisterPage() {
   const nav = useNavigate();
@@ -44,12 +43,9 @@ export default function RegisterPage() {
   };
 
   return (
-    <>
-      <ThreeBackground />
-      <div className="bg-vignette" />
-      <div className="app-root">
-        <main className="app-container">
-          <h1 className="app-title auth-title">Registration</h1>
+    <div className="app-root">
+      <main className="app-container">
+          <h1 className="app-title auth-title">Create Account</h1>
 
           <section className="card auth-card" aria-label="Register Panel">
             <form className="auth-form" onSubmit={onSubmit} autoComplete="on">
@@ -92,6 +88,5 @@ export default function RegisterPage() {
           </section>
         </main>
       </div>
-    </>
   );
 }
