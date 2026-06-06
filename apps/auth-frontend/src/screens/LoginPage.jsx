@@ -131,12 +131,6 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            {showResetMsg && (
-              <p className="login-reset-msg" role="status">
-                Password reset is coming soon. Please contact an admin.
-              </p>
-            )}
-
             <button
               type="submit"
               className={`btn-primary${loading ? ' is-loading' : ''}`}
