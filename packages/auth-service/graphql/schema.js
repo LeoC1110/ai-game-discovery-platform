@@ -286,7 +286,7 @@ export const typeDefs = /* GraphQL */ `
     tournamentLeaderboard(tournamentId: ID!, limit: Int): [TournamentResult!]!
     gameLeaderboard(gameId: ID!, limit: Int): [TournamentResult!]!
     myRecentResults(limit: Int): [TournamentResult!]!
-    allPosts(search: String, genre: String, platform: String, tag: String, sort: String): [GamePost!]!
+    allPosts(search: String, genre: String, platform: String, tag: String, sort: String, postType: PostType): [GamePost!]!
     myPosts: [GamePost!]!
     bookmarkedPosts: [GamePost!]!
     getPost(id: ID!): GamePost

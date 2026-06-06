@@ -397,9 +397,10 @@ export const resolvers = {
         ]);
       return results;
     },
-    allPosts: async (_parent, { search, genre, platform, tag, sort }, { user }) => {
+    allPosts: async (_parent, { search, genre, platform, tag, sort, postType }, { user }) => {
       requireUser(user);
       const filter = {};
+      if (POST_TYPES.has(postType)) filter.postType = postType;
       if (search) filter.$or = [
         { title: { $regex: search, $options: 'i' } },
         { review: { $regex: search, $options: 'i' } },

@@ -37,7 +37,7 @@ function LeaderboardRow({ rank, name, subtitle, stat, statLabel }) {
 export default function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState('rated');
   const { data, loading, error } = useQuery(ALL_POSTS, {
-    variables: {},
+    variables: { postType: 'GAME' },
     fetchPolicy: 'cache-and-network',
   });
 
@@ -76,7 +76,7 @@ export default function LeaderboardPage() {
         <DashboardNav />
         <h1 className="app-title">Leaderboard</h1>
         <p className="page-subtitle post-subtitle">
-          Top games and contributors in the community.
+          Game recommendation rankings only.
         </p>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>

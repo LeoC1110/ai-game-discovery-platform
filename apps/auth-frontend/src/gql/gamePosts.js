@@ -30,8 +30,8 @@ export const POST_FRAGMENT = gql`
 
 export const ALL_POSTS = gql`
   ${POST_FRAGMENT}
-  query AllPosts($search: String, $genre: String, $platform: String, $tag: String, $sort: String) {
-    allPosts(search: $search, genre: $genre, platform: $platform, tag: $tag, sort: $sort) {
+  query AllPosts($search: String, $genre: String, $platform: String, $tag: String, $sort: String, $postType: PostType) {
+    allPosts(search: $search, genre: $genre, platform: $platform, tag: $tag, sort: $sort, postType: $postType) {
       ...PostFields
     }
   }
