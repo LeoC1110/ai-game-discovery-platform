@@ -577,6 +577,32 @@ export const resolvers = {
       const current = requireUser(user);
       return clearUserPreferences(current._id);
     },
+    changePassword: async (_parent, { identifier, oldPassword, newPassword }, { res }) => {
+      const lookup = (identifier || '').trim();
+      const lookupEmail = normalizeEmail(lookup);
+      if (!lookup || !oldPassword || !newPassword) {
+        return { ok: false, message: 'All fields are required.', token: null, user: null };
+      }
+      if (newPassword.length < 6) {
+        return { ok: false, message: 'New password must be at least 6 characters.', token: null, user: null };
+      }
+      const user = await User.findOne({
+        $or: [{ username: lookup }, { email: lookup }, { email: lookupEmail }],
+      });
+      if (!user) {
+        return { ok: false, message: 'Invalid username/email or password.', token: null, user: null };
+      }
+      const passOk = await bcrypt.compare(oldPassword, user.passwordHash);
+      if (!passOk) {
+        return { ok: false, message: 'Invalid username/email or password.', token: null, user: null };
+      }
+      if (oldPassword === newPassword) {
+        return { ok: false, message: 'New password must be different from old password.', token: null, user: null };
+      }
+      user.passwordHash = await bcrypt.hash(newPassword, 12);
+      await user.save();
+      return authSuccess(user, res, 'Password changed successfully.');
+    },
     sendPasswordResetCode: async (_parent, { email }) => {
       const normalizedEmail = normalizeEmail(email);
       if (!isValidEmail(normalizedEmail)) {

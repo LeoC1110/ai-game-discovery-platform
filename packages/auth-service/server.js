@@ -86,6 +86,16 @@ async function start() {
     console.log(`🚀 HTTP server ready at http://localhost:${PORT}`);
     console.log(`🔧 GraphQL endpoint    -> http://localhost:${PORT}/graphql`);
     console.log('🧪 Apollo Studio Sandbox: https://studio.apollographql.com/sandbox/explorer');
+
+    // Email config diagnostics (no secrets printed)
+    const emailUser = process.env.EMAIL_USER;
+    const emailPass = process.env.EMAIL_APP_PASSWORD;
+    if (emailUser && emailPass) {
+      console.log(`📧 Email service configured: ${emailUser} (password: ${emailPass.length} chars, service: ${process.env.EMAIL_SERVICE || 'gmail'})`);
+    } else {
+      console.warn('⚠️  Email service NOT configured — EMAIL_USER or EMAIL_APP_PASSWORD is missing. Password reset emails will fail.');
+    }
+
     // Optional AI warm-up (controlled by AI_WARMUP_ON_START=true in .env)
     warmUpAIAgent();
   });

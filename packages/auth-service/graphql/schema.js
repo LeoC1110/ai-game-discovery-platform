@@ -317,6 +317,7 @@ export const typeDefs = /* GraphQL */ `
     featurePost(id: ID!, featured: Boolean!): GamePost!
     updatePreference(input: UpdatePreferenceInput!): UserPreference!
     clearPreferences: Boolean!
+    changePassword(identifier: String!, oldPassword: String!, newPassword: String!): AuthPayload!
     sendPasswordResetCode(email: String!): Boolean!
     resetPasswordWithCode(
       email: String!

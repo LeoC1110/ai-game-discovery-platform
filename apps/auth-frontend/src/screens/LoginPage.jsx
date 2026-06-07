@@ -156,9 +156,14 @@ export default function LoginPage() {
                 <span>Remember me</span>
               </label>
 
-              <Link to="/forgot-password" className="login-reset-link">
-                Forgot password?
-              </Link>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                <Link to="/change-password" className="login-reset-link">
+                  Change password
+                </Link>
+                <Link to="/forgot-password" className="login-reset-link">
+                  Forgot password?
+                </Link>
+              </div>
             </div>
 
             <button

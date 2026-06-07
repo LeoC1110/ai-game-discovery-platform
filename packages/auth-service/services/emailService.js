@@ -31,5 +31,12 @@ export const sendResetPasswordCodeEmail = async ({ to, code }) => {
     text: `Your verify code: ${code}\n\n-- Discovery Platform`,
   };
 
-  await getTransport().sendMail(mailOptions);
+  console.log(`[Email] Attempting to send reset code to: ${to}`);
+  try {
+    const info = await getTransport().sendMail(mailOptions);
+    console.log(`[Email] Sent successfully to: ${to} | messageId: ${info.messageId}`);
+  } catch (err) {
+    console.error(`[Email] SMTP error sending to ${to}: ${err.message}`);
+    throw err;
+  }
 };
