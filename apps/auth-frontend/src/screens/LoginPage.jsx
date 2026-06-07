@@ -189,17 +189,17 @@ export default function LoginPage() {
 
             <div className="login-demo-row">
               <span>Username</span>
-              <code>Test</code>
+              <code>Demo</code>
             </div>
 
             <div className="login-demo-row">
               <span>Email</span>
-              <code>Test@gmail.com</code>
+              <code>demo@example.com</code>
             </div>
 
             <div className="login-demo-row">
               <span>Password</span>
-              <code>233333</code>
+              <code>Demo123456!</code>
             </div>
           </div>
         </div>
