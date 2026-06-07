@@ -20,6 +20,10 @@ const FEATURES = [
     label: 'User Login and Roles',
     desc: 'The platform includes user login, protected pages, role-based access, and account-related features.',
   },
+  {
+    label: 'AI Agent Pipeline',
+    desc: 'Intent Router → Platform Tools → AI Generation → Validation → User Memory',
+  },
 ];
 
 export default function LoginPage() {
@@ -82,27 +86,13 @@ export default function LoginPage() {
         <div className="login-brand">
           <div>
             <h1 className="login-brand__name">
-              Discovery Platform — Game Discovery Module
+              AI-Powered Game Discovery Platform
             </h1>
           </div>
         </div>
 
         <p className="login-overview__desc">
           A deployed full-stack platform for game discovery, community posts, bookmarks, leaderboards, and AI-powered game recommendations.
-        </p>
-
-        <div className="home-ai-info" aria-label="AI Recommendation Assistant info">
-          <p className="home-ai-info__title">AI Recommendation Assistant</p>
-          <p className="home-ai-info__desc">
-            Get personalized game recommendations based on your preferences, bookmarks, community posts, and leaderboard data.
-          </p>
-          <p className="home-ai-info__pipeline">
-            Router → Platform Data → AI Response → Validation → Memory
-          </p>
-        </div>
-
-        <p className="login-overview__desc">
-          Use the demo account to review the project quickly.
         </p>
 
         <p className="login-overview__desc">
@@ -177,7 +167,7 @@ export default function LoginPage() {
                   Change password
                 </Link>
                 <Link to="/forgot-password" className="login-reset-link">
-                  Forgot password?
+                  Forgot password
                 </Link>
               </div>
             </div>
