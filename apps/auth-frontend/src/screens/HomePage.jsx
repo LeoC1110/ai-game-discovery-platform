@@ -98,6 +98,16 @@ export default function HomePage() {
             </Link>
           ))}
         </section>
+
+        <div className="home-ai-info" aria-label="AI Recommendation Assistant info">
+          <p className="home-ai-info__title">AI Recommendation Assistant</p>
+          <p className="home-ai-info__desc">
+            Get personalized game recommendations based on your preferences, bookmarks, community posts, and leaderboard data.
+          </p>
+          <p className="home-ai-info__pipeline">
+            Router → Platform Data → AI Response → Validation → Memory
+          </p>
+        </div>
       </div>
     </div>
   );

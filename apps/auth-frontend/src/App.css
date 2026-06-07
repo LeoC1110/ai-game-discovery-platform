@@ -459,6 +459,38 @@ select:focus-visible {
   box-shadow: 0 8px 28px rgba(0, 122, 255, 0.14);
 }
 
+/* AI info strip */
+.home-ai-info {
+  margin-top: 32px;
+  padding: 16px 20px;
+  border-radius: 10px;
+  background: var(--color-surface, #1c1c1e);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.home-ai-info__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0 0 6px;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.home-ai-info__desc {
+  font-size: 13px;
+  color: var(--color-text-secondary, #8e8e93);
+  margin: 0 0 8px;
+}
+
+.home-ai-info__pipeline {
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text-secondary, #8e8e93);
+  margin: 0;
+  opacity: 0.7;
+}
+
 /* ===== Leaderboard ===== */
 .leaderboard-form {
   display: grid;
