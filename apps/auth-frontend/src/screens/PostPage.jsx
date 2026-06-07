@@ -225,7 +225,7 @@ export default function PostPage() {
                 </label>
                 <label>
                   Cover Image
-                  <div className="cover-upload-area" onClick={() => fileInputRef.current.click()}>
+                  <div className="cover-upload-area">
                     {coverPreview ? (
                       <img src={coverPreview} alt="Cover preview" className="cover-upload-area__img" />
                     ) : (
