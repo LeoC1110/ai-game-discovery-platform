@@ -25,6 +25,7 @@ Built as a portfolio project to demonstrate end-to-end full-stack development, G
 - [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
 - [Example AI Prompts](#example-ai-prompts)
+- [Password Reset Flow](#password-reset-flow)
 - [Testing](#testing)
 - [Security](#security)
 - [Portfolio Highlights](#portfolio-highlights)
@@ -201,6 +202,9 @@ JWT_SECRET=your_jwt_secret_here
 GOOGLE_API_KEY=your_gemini_api_key_here
 AI_MODEL=gemini-2.5-flash-lite
 PORT=4001
+EMAIL_USER=your_email_account_here
+EMAIL_APP_PASSWORD=your_email_app_password_here
+EMAIL_FROM=your_email_account_here
 
 # Optional — enables web search in general chat
 TAVILY_API_KEY=your_tavily_api_key_here
@@ -234,6 +238,25 @@ npm run dev:auth-frontend   # Frontend →  http://localhost:5173
 - *Find co-op strategy games.*
 - *What should I play next?*
 - *Summarise my platform activity.*
+
+---
+
+## Password Reset Flow
+
+- User clicks Forgot password on the login page and opens `/forgot-password`.
+- User enters email and clicks Send Verification Code.
+- Backend always returns a generic success response to avoid revealing whether the email exists.
+- If the account exists, backend generates a 6-digit code, hashes it, stores it in `EmailVerification`, enforces a 60-second resend cooldown, and sends the code by email.
+- User enters email, verification code, new password, and confirm password.
+- Backend validates code status (unused, not expired, attempts < 5), updates password with bcrypt hash, and invalidates the code.
+- On success, frontend redirects user to `/login` and they can sign in with the new password.
+
+Security controls in this flow:
+- Verification code is stored as hash, never plain text.
+- Code expires after 10 minutes.
+- Maximum 5 wrong attempts per code.
+- Code is invalidated immediately after a successful reset.
+- Email credentials are loaded from `.env` (`EMAIL_USER`, `EMAIL_APP_PASSWORD`, `EMAIL_FROM`).
 
 ---
 

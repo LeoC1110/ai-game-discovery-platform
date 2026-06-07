@@ -317,6 +317,13 @@ export const typeDefs = /* GraphQL */ `
     featurePost(id: ID!, featured: Boolean!): GamePost!
     updatePreference(input: UpdatePreferenceInput!): UserPreference!
     clearPreferences: Boolean!
+    sendPasswordResetCode(email: String!): Boolean!
+    resetPasswordWithCode(
+      email: String!
+      code: String!
+      newPassword: String!
+      confirmPassword: String!
+    ): Boolean!
     requestPasswordReset(email: String!): PasswordResetPayload!
     resetPassword(token: String!, newPassword: String!): AuthPayload!
   }

@@ -1,13 +1,17 @@
-// src/gql/resetPassword.js
 import { gql } from '@apollo/client';
 
-export const RESET_PASSWORD = gql`
-  mutation ResetPassword($token: String!, $newPassword: String!) {
-    resetPassword(token: $token, newPassword: $newPassword) {
-      ok
-      message
-      token
-      user { id username email }
-    }
+export const RESET_PASSWORD_WITH_CODE = gql`
+  mutation ResetPasswordWithCode(
+    $email: String!
+    $code: String!
+    $newPassword: String!
+    $confirmPassword: String!
+  ) {
+    resetPasswordWithCode(
+      email: $email
+      code: $code
+      newPassword: $newPassword
+      confirmPassword: $confirmPassword
+    )
   }
 `;

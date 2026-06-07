@@ -157,7 +157,7 @@ export default function LoginPage() {
               </label>
 
               <Link to="/forgot-password" className="login-reset-link">
-                Reset my password
+                Forgot password?
               </Link>
             </div>
 

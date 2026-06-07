@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import { GraphQLError } from 'graphql';
 import User from '../models/User.js';
+import EmailVerification from '../models/EmailVerification.js';
 import Game from '../models/Game.js';
 import GamePost from '../models/GamePost.js';
 import Player from '../models/Player.js';
@@ -9,6 +9,7 @@ import Tournament from '../models/Tournament.js';
 import TournamentResult from '../models/TournamentResult.js';
 import { askAIAgent, clearAIHistory, getAIHistory, geminiHealthTest } from '../services/aiAgentService.js';
 import { loadStoredPreferences, upsertUserPreferences, clearUserPreferences } from '../services/userMemoryService.js';
+import { sendResetPasswordCodeEmail } from '../services/emailService.js';
 import {
   signAuthToken,
   setAuthCookie,
@@ -50,6 +51,11 @@ const TOURNAMENT_STATUSES = new Set(['Upcoming', 'Ongoing', 'Completed']);
 const TOURNAMENT_LAUNCH_TYPES = new Set(['Local', 'ExternalLink', 'Embeddable']);
 const POST_TYPES = new Set(['GAME', 'IDEA']);
 const IDEA_TEXT_REGEX = /^[\p{L}\p{N}\p{P}\p{S}\p{Z}\r\n\t]+$/u;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const RESET_PASSWORD_PURPOSE = 'RESET_PASSWORD';
+const RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const RESET_CODE_COOLDOWN_MS = 60 * 1000;
+const RESET_CODE_MAX_ATTEMPTS = 5;
 
 const requireAdmin = (user) => {
   if (user?.role !== 'Admin') {
@@ -58,6 +64,10 @@ const requireAdmin = (user) => {
     });
   }
 };
+
+const normalizeEmail = (email = '') => email.trim().toLowerCase();
+
+const isValidEmail = (email = '') => EMAIL_REGEX.test(email);
 
 const ensurePlayerForUser = async (userId) => {
   if (!userId) return null;
@@ -475,12 +485,13 @@ export const resolvers = {
     register: async (_parent, { input }, { res }) => {
       const { username, email, password, role } = input;
       const usernameNorm = normalizeName(username);
-      if (!usernameNorm || !email || !password) {
+      const emailNorm = normalizeEmail(email);
+      if (!usernameNorm || !emailNorm || !password) {
         return { ok: false, message: 'Missing required fields', token: null, user: null };
       }
 
       const existing = await User.findOne({
-        $or: [{ username: usernameNorm }, { email }],
+        $or: [{ username: usernameNorm }, { email: emailNorm }],
       });
       if (existing) {
         return { ok: false, message: 'Username or email already registered', token: null, user: null };
@@ -489,7 +500,7 @@ export const resolvers = {
       const passwordHash = await bcrypt.hash(password, 12);
       const user = await User.create({
         username: usernameNorm,
-        email,
+        email: emailNorm,
         passwordHash,
         role: 'Player',
       });
@@ -500,12 +511,13 @@ export const resolvers = {
     },
     login: async (_parent, { identifier, password }, { res }) => {
       const lookup = (identifier || '').trim();
+      const lookupEmail = normalizeEmail(lookup);
       if (!lookup || !password) {
         return { ok: false, message: 'Invalid credentials', token: null, user: null };
       }
 
       const user = await User.findOne({
-        $or: [{ username: lookup }, { email: lookup }],
+        $or: [{ username: lookup }, { email: lookup }, { email: lookupEmail }],
       });
       if (!user) {
         return { ok: false, message: 'Invalid credentials', token: null, user: null };
@@ -563,6 +575,166 @@ export const resolvers = {
     clearPreferences: async (_parent, _args, { user }) => {
       const current = requireUser(user);
       return clearUserPreferences(current._id);
+    },
+    sendPasswordResetCode: async (_parent, { email }) => {
+      const normalizedEmail = normalizeEmail(email);
+      if (!isValidEmail(normalizedEmail)) {
+        throw new GraphQLError('Please provide a valid email address.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      // Never reveal whether this email is registered.
+      const user = await User.findOne({ email: normalizedEmail });
+      if (!user) {
+        return true;
+      }
+
+      const latest = await EmailVerification.findOne(
+        { email: normalizedEmail, purpose: RESET_PASSWORD_PURPOSE },
+        null,
+        { sort: { createdAt: -1 } },
+      );
+
+      if (latest?.createdAt) {
+        const elapsed = Date.now() - new Date(latest.createdAt).getTime();
+        if (elapsed < RESET_CODE_COOLDOWN_MS) {
+          return true;
+        }
+      }
+
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const codeHash = await bcrypt.hash(code, 12);
+
+      await EmailVerification.updateMany(
+        {
+          email: normalizedEmail,
+          purpose: RESET_PASSWORD_PURPOSE,
+          used: false,
+        },
+        { $set: { used: true } },
+      );
+
+      await EmailVerification.create({
+        email: normalizedEmail,
+        codeHash,
+        purpose: RESET_PASSWORD_PURPOSE,
+        expiresAt: new Date(Date.now() + RESET_CODE_TTL_MS),
+        attempts: 0,
+        used: false,
+      });
+
+      try {
+        await sendResetPasswordCodeEmail({
+          to: normalizedEmail,
+          code,
+        });
+      } catch (err) {
+        console.error('[Auth] Failed to send reset email:', err?.message || err);
+      }
+
+      return true;
+    },
+    resetPasswordWithCode: async (
+      _parent,
+      { email, code, newPassword, confirmPassword },
+    ) => {
+      const normalizedEmail = normalizeEmail(email);
+      const sanitizedCode = (code || '').trim();
+      const nextPassword = (newPassword || '').trim();
+      const nextConfirmPassword = (confirmPassword || '').trim();
+
+      if (!isValidEmail(normalizedEmail)) {
+        throw new GraphQLError('Please provide a valid email address.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (!/^\d{6}$/.test(sanitizedCode)) {
+        throw new GraphQLError('Verification code must be a 6-digit number.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (!nextPassword || nextPassword.length < 6) {
+        throw new GraphQLError('Password must be at least 6 characters.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (nextPassword !== nextConfirmPassword) {
+        throw new GraphQLError('Passwords do not match.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      const user = await User.findOne({ email: normalizedEmail });
+      if (!user) {
+        throw new GraphQLError('Invalid or expired verification code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      const verification = await EmailVerification.findOne(
+        {
+          email: normalizedEmail,
+          purpose: RESET_PASSWORD_PURPOSE,
+          used: false,
+        },
+        null,
+        { sort: { createdAt: -1 } },
+      );
+
+      if (!verification) {
+        throw new GraphQLError('Invalid or expired verification code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (new Date(verification.expiresAt).getTime() <= Date.now()) {
+        verification.used = true;
+        await verification.save();
+        throw new GraphQLError('Verification code has expired. Please request a new code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (verification.attempts >= RESET_CODE_MAX_ATTEMPTS) {
+        verification.used = true;
+        await verification.save();
+        throw new GraphQLError('Too many incorrect attempts. Please request a new code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      const matched = await bcrypt.compare(sanitizedCode, verification.codeHash);
+      if (!matched) {
+        verification.attempts += 1;
+        if (verification.attempts >= RESET_CODE_MAX_ATTEMPTS) {
+          verification.used = true;
+        }
+        await verification.save();
+        throw new GraphQLError('Invalid verification code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      user.passwordHash = await bcrypt.hash(nextPassword, 12);
+      await user.save();
+
+      verification.used = true;
+      await verification.save();
+
+      await EmailVerification.updateMany(
+        {
+          email: normalizedEmail,
+          purpose: RESET_PASSWORD_PURPOSE,
+          used: false,
+        },
+        { $set: { used: true } },
+      );
+
+      return true;
     },
     geminiHealthTest: async () => {
       // No auth required — safe to call from Apollo Sandbox to verify API connectivity.
@@ -844,73 +1016,21 @@ export const resolvers = {
 
     // ── Password reset ──────────────────────────────────────────────────────
     requestPasswordReset: async (_parent, { email }) => {
-      const lookup = (email || '').trim().toLowerCase();
-      if (!lookup) {
-        return { ok: false, message: 'Please provide a valid email address.', resetToken: null };
-      }
-
-      const user = await User.findOne({ email: lookup });
-
-      // Always return the same generic message so we don't reveal whether
-      // an email exists in the database (prevents user enumeration).
-      const genericMsg =
-        'If this email is registered, a reset link has been generated. Check the token below (demo mode — in production this is sent by email).';
-
-      if (!user) {
-        // Return ok:true with no token to avoid leaking registration status.
-        return { ok: true, message: genericMsg, resetToken: null };
-      }
-
-      // Generate a cryptographically secure 32-byte token.
-      const plainToken = crypto.randomBytes(32).toString('hex');
-
-      // Store only the SHA-256 hash of the token in the database.
-      const hashedToken = crypto.createHash('sha256').update(plainToken).digest('hex');
-
-      user.resetPasswordToken = hashedToken;
-      user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-      await user.save();
-
-      // DEMO: return the plain token so the frontend can display it.
-      // In production: send an email with a link containing `plainToken`
-      // and return { ok: true, message: genericMsg, resetToken: null }.
-      return { ok: true, message: genericMsg, resetToken: plainToken };
+      await resolvers.Mutation.sendPasswordResetCode(_parent, { email });
+      return {
+        ok: true,
+        message: 'If this email exists, a verification code has been sent.',
+        resetToken: null,
+      };
     },
 
-    resetPassword: async (_parent, { token, newPassword }, { res }) => {
-      const trimmedToken = (token || '').trim();
-      const trimmedPwd   = (newPassword || '').trim();
-
-      if (!trimmedToken) {
-        return { ok: false, message: 'Reset token is missing.', token: null, user: null };
-      }
-      if (!trimmedPwd || trimmedPwd.length < 6) {
-        return { ok: false, message: 'Password must be at least 6 characters.', token: null, user: null };
-      }
-
-      const hashedToken = crypto.createHash('sha256').update(trimmedToken).digest('hex');
-
-      const user = await User.findOne({
-        resetPasswordToken: hashedToken,
-        resetPasswordExpires: { $gt: Date.now() },
-      });
-
-      if (!user) {
-        return {
-          ok: false,
-          message: 'This reset link is invalid or has expired. Please request a new one.',
-          token: null,
-          user: null,
-        };
-      }
-
-      // Hash the new password and persist it; then clear the reset token fields.
-      user.passwordHash = await bcrypt.hash(trimmedPwd, 12);
-      user.resetPasswordToken   = undefined;
-      user.resetPasswordExpires = undefined;
-      await user.save();
-
-      return authSuccess(user, res, 'Password reset successful. You are now logged in.');
+    resetPassword: async () => {
+      return {
+        ok: false,
+        message: 'This endpoint is deprecated. Use resetPasswordWithCode instead.',
+        token: null,
+        user: null,
+      };
     },
   },
   Game: {

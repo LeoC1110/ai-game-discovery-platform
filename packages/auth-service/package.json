@@ -8,7 +8,7 @@
     "dev:mock": "cross-env AI_MOCK_MODE=true nodemon --watch .env server.js",
     "dev:real": "cross-env AI_MOCK_MODE=false nodemon --watch .env server.js",
     "start": "node server.js",
-    "test": "node --test ai/__tests__/mockMode.test.js ai/__tests__/pipeline.test.js"
+    "test": "node --test ai/__tests__/mockMode.test.js ai/__tests__/pipeline.test.js __tests__/passwordReset.test.js"
   },
   "dependencies": {
     "@apollo/server": "^5.0.0",
@@ -23,7 +23,8 @@
     "express": "^4.21.0",
     "graphql": "^16.11.0",
     "langchain": "^1.4.0",
-    "mongoose": "^8.19.1"
+    "mongoose": "^8.19.1",
+    "nodemailer": "^6.10.1"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
