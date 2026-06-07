@@ -6,15 +6,15 @@ import { LOGIN } from '../gql/login';
 const FEATURES = [
   {
     label: 'Game Discovery Community',
-    desc: 'Browse game-related posts, create recommendations, leave comments, and save favorite content.',
+    desc: 'Create game posts, ideas, comments, likes, and bookmarks.',
   },
   {
     label: 'AI Recommendation Assistant',
-    desc: 'Ask the AI assistant for game suggestions, gameplay ideas, and helpful recommendations.',
+    desc: 'Get personalized game recommendations using user preferences and community data.',
   },
   {
     label: 'Leaderboards',
-    desc: 'View top game-related posts and user activity based on community engagement.',
+    desc: 'Rank posts by likes, ratings, and recent activity.',
   },
   {
     label: 'User Login and Roles',
@@ -22,7 +22,7 @@ const FEATURES = [
   },
   {
     label: 'Scalable Platform Direction',
-    desc: 'The current version focuses on games, but the platform structure can be extended to other discovery categories in the future.',
+    desc: 'JWT authentication with HttpOnly cookies and protected routes. Future plans include social logins, OAuth, and multi-factor authentication.',
   },
 ];
 
@@ -31,17 +31,23 @@ export default function LoginPage() {
   const [msg, setMsg] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [login, { loading }] = useMutation(LOGIN);
+
+  const fillDemo = () => {
+    setIdentifier('demo@example.com');
+    setPassword('Demo123456!');
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setMsg('');
 
-    const form = new FormData(e.currentTarget);
-    const identifier = (form.get('identifier') || '').toString().trim();
-    const password = (form.get('password') || '').toString().trim();
+    const trimmedIdentifier = identifier.trim();
+    const trimmedPassword = password.trim();
 
-    if (!identifier || !password) {
+    if (!trimmedIdentifier || !trimmedPassword) {
       setMsg('Please enter your username or email and password.');
       return;
     }
@@ -49,8 +55,8 @@ export default function LoginPage() {
     try {
       const { data } = await login({
         variables: {
-          identifier,
-          password,
+          identifier: trimmedIdentifier,
+          password: trimmedPassword,
         },
       });
 
@@ -124,6 +130,8 @@ export default function LoginPage() {
               type="text"
               placeholder="Username or Email"
               autoComplete="username"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               required
             />
 
@@ -134,6 +142,8 @@ export default function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
                 autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
               />
               <button
@@ -190,11 +200,21 @@ export default function LoginPage() {
 
           {/* Demo / test account */}
           <div className="login-demo-card" aria-label="Test account credentials">
-            <p className="login-demo-label">Test Account</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <p className="login-demo-label" style={{ margin: 0 }}>Test Account</p>
+              <button
+                type="button"
+                className="btn-ghost"
+                style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                onClick={fillDemo}
+              >
+                Quick Login
+              </button>
+            </div>
 
             <div className="login-demo-row">
               <span>Username</span>
-              <code>Demo</code>
+              <code>demo@example.com</code>
             </div>
 
             <div className="login-demo-row">
