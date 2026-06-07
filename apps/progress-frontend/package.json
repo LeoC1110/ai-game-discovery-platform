@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "serve dist -s -l $PORT"
+    "start": "node scripts/start.mjs"
   },
   "dependencies": {
     "serve": "^14.2.4",
