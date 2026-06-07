@@ -614,7 +614,7 @@ export const resolvers = {
       // Never reveal whether this email is registered.
       const user = await User.findOne({ email: normalizedEmail });
       if (!user) {
-        return true;
+        return { ok: true };
       }
 
       const latest = await EmailVerification.findOne(
@@ -626,7 +626,7 @@ export const resolvers = {
       if (latest?.createdAt) {
         const elapsed = Date.now() - new Date(latest.createdAt).getTime();
         if (elapsed < RESET_CODE_COOLDOWN_MS) {
-          return true;
+          return { ok: true };
         }
       }
 
@@ -651,6 +651,13 @@ export const resolvers = {
         used: false,
       });
 
+      // EMAIL_DEMO_MODE: skip SMTP entirely and return code directly in response.
+      // Set EMAIL_DEMO_MODE=true in Railway env vars when SMTP is unavailable.
+      if (process.env.EMAIL_DEMO_MODE === 'true') {
+        console.log(`[Email] DEMO MODE — code for ${normalizedEmail}: ${code}`);
+        return { ok: true, demoCode: code };
+      }
+
       try {
         await sendResetPasswordCodeEmail({
           to: normalizedEmail,
@@ -658,7 +665,7 @@ export const resolvers = {
         });
       } catch (err) {
         if (process.env.NODE_ENV === 'test') {
-          return true;
+          return { ok: true };
         }
         verification.used = true;
         await verification.save();
@@ -668,7 +675,7 @@ export const resolvers = {
         });
       }
 
-      return true;
+      return { ok: true };
     },
     resetPasswordWithCode: async (
       _parent,

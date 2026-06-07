@@ -50,9 +50,15 @@ export default function ForgotPasswordPage() {
     }
 
     try {
-      await sendCode({ variables: { email: normalizedEmail } });
+      const { data } = await sendCode({ variables: { email: normalizedEmail } });
+      const demoCode = data?.sendPasswordResetCode?.demoCode;
       setSendStatus('success');
-      setSendMessage('If this email exists, a verification code has been sent.');
+      if (demoCode) {
+        setSendMessage(`Demo mode — your verification code: ${demoCode}`);
+        setCode(demoCode);
+      } else {
+        setSendMessage('If this email exists, a verification code has been sent.');
+      }
       setResendUntil(Date.now() + 60000);
     } catch (err) {
       setSendStatus('error');

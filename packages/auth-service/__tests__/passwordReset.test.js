@@ -115,7 +115,7 @@ describe('Password reset flow with email verification code', () => {
 
     const result = await resolvers.Mutation.sendPasswordResetCode(null, { email: 'alice@example.com' });
 
-    assert.equal(result, true);
+    assert.equal(result.ok, true);
     assert.equal(verifications.length, 1);
     assert.equal(verifications[0].email, 'alice@example.com');
     assert.equal(verifications[0].purpose, 'RESET_PASSWORD');
@@ -126,7 +126,7 @@ describe('Password reset flow with email verification code', () => {
 
   test('non-existing email generic response', async () => {
     const result = await resolvers.Mutation.sendPasswordResetCode(null, { email: 'nobody@example.com' });
-    assert.equal(result, true);
+    assert.equal(result.ok, true);
     assert.equal(verifications.length, 0);
   });
 

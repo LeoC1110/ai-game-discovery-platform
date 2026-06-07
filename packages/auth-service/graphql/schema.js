@@ -293,6 +293,13 @@ export const typeDefs = /* GraphQL */ `
     myPreferences: UserPreference
   }
 
+  """Result of a send-reset-code request"""
+  type SendCodePayload {
+    ok: Boolean!
+    """Only populated when EMAIL_DEMO_MODE=true — shows code directly on screen."""
+    demoCode: String
+  }
+
   type Mutation {
     register(input: RegisterInput!): AuthPayload!
     login(identifier: String!, password: String!): AuthPayload!
@@ -318,7 +325,7 @@ export const typeDefs = /* GraphQL */ `
     updatePreference(input: UpdatePreferenceInput!): UserPreference!
     clearPreferences: Boolean!
     changePassword(identifier: String!, oldPassword: String!, newPassword: String!): AuthPayload!
-    sendPasswordResetCode(email: String!): Boolean!
+    sendPasswordResetCode(email: String!): SendCodePayload!
     resetPasswordWithCode(
       email: String!
       code: String!
