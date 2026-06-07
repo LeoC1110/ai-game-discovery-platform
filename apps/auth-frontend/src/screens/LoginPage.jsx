@@ -20,10 +20,6 @@ const FEATURES = [
     label: 'User Login and Roles',
     desc: 'The platform includes user login, protected pages, role-based access, and account-related features.',
   },
-  {
-    label: 'Scalable Platform Direction',
-    desc: 'JWT authentication with HttpOnly cookies and protected routes. Future plans include social logins, OAuth, and multi-factor authentication.',
-  },
 ];
 
 export default function LoginPage() {
