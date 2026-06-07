@@ -22,14 +22,13 @@ const getTransport = () => {
 
 export const sendResetPasswordCodeEmail = async ({ to, code }) => {
   const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER;
-  const appName = process.env.EMAIL_APP_NAME || 'Game Discovery Platform';
+  const appName = process.env.EMAIL_APP_NAME || 'Discovery Platform';
 
   const mailOptions = {
     from: sender,
     to,
-    subject: `${appName} password reset code`,
-    text: `Your password reset verification code is ${code}. This code will expire in 10 minutes.`,
-    html: `<p>Your password reset verification code is <strong>${code}</strong>.</p><p>This code will expire in 10 minutes.</p>`,
+    subject: `${appName} verification code`,
+    text: `Your verify code: ${code}\n\n-- Discovery Platform`,
   };
 
   await getTransport().sendMail(mailOptions);

@@ -7,6 +7,8 @@ import { REGISTER_USER } from '../gql/register';
 export default function RegisterPage() {
   const nav = useNavigate();
   const [msg, setMsg] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [registerUser, { loading }] = useMutation(REGISTER_USER);
 
   const onSubmit = async (e) => {
@@ -17,13 +19,18 @@ export default function RegisterPage() {
     const username = (form.get('username') || '').toString().trim();
     const email = (form.get('email') || '').toString().trim();
     const password = (form.get('password') || '').toString().trim();
+    const confirmPassword = (form.get('confirmPassword') || '').toString().trim();
 
-    if (!username || !email || !password) {
-      setMsg('Please enter username, email, and password');
+    if (!username || !email || !password || !confirmPassword) {
+      setMsg('Please enter username, email, password, and confirm password');
       return;
     }
     if (password.length < 6) {
       setMsg('Password must be at least 6 characters');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setMsg('Password and confirm password must match');
       return;
     }
 
@@ -65,14 +72,43 @@ export default function RegisterPage() {
                 autoComplete="email"
                 required
               />
-              <input
-                name="password"
-                type="password"
-                className="input"
-                placeholder="Password (≥6)"
-                autoComplete="new-password"
-                required
-              />
+              <div className="password-input-wrap">
+                <input
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  className="input password-input"
+                  placeholder="Password (≥6)"
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+
+              <div className="password-input-wrap">
+                <input
+                  name="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  className="input password-input"
+                  placeholder="Confirm Password"
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                >
+                  {showConfirmPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
 
               <div className="auth-actions">
                 <button type="submit" className={`btn-primary ${loading ? 'is-loading' : ''}`} disabled={loading} aria-busy={loading}>

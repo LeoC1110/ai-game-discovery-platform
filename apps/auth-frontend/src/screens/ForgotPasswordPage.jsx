@@ -10,6 +10,8 @@ export default function ForgotPasswordPage() {
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [sendStatus, setSendStatus] = useState(null);
   const [sendMessage, setSendMessage] = useState('');
@@ -68,6 +70,12 @@ export default function ForgotPasswordPage() {
     if (!normalizedEmail || !normalizedCode || !newPassword || !confirmPassword) {
       setResetStatus('error');
       setResetMessage('Please complete all fields before resetting your password.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setResetStatus('error');
+      setResetMessage('New password and confirm password must match.');
       return;
     }
 
@@ -153,26 +161,47 @@ export default function ForgotPasswordPage() {
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               required
             />
-            <input
-              className="input"
-              name="newPassword"
-              type="password"
-              placeholder="New password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-            />
-            <input
-              className="input"
-              name="confirmPassword"
-              type="password"
-              placeholder="Confirm new password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-            />
+            <div className="password-input-wrap">
+              <input
+                className="input password-input"
+                name="newPassword"
+                type={showNewPassword ? 'text' : 'password'}
+                placeholder="New password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                onClick={() => setShowNewPassword((v) => !v)}
+              >
+                {showNewPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
+            <div className="password-input-wrap">
+              <input
+                className="input password-input"
+                name="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Confirm new password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                aria-label={showConfirmPassword ? 'Hide confirm new password' : 'Show confirm new password'}
+                onClick={() => setShowConfirmPassword((v) => !v)}
+              >
+                {showConfirmPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
 
             <button
               type="submit"

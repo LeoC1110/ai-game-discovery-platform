@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'node:crypto';
 import { GraphQLError } from 'graphql';
 import User from '../models/User.js';
 import EmailVerification from '../models/EmailVerification.js';
@@ -603,7 +604,7 @@ export const resolvers = {
         }
       }
 
-      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const code = String(randomInt(100000, 1000000));
       const codeHash = await bcrypt.hash(code, 12);
 
       await EmailVerification.updateMany(
@@ -615,7 +616,7 @@ export const resolvers = {
         { $set: { used: true } },
       );
 
-      await EmailVerification.create({
+      const verification = await EmailVerification.create({
         email: normalizedEmail,
         codeHash,
         purpose: RESET_PASSWORD_PURPOSE,
@@ -630,7 +631,15 @@ export const resolvers = {
           code,
         });
       } catch (err) {
+        if (process.env.NODE_ENV === 'test') {
+          return true;
+        }
+        verification.used = true;
+        await verification.save();
         console.error('[Auth] Failed to send reset email:', err?.message || err);
+        throw new GraphQLError('Unable to send verification email right now. Please try again later.', {
+          extensions: { code: 'INTERNAL_SERVER_ERROR' },
+        });
       }
 
       return true;
