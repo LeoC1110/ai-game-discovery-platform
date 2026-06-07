@@ -91,6 +91,16 @@ export default function LoginPage() {
           A deployed full-stack platform for game discovery, community posts, bookmarks, leaderboards, and AI-powered game recommendations.
         </p>
 
+        <div className="home-ai-info" aria-label="AI Recommendation Assistant info">
+          <p className="home-ai-info__title">AI Recommendation Assistant</p>
+          <p className="home-ai-info__desc">
+            Get personalized game recommendations based on your preferences, bookmarks, community posts, and leaderboard data.
+          </p>
+          <p className="home-ai-info__pipeline">
+            Router → Platform Data → AI Response → Validation → Memory
+          </p>
+        </div>
+
         <p className="login-overview__desc">
           Use the demo account to review the project quickly.
         </p>
