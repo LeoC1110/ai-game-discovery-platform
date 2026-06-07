@@ -73,10 +73,10 @@ select:focus-visible {
 
 .app-title {
   text-align: center;
-  font-size: 48px;
-  font-weight: 800;
+  font-size: 40px;
+  font-weight: 700;
   margin-bottom: 28px;
-  letter-spacing: .4px;
+  letter-spacing: -0.5px;
 }
 
 /* ===== 卡片/控件通用 ===== */
@@ -247,9 +247,9 @@ select:focus-visible {
 }
 
 .app-title.auth-title {
-  font-size: clamp(32px, 4vw, 40px);
+  font-size: clamp(28px, 4vw, 36px);
   margin-bottom: 18px;
-  letter-spacing: .2px;
+  letter-spacing: -0.5px;
 }
 
 .auth-form {
@@ -263,7 +263,7 @@ select:focus-visible {
 .auth-form .btn-primary { height: 48px; font-size: 16px; font-weight: 700; border-radius: 12px; }
 
 .auth-actions { display: flex; gap: 12px; justify-content: center; margin-top: 6px; }
-.auth-hint { margin-top: 8px; text-align: center; color: #ff9f0a; font-size: 14px; }
+.auth-hint { margin-top: 8px; text-align: center; color: var(--color-danger); font-size: 14px; }
 
 @media (max-width: 480px) {
   .card.auth-card { padding: 22px; max-width: 100%; }
@@ -377,7 +377,8 @@ select:focus-visible {
   max-width: 540px;
   text-align: center;
   color: var(--color-text-muted);
-  font-size: 16px;
+  font-size: 15px;
+  letter-spacing: -0.1px;
 }
 
 .home-grid {
@@ -434,8 +435,9 @@ select:focus-visible {
 
 .home-card h2 {
   margin: 0 0 8px;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .home-card p {
@@ -446,11 +448,10 @@ select:focus-visible {
 
 .home-card__cta {
   margin-top: 16px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   font-size: 13px;
+  letter-spacing: -0.1px;
 }
 
 .home-card:hover {
@@ -500,8 +501,8 @@ select:focus-visible {
 }
 
 .leaderboard-rank {
-  font-weight: 800;
-  font-size: 18px;
+  font-weight: 700;
+  font-size: 17px;
   color: var(--color-primary);
 }
 
@@ -538,9 +539,10 @@ select:focus-visible {
 .page-subtitle {
   text-align: center;
   color: var(--color-text-muted);
-  font-size: 16px;
+  font-size: 14px;
   margin: -10px auto 22px;
   max-width: 560px;
+  letter-spacing: -0.1px;
 }
 
 /* ===== Status messages ===== */
@@ -1035,7 +1037,7 @@ select:focus-visible {
 .lb-row__name { margin: 0; font-size: 15px; font-weight: 700; }
 .lb-row__sub { margin: 2px 0 0; font-size: 12px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lb-row__stat { text-align: right; }
-.lb-stat-value { display: block; font-size: 18px; font-weight: 800; color: var(--color-primary); }
+.lb-stat-value { display: block; font-size: 17px; font-weight: 700; color: var(--color-primary); }
 .lb-stat-label { font-size: 11px; color: var(--color-text-muted); text-transform: uppercase; }
 
 /* ===== AI Agent ===== */
@@ -1253,104 +1255,92 @@ select:focus-visible {
 .login-page {
   display: flex;
   min-height: 100vh;
-  background: var(--color-bg);
+  background: var(--color-surface);
 }
 
 /* Left column: project overview */
 .login-overview {
-  flex: 1;
+  flex: 0 0 460px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 60px 48px;
-  background: #fff;
+  padding: 72px 52px;
+  background: var(--color-bg);
   border-right: 1px solid var(--color-border);
-  max-width: 520px;
+  overflow-y: auto;
 }
 
 .login-brand {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 24px;
-}
-
-.login-brand__icon {
-  font-size: 40px;
-  line-height: 1;
+  margin-bottom: 28px;
 }
 
 .login-brand__name {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 800;
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
   color: var(--color-text);
   letter-spacing: -0.3px;
+  line-height: 1.25;
 }
 
 .login-brand__tagline {
-  margin: 3px 0 0;
-  font-size: 13px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
   color: var(--color-text-muted);
+  letter-spacing: -0.1px;
 }
 
 .login-overview__desc {
-  margin: 0 0 28px;
-  font-size: 15px;
-  line-height: 1.65;
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.7;
   color: var(--color-text-muted);
+  letter-spacing: -0.1px;
+}
+
+.login-overview__desc strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
 }
 
 .login-features {
   list-style: none;
   padding: 0;
-  margin: 0 0 28px;
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 
 .login-feature {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.login-feature__icon {
-  font-size: 22px;
-  flex-shrink: 0;
-  margin-top: 1px;
+.login-feature:first-child {
+  border-top: 1px solid var(--color-border);
 }
 
 .login-feature__label {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--color-text);
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
+  letter-spacing: -0.1px;
 }
 
 .login-feature__desc {
   margin: 0;
   font-size: 13px;
   color: var(--color-text-muted);
-  line-height: 1.5;
-}
-
-.login-tech-stack {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tech-chip {
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
+  line-height: 1.55;
+  letter-spacing: -0.1px;
 }
 
 /* Right column: login form */
@@ -1360,25 +1350,27 @@ select:focus-visible {
   align-items: center;
   justify-content: center;
   padding: 60px 48px;
-  background: var(--color-bg);
+  background: var(--color-surface);
 }
 
 .login-form-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 380px;
 }
 
 .login-form-title {
   margin: 0 0 6px;
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--color-text);
+  letter-spacing: -0.5px;
 }
 
 .login-form-sub {
-  margin: 0 0 24px;
+  margin: 0 0 28px;
   font-size: 14px;
   color: var(--color-text-muted);
+  letter-spacing: -0.1px;
 }
 
 /* Extras row: remember me + reset */
@@ -1413,7 +1405,7 @@ select:focus-visible {
   font-size: 14px;
   color: var(--color-primary);
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 400;
   text-decoration: none;
 }
 
@@ -1427,39 +1419,36 @@ select:focus-visible {
 
 .password-input-wrap .password-input {
   width: 100%;
-  padding-right: 48px;
+  padding-right: 60px;
 }
 
 .password-toggle {
   position: absolute;
-  right: 8px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface-alt);
-  color: var(--color-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0;
+  line-height: 1;
 }
 
 .password-toggle:hover {
-  color: var(--color-text);
-  background: var(--color-surface);
+  opacity: 0.75;
 }
 
 .password-toggle:focus-visible {
   outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .login-reset-msg {
-  background: rgba(0, 122, 255, 0.07);
+  background: var(--color-primary-soft);
   border: 1px solid rgba(0, 122, 255, 0.2);
   border-radius: 10px;
   padding: 10px 14px;
@@ -1470,32 +1459,30 @@ select:focus-visible {
 
 /* Demo / test account card */
 .login-demo-card {
-  margin-top: 20px;
+  margin-top: 24px;
   padding: 16px 18px;
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--color-bg);
   border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-card);
 }
 
 .login-demo-label {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--color-text);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .login-demo-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 5px 0;
+  padding: 6px 0;
   font-size: 13px;
   color: var(--color-text-muted);
-  border-bottom: 1px solid var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .login-demo-row:last-child {
@@ -1504,9 +1491,9 @@ select:focus-visible {
 
 .login-demo-row code {
   font-family: "SF Mono", ui-monospace, Menlo, monospace;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--color-text);
-  background: var(--color-surface-alt);
+  background: var(--color-surface);
   padding: 2px 8px;
   border-radius: 5px;
   border: 1px solid var(--color-border);
@@ -1518,7 +1505,7 @@ select:focus-visible {
     flex-direction: column;
   }
   .login-overview {
-    max-width: none;
+    flex: none;
     border-right: none;
     border-bottom: 1px solid var(--color-border);
     padding: 40px 28px;

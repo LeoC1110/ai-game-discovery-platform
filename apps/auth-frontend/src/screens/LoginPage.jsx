@@ -5,24 +5,24 @@ import { LOGIN } from '../gql/login';
 
 const FEATURES = [
   {
-    icon: '🎮',
-    label: 'Game Community',
-    desc: 'Browse games, create posts, leave comments, and save your favorite content.',
+    label: 'Game Discovery Community',
+    desc: 'Browse game-related posts, create recommendations, leave comments, and save favorite content.',
   },
   {
-    icon: '🤖',
-    label: 'AI Game Assistant',
-    desc: 'Ask the AI assistant for game suggestions and helpful tips.',
+    label: 'AI Recommendation Assistant',
+    desc: 'Ask the AI assistant for game suggestions, gameplay ideas, and helpful recommendations.',
   },
   {
-    icon: '📊',
     label: 'Leaderboards',
-    desc: 'View top users based on activity, ratings, and community engagement.',
+    desc: 'View top game-related posts and user activity based on community engagement.',
   },
   {
-    icon: '🔐',
-    label: 'Secure Login',
-    desc: 'The platform includes login, protected pages, user roles, and account features.',
+    label: 'User Login and Roles',
+    desc: 'The platform includes user login, protected pages, role-based access, and account-related features.',
+  },
+  {
+    label: 'Scalable Platform Direction',
+    desc: 'The current version focuses on games, but the platform structure can be extended to other discovery categories in the future.',
   },
 ];
 
@@ -78,36 +78,28 @@ export default function LoginPage() {
       {/* Left panel: project overview */}
       <div className="login-overview">
         <div className="login-brand">
-          <span className="login-brand__icon" aria-hidden="true">
-            🎮
-          </span>
-
           <div>
-            <h1 className="login-brand__name">GameDiscover AI</h1>
-            <p className="login-brand__tagline">
-              AI-Powered Game Discovery Platform
-            </p>
+            <h1 className="login-brand__name">
+              Discovery Platform — Game Discovery Module
+            </h1>
           </div>
         </div>
 
         <p className="login-overview__desc">
-          GameDiscover AI is a full-stack web app for discovering games and
-          sharing game posts. It includes login, community features,
-          leaderboards, and an AI assistant.
+          A deployed full-stack platform for game discovery, community posts, bookmarks, leaderboards, and AI-powered game recommendations.
         </p>
 
         <p className="login-overview__desc">
-          This demo account is provided so recruiters and hiring teams can test
-          the project quickly.
+          Use the demo account to review the project quickly.
+        </p>
+
+        <p className="login-overview__desc">
+          <strong>Key Features</strong>
         </p>
 
         <ul className="login-features" aria-label="Platform features">
           {FEATURES.map((f) => (
             <li key={f.label} className="login-feature">
-              <span className="login-feature__icon" aria-hidden="true">
-                {f.icon}
-              </span>
-
               <div>
                 <strong className="login-feature__label">{f.label}</strong>
                 <p className="login-feature__desc">{f.desc}</p>
@@ -150,7 +142,7 @@ export default function LoginPage() {
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
                 onClick={() => setShowPassword((v) => !v)}
               >
-                👁
+                {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
 
@@ -193,9 +185,7 @@ export default function LoginPage() {
 
           {/* Demo / test account */}
           <div className="login-demo-card" aria-label="Test account credentials">
-            <p className="login-demo-label">
-              <span aria-hidden="true">🧪</span> Test Account
-            </p>
+            <p className="login-demo-label">Test Account</p>
 
             <div className="login-demo-row">
               <span>Username</span>
