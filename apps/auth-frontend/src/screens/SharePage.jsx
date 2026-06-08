@@ -54,14 +54,14 @@ export default function SharePage() {
         <DashboardNav />
         <h1 className="app-title">Share Your Idea</h1>
         <p className="page-subtitle share-subtitle">
-          Post a thought, feedback, or game idea with the community.
+    
         </p>
 
         <div className="share-grid">
           <div className="share-card">
             <header className="share-card__header">
               <h2>New Idea</h2>
-              <p>Text and emoji only. Max 500 characters.</p>
+     
             </header>
 
             {message && (
@@ -75,13 +75,13 @@ export default function SharePage() {
 
             <div className="share-form">
               <label className="share-form__label">
-                Your Idea
+                
                 <textarea
                   className="input textarea share-form__textarea"
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   maxLength={500}
-                  placeholder="Write your thought, feedback, or game idea..."
+                  placeholder="Write something or share an idea with the community..."
                   rows={7}
                 />
               </label>
