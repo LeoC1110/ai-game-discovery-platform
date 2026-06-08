@@ -438,7 +438,7 @@ export default function CommunityPage() {
         <DashboardNav />
         <h1 className="app-title">Community</h1>
         <p className="page-subtitle post-subtitle">
-          Discover game recommendations from players around the world.
+          
         </p>
 
         {/* Filters */}

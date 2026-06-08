@@ -33,7 +33,7 @@ export default function BookmarksPage() {
         <DashboardNav />
         <h1 className="app-title">Bookmarks</h1>
         <p className="page-subtitle post-subtitle">
-          Your saved game recommendations.
+          
         </p>
 
         {loading && <p style={{ color: '#aaa', textAlign: 'center' }}>Loading bookmarks…</p>}

@@ -123,9 +123,9 @@ export default function AgentPage() {
 
         <div className="agent-header">
           <div>
-            <h1 className="app-title">AI Game Agent</h1>
+            <h1 className="app-title">Ask Nova</h1>
             <p className="page-subtitle post-subtitle">
-              Powered by Google Gemini · Remembers your conversation · Uses your bookmarks &amp; community data
+              
             </p>
           </div>
           <button

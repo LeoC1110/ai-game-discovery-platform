@@ -86,7 +86,7 @@ export default function LeaderboardPage() {
         <DashboardNav />
         <h1 className="app-title">Community Trends</h1>
         <p className="page-subtitle trends-subtitle">
-          Explore popular games, active discussions, and community activity.
+          
         </p>
 
         {loading && <p className="trends-status">Loading…</p>}

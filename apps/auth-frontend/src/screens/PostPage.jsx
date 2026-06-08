@@ -133,7 +133,7 @@ export default function PostPage() {
         <DashboardNav />
         <h1 className="app-title">Post a Game</h1>
         <p className="page-subtitle post-subtitle">
-          Share a game recommendation with the community.
+          
         </p>
 
         <div className="post-grid" style={{ gridTemplateColumns: '1fr' }}>
