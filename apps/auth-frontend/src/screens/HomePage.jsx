@@ -19,7 +19,7 @@ const sections = [
   {
     to: '/post',
     title: 'Post',
-    description: 'Share your passion. Rate, review, and tag your favorite games in seconds.',
+    description: 'Post your passion. Rate, review, and tag your favorite games in seconds.',
   },
   {
     to: '/community',
