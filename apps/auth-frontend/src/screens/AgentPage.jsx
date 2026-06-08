@@ -63,7 +63,7 @@ export default function AgentPage() {
     if (historyLoading) return;
     const greeting = {
       role: 'agent',
-      text: "Hello! I'm your AI Game Agent powered by Google Gemini. Ask me for game recommendations, community insights, or anything about your bookmarks!",
+      text: "Hi, I'm Nova. I can help you find games you might like, understand community trends, and get recommendations based on your bookmarks and preferences. What would you like to explore today?",
     };
     const history = historyData?.myAIHistory ?? [];
     const restored = history.map((m) => ({
