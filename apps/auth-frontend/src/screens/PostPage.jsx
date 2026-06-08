@@ -8,6 +8,20 @@ import './Post.css';
 
 const ME_QUERY = gql`query MePost { me { id role } }`;
 
+const GENRE_OPTIONS = [
+  'Action', 'Adventure', 'RPG', 'Strategy', 'Simulation', 'Sports', 'Racing',
+  'Puzzle', 'Platformer', 'Shooter', 'Fighting', 'Horror', 'Survival', 'Sandbox',
+  'Roguelike', 'Open-world', 'Casual', 'Indie', 'Multiplayer', 'Other',
+];
+const PLATFORM_OPTIONS = [
+  'PC', 'PlayStation', 'Xbox', 'Nintendo Switch', 'iOS', 'Android',
+  'Web Browser', 'Steam Deck', 'Other',
+];
+const GAME_TYPE_OPTIONS = [
+  'Single-player', 'Multiplayer', 'Online Co-op', 'Local Co-op', 'PvP', 'PvE',
+  'Free-to-play', 'Premium', 'Early Access', 'Live Service', 'Other',
+];
+
 const INITIAL_FORM = {
   title: '',
   genre: '',
@@ -21,6 +35,9 @@ const INITIAL_FORM = {
   tags: '',
   review: '',
   featured: false,
+  genreOther: '',
+  platformOther: '',
+  gameTypeOther: '',
 };
 
 export default function PostPage() {
@@ -83,11 +100,11 @@ export default function PostPage() {
           input: {
             postType: 'GAME',
             title: form.title.trim(),
-            genre: form.genre || undefined,
-            platform: form.platform || undefined,
+            genre: form.genre === 'Other' ? (form.genreOther.trim() || 'Other') : (form.genre || undefined),
+            platform: form.platform === 'Other' ? (form.platformOther.trim() || 'Other') : (form.platform || undefined),
             developer: form.developer || undefined,
             releaseYear: form.releaseYear ? Number(form.releaseYear) : undefined,
-            gameType: form.gameType || undefined,
+            gameType: form.gameType === 'Other' ? (form.gameTypeOther.trim() || 'Other') : (form.gameType || undefined),
             rating: form.rating ? Number(form.rating) : undefined,
             coverImageUrl: form.coverImageUrl || undefined,
             gameLink: form.gameLink || undefined,
@@ -143,14 +160,26 @@ export default function PostPage() {
                 </label>
                 <label>
                   Genre
-                  <input className="input" name="genre" value={form.genre} onChange={handleChange} placeholder="e.g. RPG, FPS" />
+                  <select className="input" name="genre" value={form.genre} onChange={handleChange}>
+                    <option value="">Select a genre…</option>
+                    {GENRE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                  {form.genre === 'Other' && (
+                    <input className="input" name="genreOther" value={form.genreOther} onChange={handleChange} placeholder="Specify genre…" style={{ marginTop: 6 }} />
+                  )}
                 </label>
               </div>
 
               <div className="post-form__row">
                 <label>
                   Platform
-                  <input className="input" name="platform" value={form.platform} onChange={handleChange} placeholder="e.g. PC, PS5" />
+                  <select className="input" name="platform" value={form.platform} onChange={handleChange}>
+                    <option value="">Select a platform…</option>
+                    {PLATFORM_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  {form.platform === 'Other' && (
+                    <input className="input" name="platformOther" value={form.platformOther} onChange={handleChange} placeholder="Specify platform…" style={{ marginTop: 6 }} />
+                  )}
                 </label>
                 <label>
                   Developer / Studio
@@ -165,7 +194,13 @@ export default function PostPage() {
                 </label>
                 <label>
                   Game Type
-                  <input className="input" name="gameType" value={form.gameType} onChange={handleChange} placeholder="e.g. Singleplayer, Multiplayer" />
+                  <select className="input" name="gameType" value={form.gameType} onChange={handleChange}>
+                    <option value="">Select a game type…</option>
+                    {GAME_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  {form.gameType === 'Other' && (
+                    <input className="input" name="gameTypeOther" value={form.gameTypeOther} onChange={handleChange} placeholder="Specify game type…" style={{ marginTop: 6 }} />
+                  )}
                 </label>
               </div>
 

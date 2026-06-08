@@ -24,6 +24,16 @@ const SORT_OPTIONS = [
   { value: 'comments', label: 'Most Commented' },
 ];
 
+const GENRE_OPTIONS = [
+  'Action', 'Adventure', 'RPG', 'Strategy', 'Simulation', 'Sports', 'Racing',
+  'Puzzle', 'Platformer', 'Shooter', 'Fighting', 'Horror', 'Survival', 'Sandbox',
+  'Roguelike', 'Open-world', 'Casual', 'Indie', 'Multiplayer', 'Other',
+];
+const PLATFORM_OPTIONS = [
+  'PC', 'PlayStation', 'Xbox', 'Nintendo Switch', 'iOS', 'Android',
+  'Web Browser', 'Steam Deck', 'Other',
+];
+
 function StarRating({ value }) {
   if (!value) return <span className="star-rating star-rating--empty">No rating</span>;
   return (
@@ -149,10 +159,14 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
 
 function EditModal({ post, onClose, onSaved }) {
   const isIdea = post.postType === 'IDEA';
+  const initGenre = GENRE_OPTIONS.includes(post.genre || '') ? (post.genre || '') : (post.genre ? 'Other' : '');
+  const initPlatform = PLATFORM_OPTIONS.includes(post.platform || '') ? (post.platform || '') : (post.platform ? 'Other' : '');
   const [form, setForm] = useState({
     title: post.title || '',
-    genre: post.genre || '',
-    platform: post.platform || '',
+    genre: initGenre,
+    genreOther: initGenre === 'Other' ? (post.genre || '') : '',
+    platform: initPlatform,
+    platformOther: initPlatform === 'Other' ? (post.platform || '') : '',
     developer: post.developer || '',
     releaseYear: post.releaseYear ? String(post.releaseYear) : '',
     gameType: post.gameType || '',
@@ -183,8 +197,8 @@ function EditModal({ post, onClose, onSaved }) {
         id: post.id,
         input: {
           title: isIdea ? undefined : form.title.trim(),
-          genre: isIdea ? undefined : form.genre || undefined,
-          platform: isIdea ? undefined : form.platform || undefined,
+          genre: isIdea ? undefined : (form.genre === 'Other' ? (form.genreOther.trim() || 'Other') : (form.genre || undefined)),
+          platform: isIdea ? undefined : (form.platform === 'Other' ? (form.platformOther.trim() || 'Other') : (form.platform || undefined)),
           developer: isIdea ? undefined : form.developer || undefined,
           releaseYear: isIdea ? undefined : form.releaseYear ? Number(form.releaseYear) : undefined,
           gameType: isIdea ? undefined : form.gameType || undefined,
@@ -214,11 +228,23 @@ function EditModal({ post, onClose, onSaved }) {
                 </label>
                 <label className="community-form-label">
                   Genre
-                  <input className="input" name="genre" value={form.genre} onChange={handle} />
+                  <select className="input" name="genre" value={form.genre} onChange={handle}>
+                    <option value="">Select a genre…</option>
+                    {GENRE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                  {form.genre === 'Other' && (
+                    <input className="input" name="genreOther" value={form.genreOther} onChange={handle} placeholder="Specify genre…" style={{ marginTop: 6 }} />
+                  )}
                 </label>
                 <label className="community-form-label">
                   Platform
-                  <input className="input" name="platform" value={form.platform} onChange={handle} />
+                  <select className="input" name="platform" value={form.platform} onChange={handle}>
+                    <option value="">Select a platform…</option>
+                    {PLATFORM_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  {form.platform === 'Other' && (
+                    <input className="input" name="platformOther" value={form.platformOther} onChange={handle} placeholder="Specify platform…" style={{ marginTop: 6 }} />
+                  )}
                 </label>
                 <label className="community-form-label">
                   Rating (1-10)

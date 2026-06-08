@@ -7,9 +7,6 @@ import { ALL_POSTS } from '../gql/gamePosts';
 import './Trends.css';
 
 function MedalIcon({ rank }) {
-  if (rank === 1) return <span className="trends-medal">🥇</span>;
-  if (rank === 2) return <span className="trends-medal">🥈</span>;
-  if (rank === 3) return <span className="trends-medal">🥉</span>;
   return <span className="trends-rank">#{rank}</span>;
 }
 
@@ -43,7 +40,7 @@ export default function LeaderboardPage() {
           (p.bookmarksCount || 0) * 2,
       }))
       .sort((a, b) => b.trendScore - a.trendScore)
-      .slice(0, 10),
+      .slice(0, 5),
     [gamePosts]);
 
   // ── Popular Tags ────────────────────────────────────────────────────────────
@@ -54,7 +51,7 @@ export default function LeaderboardPage() {
     });
     return Object.entries(map)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 24);
+      .slice(0, 20);
   }, [gamePosts]);
 
   // ── Recent Discussions ──────────────────────────────────────────────────────
@@ -63,7 +60,7 @@ export default function LeaderboardPage() {
       .sort((a, b) =>
         (b.commentsCount || 0) - (a.commentsCount || 0) ||
         new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 8),
+      .slice(0, 5),
     [allPosts]);
 
   // ── Active Contributors ─────────────────────────────────────────────────────
@@ -78,7 +75,7 @@ export default function LeaderboardPage() {
     });
     return Object.values(map)
       .sort((a, b) => b.postCount - a.postCount || b.totalLikes - a.totalLikes)
-      .slice(0, 10);
+      .slice(0, 5);
   }, [allPosts]);
 
   const isEmpty = !loading && allPosts.length === 0;
@@ -105,9 +102,9 @@ export default function LeaderboardPage() {
           <div className="trends-grid">
 
             {/* ── Trending Games ─────────────────────────────────────────── */}
-            <SectionCard title="🔥 Trending Games">
+            <SectionCard title="Trending Games">
               {trendingGames.length === 0
-                ? <p className="trends-empty">No game posts yet.</p>
+                ? <p className="trends-empty">No trending games yet.</p>
                 : (
                   <ol className="trends-game-list">
                     {trendingGames.map((post, i) => (
@@ -123,12 +120,12 @@ export default function LeaderboardPage() {
                         </div>
                         <div className="trends-game-row__stats">
                           {post.rating != null && (
-                            <span className="trends-stat">⭐ {post.rating}/10</span>
+                            <span className="trends-stat">Rating: {post.rating}/10</span>
                           )}
-                          <span className="trends-stat">♥ {post.likesCount || 0}</span>
-                          <span className="trends-stat">💬 {post.commentsCount || 0}</span>
+                          <span className="trends-stat">Likes: {post.likesCount || 0}</span>
+                          <span className="trends-stat">Comments: {post.commentsCount || 0}</span>
                           {post.bookmarksCount != null && (
-                            <span className="trends-stat">🔖 {post.bookmarksCount}</span>
+                            <span className="trends-stat">Bookmarks: {post.bookmarksCount}</span>
                           )}
                         </div>
                       </li>
@@ -138,9 +135,9 @@ export default function LeaderboardPage() {
             </SectionCard>
 
             {/* ── Popular Tags ───────────────────────────────────────────── */}
-            <SectionCard title="🏷 Popular Tags">
+            <SectionCard title="Popular Tags">
               {popularTags.length === 0
-                ? <p className="trends-empty">No tags found.</p>
+                ? <p className="trends-empty">No tags available yet.</p>
                 : (
                   <div className="trends-tag-cloud">
                     {popularTags.map(([tag, count]) => (
@@ -159,9 +156,9 @@ export default function LeaderboardPage() {
             </SectionCard>
 
             {/* ── Recent Discussions ─────────────────────────────────────── */}
-            <SectionCard title="💬 Recent Discussions">
+            <SectionCard title="Recent Discussions">
               {recentDiscussions.length === 0
-                ? <p className="trends-empty">No discussions yet.</p>
+                ? <p className="trends-empty">No recent discussions yet.</p>
                 : (
                   <ul className="trends-discussion-list">
                     {recentDiscussions.map((post) => (
@@ -176,8 +173,8 @@ export default function LeaderboardPage() {
                           </p>
                         </div>
                         <div className="trends-discussion-row__stats">
-                          <span className="trends-stat">💬 {post.commentsCount || 0}</span>
-                          <span className="trends-stat">♥ {post.likesCount || 0}</span>
+                          <span className="trends-stat">Comments: {post.commentsCount || 0}</span>
+                          <span className="trends-stat">Likes: {post.likesCount || 0}</span>
                         </div>
                       </li>
                     ))}
@@ -186,9 +183,9 @@ export default function LeaderboardPage() {
             </SectionCard>
 
             {/* ── Active Contributors ────────────────────────────────────── */}
-            <SectionCard title="👥 Active Contributors">
+            <SectionCard title="Active Contributors">
               {activeContributors.length === 0
-                ? <p className="trends-empty">No contributors yet.</p>
+                ? <p className="trends-empty">No active contributors yet.</p>
                 : (
                   <ol className="trends-contributor-list">
                     {activeContributors.map((c, i) => (
@@ -200,8 +197,8 @@ export default function LeaderboardPage() {
                           <p className="trends-contributor-row__name">{c.username}</p>
                           <p className="trends-contributor-row__meta">
                             {c.postCount} post{c.postCount !== 1 ? 's' : ''}
-                            {' · '}♥ {c.totalLikes}
-                            {' · '}💬 {c.totalComments}
+                            {' · '}Likes: {c.totalLikes}
+                            {' · '}Comments: {c.totalComments}
                           </p>
                         </div>
                       </li>
@@ -224,7 +221,7 @@ export default function LeaderboardPage() {
               })
             }
           >
-            ✨ Ask AI About These Trends
+            Ask AI About These Trends
           </button>
         </div>
 
