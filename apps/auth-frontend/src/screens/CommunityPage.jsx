@@ -1,5 +1,5 @@
 ﻿// src/screens/CommunityPage.jsx — Browse & interact with game recommendation posts
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, gql } from '@apollo/client';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
