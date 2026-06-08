@@ -429,6 +429,40 @@ export const resolvers = {
       if (sort === 'comments') posts.sort((a, b) => b.comments.length - a.comments.length);
       return posts;
     },
+    pagedPosts: async (_parent, { search, genre, platform, tag, sort, postType, limit = 10, offset = 0 }, { user }) => {
+      requireUser(user);
+      const cap = Math.min(Math.max(1, limit), 50);
+      const skip = Math.max(0, offset);
+      const filter = {};
+      if (POST_TYPES.has(postType)) filter.postType = postType;
+      if (search) filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { review: { $regex: search, $options: 'i' } },
+        { tags: { $regex: search, $options: 'i' } },
+      ];
+      if (genre) filter.genre = { $regex: genre, $options: 'i' };
+      if (platform) filter.platform = { $regex: platform, $options: 'i' };
+      if (tag) filter.tags = tag;
+      const totalCount = await GamePost.countDocuments(filter);
+      const baseQuery = GamePost.find(filter)
+        .populate('postedBy')
+        .populate({ path: 'comments.author' })
+        .populate('likedBy', '_id')
+        .populate('bookmarkedBy', '_id');
+      let posts;
+      if (sort === 'likes' || sort === 'comments') {
+        // In-memory sort — correct for small datasets
+        const all = await baseQuery.sort({ createdAt: -1 });
+        if (sort === 'likes') all.sort((a, b) => b.likedBy.length - a.likedBy.length);
+        else all.sort((a, b) => b.comments.length - a.comments.length);
+        posts = all.slice(skip, skip + cap);
+      } else if (sort === 'rating') {
+        posts = await baseQuery.sort({ rating: -1, createdAt: -1 }).skip(skip).limit(cap);
+      } else {
+        posts = await baseQuery.sort({ createdAt: -1 }).skip(skip).limit(cap);
+      }
+      return { posts, totalCount };
+    },
     myPosts: async (_parent, _args, { user }) => {
       const current = requireUser(user);
       return GamePost.find({ postedBy: current._id })
@@ -446,6 +480,22 @@ export const resolvers = {
         .populate('likedBy', '_id')
         .populate('bookmarkedBy', '_id')
         .sort({ createdAt: -1 });
+    },
+    pagedBookmarks: async (_parent, { limit = 8, offset = 0 }, { user }) => {
+      const current = requireUser(user);
+      const cap = Math.min(Math.max(1, limit), 50);
+      const skip = Math.max(0, offset);
+      const filter = { bookmarkedBy: current._id };
+      const totalCount = await GamePost.countDocuments(filter);
+      const posts = await GamePost.find(filter)
+        .populate('postedBy')
+        .populate({ path: 'comments.author' })
+        .populate('likedBy', '_id')
+        .populate('bookmarkedBy', '_id')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(cap);
+      return { posts, totalCount };
     },
     getPost: async (_parent, { id }, { user }) => {
       requireUser(user);

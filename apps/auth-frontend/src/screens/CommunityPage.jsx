@@ -4,7 +4,7 @@ import { useQuery, useMutation, gql } from '@apollo/client';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
 import {
-  ALL_POSTS,
+  PAGED_POSTS,
   LIKE_POST,
   ADD_COMMENT,
   TOGGLE_BOOKMARK,
@@ -179,9 +179,8 @@ function EditModal({ post, onClose, onSaved }) {
   const [errMsg, setErrMsg] = useState(null);
 
   const [editPost, { loading }] = useMutation(EDIT_POST, {
-    onCompleted: () => { onSaved(); onClose(); },
+    onCompleted: (data) => { onSaved(data.editPost); onClose(); },
     onError: (err) => setErrMsg(err.message),
-    refetchQueries: [{ query: ALL_POSTS }],
   });
 
   const handle = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
@@ -273,7 +272,7 @@ function EditModal({ post, onClose, onSaved }) {
   );
 }
 
-function PostModal({ post, currentUser, onClose, onRefetch }) {
+function PostModal({ post, currentUser, onClose, onUpdate }) {
   const [commentText, setCommentText] = useState('');
   const isAdmin = currentUser?.role === 'Admin';
   const isIdea = post.postType === 'IDEA';
@@ -288,19 +287,22 @@ function PostModal({ post, currentUser, onClose, onRefetch }) {
 
   const [addComment, { loading: commenting }] = useMutation(ADD_COMMENT, {
     variables: { postId: post.id, text: commentText },
-    onCompleted: () => { setCommentText(''); onRefetch(); },
+    onCompleted: ({ addComment: updated }) => { setCommentText(''); onUpdate(updated); },
   });
 
   const [deleteComment] = useMutation(DELETE_COMMENT, {
-    onCompleted: () => onRefetch(),
+    onCompleted: ({ deleteComment: updated }) => onUpdate(updated),
   });
 
-  const [toggleCommentLike] = useMutation(TOGGLE_COMMENT_LIKE);
+  const [toggleCommentLike] = useMutation(TOGGLE_COMMENT_LIKE, {
+    onCompleted: ({ toggleCommentLike: updated }) => onUpdate(updated),
+  });
 
   const handleDeleteComment = (commentId) => {
     if (!window.confirm('Delete this comment?')) return;
     deleteComment({ variables: { postId: post.id, commentId } });
   };
+
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -399,35 +401,77 @@ export default function CommunityPage() {
   const [expandedPost, setExpandedPost] = useState(null);
   const [editingPost, setEditingPost] = useState(null);
 
+  // ── Pagination state ─────────────────────────────────────────────────────
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(0);
+  const [posts, setPosts] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageRef = React.useRef(0);
+  pageRef.current = page;
+
+  // Reset accumulation when filters change
+  useEffect(() => {
+    setPage(0);
+    setPosts([]);
+  }, [search, filterGenre, filterPlatform, sort]);
+
   const { data: meData } = useQuery(ME_QUERY, { fetchPolicy: 'cache-first' });
   const currentUser = meData?.me;
 
-  const { data, loading, error, refetch } = useQuery(ALL_POSTS, {
-    variables: { search: search || undefined, genre: filterGenre || undefined, platform: filterPlatform || undefined, sort },
-    fetchPolicy: 'cache-and-network',
+  const { loading, error } = useQuery(PAGED_POSTS, {
+    variables: {
+      search: search || undefined,
+      genre: filterGenre || undefined,
+      platform: filterPlatform || undefined,
+      sort,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    },
+    fetchPolicy: 'network-only',
+    notifyOnNetworkStatusChange: true,
+    onCompleted: ({ pagedPosts }) => {
+      setTotalCount(pagedPosts.totalCount);
+      if (pageRef.current === 0) {
+        setPosts(pagedPosts.posts);
+      } else {
+        setPosts((prev) => [...prev, ...pagedPosts.posts]);
+      }
+    },
   });
 
-  const [likePost] = useMutation(LIKE_POST, { onCompleted: () => refetch() });
-  const [toggleBookmark] = useMutation(TOGGLE_BOOKMARK, { onCompleted: () => refetch() });
-  const [deletePost] = useMutation(DELETE_POST, {
-    onCompleted: () => refetch(),
-    refetchQueries: [{ query: ALL_POSTS }],
+  const hasMore = posts.length < totalCount;
+
+  // ── Mutations — patch local state instead of full refetch ────────────────
+  const patchPost = (updated) =>
+    setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
+
+  const [likePost] = useMutation(LIKE_POST, {
+    onCompleted: ({ likePost: updated }) => patchPost(updated),
   });
-  const [featurePost] = useMutation(FEATURE_POST, { onCompleted: () => refetch() });
+  const [toggleBookmark] = useMutation(TOGGLE_BOOKMARK, {
+    onCompleted: ({ toggleBookmark: updated }) => patchPost(updated),
+  });
+  const [deletePost] = useMutation(DELETE_POST);
+  const [featurePost] = useMutation(FEATURE_POST, {
+    onCompleted: ({ featurePost: updated }) => patchPost(updated),
+  });
 
   const handleDelete = (id) => {
     if (!window.confirm('Delete this post?')) return;
-    deletePost({ variables: { id } });
+    deletePost({
+      variables: { id },
+      onCompleted: () => {
+        setPosts((prev) => prev.filter((p) => p.id !== id));
+        setTotalCount((prev) => prev - 1);
+      },
+    });
   };
 
   const handleFeature = (id, featured) => {
     featurePost({ variables: { id, featured } });
   };
 
-  const posts = data?.allPosts ?? [];
-  // Always derive the modal's post from the live posts array so that
-  // after a refetch (cache-and-network or onRefetch) the modal sees
-  // fresh comments instead of the stale snapshot stored in expandedPost state.
+  // Always derive the modal's post from the live posts array so comments stay fresh
   const liveExpandedPost = expandedPost
     ? (posts.find((p) => p.id === expandedPost.id) ?? expandedPost)
     : null;
@@ -474,7 +518,7 @@ export default function CommunityPage() {
           </div>
         </div>
 
-        {loading && <p className="community-status community-status--loading">Loading posts…</p>}
+        {loading && page === 0 && <p className="community-status community-status--loading">Loading posts…</p>}
         {error && <p className="community-status community-status--error">Error: {error.message}</p>}
 
         {!loading && posts.length === 0 && (
@@ -498,6 +542,23 @@ export default function CommunityPage() {
             />
           ))}
         </div>
+
+        {/* Load More */}
+        {hasMore && (
+          <div className="community-load-more">
+            <button
+              className={`btn-ghost community-load-more__btn ${loading ? 'is-loading' : ''}`}
+              onClick={() => setPage((p) => p + 1)}
+              disabled={loading}
+              aria-busy={loading}
+            >
+              {loading ? '…' : `Load More (${posts.length} / ${totalCount})`}
+            </button>
+          </div>
+        )}
+        {!hasMore && posts.length > 0 && (
+          <p className="community-load-more__end">All {totalCount} posts loaded.</p>
+        )}
       </div>
 
       {liveExpandedPost && (
@@ -505,7 +566,9 @@ export default function CommunityPage() {
           post={liveExpandedPost}
           currentUser={currentUser}
           onClose={() => setExpandedPost(null)}
-          onRefetch={refetch}
+          onUpdate={(updated) =>
+            setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)))
+          }
         />
       )}
 
@@ -513,7 +576,10 @@ export default function CommunityPage() {
         <EditModal
           post={editingPost}
           onClose={() => setEditingPost(null)}
-          onSaved={() => { setEditingPost(null); refetch(); }}
+          onSaved={(updatedPost) => {
+            setEditingPost(null);
+            if (updatedPost) patchPost(updatedPost);
+          }}
         />
       )}
     </div>

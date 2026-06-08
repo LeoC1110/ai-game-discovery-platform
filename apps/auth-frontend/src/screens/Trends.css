@@ -284,6 +284,59 @@
   letter-spacing: -0.1px;
 }
 
+/* ── Pagination ───────────────────────────────────────────────────────────── */
+.trends-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.trends-pagination__btn {
+  min-width: 36px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.trends-pagination__page {
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 13px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.trends-pagination__page:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+}
+
+.trends-pagination__page--active {
+  background: var(--color-primary, #007aff);
+  color: #fff;
+  border-color: var(--color-primary, #007aff);
+  font-weight: 700;
+}
+
+.trends-game-row__rating {
+  margin-left: 6px;
+  color: var(--color-warning, #c87000);
+}
+
+.trends-game-row__score {
+  margin-left: 6px;
+  color: var(--color-text-muted);
+}
+
+
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 680px) {
   .trends-grid {

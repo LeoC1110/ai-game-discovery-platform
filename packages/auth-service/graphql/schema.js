@@ -288,6 +288,12 @@ export const typeDefs = /* GraphQL */ `
     bookmarkedPosts: [GamePost!]
   }
 
+  """Paginated list of game posts with a total count"""
+  type GamePostPage {
+    posts: [GamePost!]!
+    totalCount: Int!
+  }
+
   type Query {
     _health: String!
     me: User
@@ -301,8 +307,10 @@ export const typeDefs = /* GraphQL */ `
     gameLeaderboard(gameId: ID!, limit: Int): [TournamentResult!]!
     myRecentResults(limit: Int): [TournamentResult!]!
     allPosts(search: String, genre: String, platform: String, tag: String, sort: String, postType: PostType): [GamePost!]!
+    pagedPosts(search: String, genre: String, platform: String, tag: String, sort: String, postType: PostType, limit: Int, offset: Int): GamePostPage!
     myPosts: [GamePost!]!
     bookmarkedPosts: [GamePost!]!
+    pagedBookmarks(limit: Int, offset: Int): GamePostPage!
     getPost(id: ID!): GamePost
     myPreferences: UserPreference
     searchUsers(query: String!): [PublicUserProfile!]!

@@ -37,6 +37,16 @@ export const ALL_POSTS = gql`
   }
 `;
 
+export const PAGED_POSTS = gql`
+  ${POST_FRAGMENT}
+  query PagedPosts($search: String, $genre: String, $platform: String, $tag: String, $sort: String, $postType: PostType, $limit: Int, $offset: Int) {
+    pagedPosts(search: $search, genre: $genre, platform: $platform, tag: $tag, sort: $sort, postType: $postType, limit: $limit, offset: $offset) {
+      posts { ...PostFields }
+      totalCount
+    }
+  }
+`;
+
 export const MY_POSTS = gql`
   ${POST_FRAGMENT}
   query MyPosts {
@@ -48,6 +58,16 @@ export const BOOKMARKED_POSTS = gql`
   ${POST_FRAGMENT}
   query BookmarkedPosts {
     bookmarkedPosts { ...PostFields }
+  }
+`;
+
+export const PAGED_BOOKMARKS = gql`
+  ${POST_FRAGMENT}
+  query PagedBookmarks($limit: Int, $offset: Int) {
+    pagedBookmarks(limit: $limit, offset: $offset) {
+      posts { ...PostFields }
+      totalCount
+    }
   }
 `;
 

@@ -694,6 +694,62 @@ select:focus-visible {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 18px;
 }
+/* Load More row */
+.community-load-more {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0 8px;
+}
+.community-load-more__btn {
+  min-width: 200px;
+  height: 42px;
+  font-size: 14px;
+}
+.community-load-more__end {
+  text-align: center;
+  color: var(--color-muted, #6e6e73);
+  font-size: 13px;
+  margin: 20px 0 8px;
+}
+/* Bookmarks pagination */
+.bookmarks-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 28px 0 8px;
+}
+.bookmarks-pagination__btn {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.bookmarks-pagination__page {
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 13px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.bookmarks-pagination__page:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+}
+.bookmarks-pagination__page--active {
+  background: var(--color-primary, #007aff);
+  color: #fff;
+  border-color: var(--color-primary, #007aff);
+  font-weight: 700;
+}
+.bookmarks-pagination__info {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-left: 8px;
+}
 .community-card {
   display: flex;
   flex-direction: column;
