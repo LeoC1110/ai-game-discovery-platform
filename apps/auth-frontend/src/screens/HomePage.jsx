@@ -19,32 +19,32 @@ const sections = [
   {
     to: '/post',
     title: 'Post',
-    description: 'Share a game recommendation with your rating, review, and tags.',
+    description: 'Share your passion. Rate, review, and tag your favorite games in seconds.',
   },
   {
     to: '/community',
     title: 'Community',
-    description: 'Explore game posts, reviews, likes, and comments from other users.',
+    description: 'Connect with players. Discover your next favorite game through the eyes of the community.',
   },
   {
     to: '/bookmarks',
     title: 'Bookmarks',
-    description: 'Save games from the community and manage your personal list.',
+    description: 'Your personal collection. Save the games you love and organize them beautifully.',
   },
   {
     to: '/profile',
-    title: 'My Profile',
-    description: 'View your posts, comments, likes, saved games, and account details.',
+    title: 'Profile',
+    description: 'Everything you care about, all in one place. Your posts, your likes, your identity.',
   },
   {
     to: '/agent',
-    title: 'AI Game Agent',
-    description: 'Get AI-powered game recommendations and community insights.',
+    title: 'Ask Nova',
+    description: 'Meet Nova. A powerful AI designed to understand your taste and recommend perfection.',
   },
   {
     to: '/leaderboard',
-    title: 'Leaderboard',
-    description: 'View top-rated games, most-liked posts, and active contributors.',
+    title: 'Trends',
+    description: 'See what’s shaping the gaming world. The top games, the biggest posts, the best creators.',
   },
 ];
 
