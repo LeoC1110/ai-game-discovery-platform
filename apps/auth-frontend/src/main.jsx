@@ -16,6 +16,7 @@ import ResetPasswordPage from './screens/ResetPasswordPage.jsx';
 import ChangePasswordPage from './screens/ChangePasswordPage.jsx';
 import HomePage from './screens/HomePage.jsx';
 import PostPage from './screens/PostPage.jsx';
+import SharePage from './screens/SharePage.jsx';
 import CommunityPage from './screens/CommunityPage.jsx';
 import BookmarksPage from './screens/BookmarksPage.jsx';
 import ProfilePage from './screens/ProfilePage.jsx';
@@ -37,6 +38,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<RequireAuth />}>
             <Route path="/home" element={<HomePage />} />
+            <Route path="/share" element={<SharePage />} />
             <Route path="/post" element={<PostPage />} />
             <Route path="/community" element={<CommunityPage />} />
             <Route path="/bookmarks" element={<BookmarksPage />} />

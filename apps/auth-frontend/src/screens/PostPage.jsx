@@ -23,17 +23,12 @@ const INITIAL_FORM = {
   featured: false,
 };
 
-const IDEA_TEXT_REGEX = /^[\p{L}\p{N}\p{P}\p{S}\p{Z}\r\n\t]+$/u;
-
 export default function PostPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState(INITIAL_FORM);
   const [message, setMessage] = useState(null);
   const [coverPreview, setCoverPreview] = useState(null);
   const [showPostChoice, setShowPostChoice] = useState(false);
-  const [showIdeaModal, setShowIdeaModal] = useState(false);
-  const [ideaContent, setIdeaContent] = useState('');
-  const [ideaMessage, setIdeaMessage] = useState(null);
   const fileInputRef = React.useRef(null);
 
   const { data: meData } = useQuery(ME_QUERY, { fetchPolicy: 'cache-first' });
@@ -110,40 +105,6 @@ export default function PostPage() {
     }
   };
 
-  const publishIdeaPost = async () => {
-    setIdeaMessage(null);
-    const content = ideaContent.trim();
-    if (!content) {
-      setIdeaMessage({ type: 'error', text: 'Content cannot be empty.' });
-      return;
-    }
-    if (content.length > 500) {
-      setIdeaMessage({ type: 'error', text: 'Content must be 500 characters or less.' });
-      return;
-    }
-    if (!IDEA_TEXT_REGEX.test(content)) {
-      setIdeaMessage({ type: 'error', text: 'Only text and emoji are allowed.' });
-      return;
-    }
-
-    try {
-      await createPost({
-        variables: {
-          input: {
-            postType: 'IDEA',
-            review: content,
-          },
-        },
-      });
-      setShowIdeaModal(false);
-      setIdeaContent('');
-      setMessage({ type: 'success', text: 'Idea published! Redirecting to Community...' });
-      setTimeout(() => navigate('/community'), 1200);
-    } catch (err) {
-      setIdeaMessage({ type: 'error', text: err.message });
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setShowPostChoice(true);
@@ -157,16 +118,6 @@ export default function PostPage() {
         <p className="page-subtitle post-subtitle">
           Share a game recommendation with the community.
         </p>
-
-        <div className="post-main-actions">
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => setShowIdeaModal(true)}
-          >
-            Share Your Idea
-          </button>
-        </div>
 
         <div className="post-grid" style={{ gridTemplateColumns: '1fr' }}>
           <div className="post-card">
@@ -302,13 +253,6 @@ export default function PostPage() {
                 <button
                   type="button"
                   className="btn-ghost"
-                  onClick={() => setShowIdeaModal(true)}
-                >
-                  Share Your Idea
-                </button>
-                <button
-                  type="button"
-                  className="btn-ghost"
                   onClick={() => {
                     setForm(INITIAL_FORM);
                     setMessage(null);
@@ -345,61 +289,11 @@ export default function PostPage() {
               >
                 Post a Game
               </button>
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() => {
-                  setShowPostChoice(false);
-                  setShowIdeaModal(true);
-                }}
-              >
-                Share Your Idea
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {showIdeaModal && (
-        <div className="modal-overlay" onClick={() => setShowIdeaModal(false)}>
-          <div className="modal-box post-idea-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowIdeaModal(false)}>✕</button>
-            <h2 className="modal-title">Share Your Idea</h2>
-            <p className="post-idea-modal__desc">
-              Text and emoji only. Max 500 characters.
-            </p>
-            <textarea
-              className="input textarea post-idea-modal__input"
-              value={ideaContent}
-              onChange={(e) => setIdeaContent(e.target.value)}
-              maxLength={500}
-              placeholder="Write your thought, feedback, or game idea..."
-            />
-            <div className="post-idea-modal__count">{ideaContent.length}/500</div>
-
-            {ideaMessage && (
-              <div className={ideaMessage.type === 'error' ? 'msg-error' : 'msg-success'} role="alert">
-                {ideaMessage.text}
-              </div>
-            )}
-
-            <div className="post-idea-modal__actions">
-              <button type="button" className="btn-ghost" onClick={() => setShowIdeaModal(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={`btn-primary ${loading ? 'is-loading' : ''}`}
-                disabled={loading}
-                aria-busy={loading}
-                onClick={publishIdeaPost}
-              >
-                {loading ? 'Publishing...' : 'Publish'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

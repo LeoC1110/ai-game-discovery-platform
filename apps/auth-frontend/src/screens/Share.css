@@ -1,0 +1,90 @@
+/* share page — matches Post module style */
+
+.share-subtitle {
+  margin: -10px auto 18px;
+  max-width: 540px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  letter-spacing: -0.1px;
+}
+
+.share-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 1fr;
+  max-width: 680px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.share-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.share-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--color-text);
+}
+
+.share-card__header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.share-card__header p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.share-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.share-form__label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.share-form__textarea {
+  min-height: 160px;
+  font-weight: 500;
+  resize: vertical;
+}
+
+.share-form__count {
+  text-align: right;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: -8px;
+}
+
+.share-form__footer {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .share-form__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
