@@ -32,7 +32,7 @@ import { fetchDataForIntent } from './platformTools.js';
 import { generateAnswer, generateReflection, resetModel } from './answerAgent.js';
 import { extractRecommendedPosts } from './recommendationExtractor.js';
 import { validate, evaluateResponse, loadKnownTitles } from './validatorAgent.js';
-import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE, QUOTA_EXCEEDED_RESPONSE, GENSHIN_RESPONSE } from '../prompts/fallbackResponses.js';
+import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE, QUOTA_EXCEEDED_RESPONSE } from '../prompts/fallbackResponses.js';
 import { buildUserMemoryContext, saveExplicitPreferences } from '../services/userMemoryService.js';
 
 // ── Greeting fast-path ───────────────────────────────────────────────────────
@@ -43,15 +43,6 @@ const SIMPLE_GREETING_RE =
 
 function isSimpleGreeting(msg) {
   return SIMPLE_GREETING_RE.test(msg);
-}
-
-// ── Genshin easter egg fast-path ─────────────────────────────────────────────
-// Matches messages that mention 原神 together with 牛逼 / 牛不牛逼 / nb etc.
-const GENSHIN_RE =
-  /原神.{0,20}(牛[不牛]*逼|nb)|原神牛逼|(.+和原神|原神和.+).{0,10}(哪个|谁).{0,10}(牛[不牛]*逼|厉害|好玩|强)/i;
-
-function isGenshinEasterEgg(msg) {
-  return GENSHIN_RE.test(msg);
 }
 
 // ── Pipeline roadmap ──────────────────────────────────────────────────────────
@@ -84,20 +75,6 @@ function isGenshinEasterEgg(msg) {
 export async function runPipeline({ userId, username, message }) {
   console.time('[pipeline] total');
   console.log('[pipeline] START — user:', username, '| message:', message.slice(0, 60));
-
-  // ── Genshin easter egg fast-path ──────────────────────────────────────────
-  if (isGenshinEasterEgg(message)) {
-    console.log('[pipeline] genshin easter egg fast-path');
-    saveExchange(userId, username, message, GENSHIN_RESPONSE).catch(() => {});
-    console.timeEnd('[pipeline] total');
-    return {
-      answer: GENSHIN_RESPONSE,
-      intent: 'general_chat',
-      userTurnCount: 0,
-      recommendedPosts: [],
-      evaluation: null,
-    };
-  }
 
   // ── Greeting fast-path — skip Gemini entirely ────────────────────────────
   if (isSimpleGreeting(message)) {

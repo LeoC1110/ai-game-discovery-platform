@@ -7,12 +7,12 @@ import DashboardNav from '../components/DashboardNav';
 import { ASK_AI, CLEAR_AI_HISTORY, MY_AI_HISTORY } from '../gql/askAI';
 
 const SUGGESTIONS = [
-  'Recommend games based on my bookmarks.',
-  'Summarize the most liked community posts.',
-  'What are the top-rated games?',
-  'Find me a good co-op or multiplayer game.',
-  'What should I play next based on my taste?',
+  'What should I play next based on my bookmarks?',
   'Which games are trending in the community?',
+  'Recommend games that match my preferences.',
+  'Find me a good co-op or multiplayer game.',
+  'Summarize popular community posts.',
+  'What do my bookmarks say about my taste?',
 ];
 
 // ── Small recommendation card ──────────────────────────────────────────────────
