@@ -30,9 +30,12 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const client = useApolloClient();
   const [msg, setMsg] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [identifier, setIdentifier] = useState('');
+
+  // Restore remembered identifier on mount
+  const savedIdentifier = localStorage.getItem('rememberedIdentifier') ?? '';
+  const [rememberMe, setRememberMe] = useState(!!savedIdentifier);
+  const [identifier, setIdentifier] = useState(savedIdentifier);
   const [password, setPassword] = useState('');
   const [login, { loading }] = useMutation(LOGIN);
 
@@ -69,7 +72,13 @@ export default function LoginPage() {
         }
 
         localStorage.setItem('me', JSON.stringify(res.user));
-        localStorage.setItem('rememberMe', rememberMe ? 'true' : 'false');
+
+        // Persist or clear the remembered identifier
+        if (rememberMe) {
+          localStorage.setItem('rememberedIdentifier', trimmedIdentifier);
+        } else {
+          localStorage.removeItem('rememberedIdentifier');
+        }
 
         // Clear stale cache from a previously logged-in account before
         // navigating. resetStore re-runs active queries with the new token.
