@@ -1,151 +1,233 @@
-﻿// src/screens/LeaderboardPage.jsx — Community leaderboard based on GamePost data
-import React, { useState, useMemo } from 'react';
+﻿// src/screens/LeaderboardPage.jsx — Community Trends
+import React, { useMemo } from 'react';
 import { useQuery } from '@apollo/client';
+import { useNavigate } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
 import { ALL_POSTS } from '../gql/gamePosts';
-
-const TABS = [
-  { key: 'rated', label: 'Top Rated' },
-  { key: 'liked', label: 'Most Liked' },
-  { key: 'commented', label: 'Most Commented' },
-  { key: 'contributors', label: 'Top Contributors' },
-];
+import './Trends.css';
 
 function MedalIcon({ rank }) {
-  if (rank === 1) return <span style={{ fontSize: 20 }}>🥇</span>;
-  if (rank === 2) return <span style={{ fontSize: 20 }}>🥈</span>;
-  if (rank === 3) return <span style={{ fontSize: 20 }}>🥉</span>;
-  return <span style={{ color: '#888', fontWeight: 700, minWidth: 22, display: 'inline-block' }}>#{rank}</span>;
+  if (rank === 1) return <span className="trends-medal">🥇</span>;
+  if (rank === 2) return <span className="trends-medal">🥈</span>;
+  if (rank === 3) return <span className="trends-medal">🥉</span>;
+  return <span className="trends-rank">#{rank}</span>;
 }
 
-function LeaderboardRow({ rank, name, subtitle, stat, statLabel }) {
+function SectionCard({ title, children }) {
   return (
-    <div className="lb-row card">
-      <div className="lb-row__rank"><MedalIcon rank={rank} /></div>
-      <div className="lb-row__info">
-        <p className="lb-row__name">{name}</p>
-        {subtitle && <p className="lb-row__sub">{subtitle}</p>}
-      </div>
-      <div className="lb-row__stat">
-        <span className="lb-stat-value">{stat}</span>
-        <span className="lb-stat-label">{statLabel}</span>
-      </div>
+    <div className="trends-section-card">
+      <h2 className="trends-section-title">{title}</h2>
+      {children}
     </div>
   );
 }
 
 export default function LeaderboardPage() {
-  const [activeTab, setActiveTab] = useState('rated');
+  const navigate = useNavigate();
   const { data, loading, error } = useQuery(ALL_POSTS, {
-    variables: { postType: 'GAME' },
     fetchPolicy: 'cache-and-network',
   });
 
-  const posts = data?.allPosts ?? [];
+  const allPosts = data?.allPosts ?? [];
+  const gamePosts = useMemo(() => allPosts.filter((p) => p.postType === 'GAME'), [allPosts]);
 
-  const topRated = useMemo(() =>
-    [...posts].filter((p) => p.rating != null)
-      .sort((a, b) => b.rating - a.rating)
+  // ── Trending Games ──────────────────────────────────────────────────────────
+  const trendingGames = useMemo(() =>
+    [...gamePosts]
+      .map((p) => ({
+        ...p,
+        trendScore:
+          (p.rating || 0) +
+          (p.likesCount || 0) +
+          (p.commentsCount || 0) * 2 +
+          (p.bookmarksCount || 0) * 2,
+      }))
+      .sort((a, b) => b.trendScore - a.trendScore)
       .slice(0, 10),
-    [posts]);
+    [gamePosts]);
 
-  const mostLiked = useMemo(() =>
-    [...posts].sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0)).slice(0, 10),
-    [posts]);
-
-  const mostCommented = useMemo(() =>
-    [...posts].sort((a, b) => (b.commentsCount || 0) - (a.commentsCount || 0)).slice(0, 10),
-    [posts]);
-
-  const contributors = useMemo(() => {
+  // ── Popular Tags ────────────────────────────────────────────────────────────
+  const popularTags = useMemo(() => {
     const map = {};
-    posts.forEach((p) => {
+    gamePosts.forEach((p) => {
+      (p.tags || []).forEach((t) => { map[t] = (map[t] || 0) + 1; });
+    });
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 24);
+  }, [gamePosts]);
+
+  // ── Recent Discussions ──────────────────────────────────────────────────────
+  const recentDiscussions = useMemo(() =>
+    [...allPosts]
+      .sort((a, b) =>
+        (b.commentsCount || 0) - (a.commentsCount || 0) ||
+        new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 8),
+    [allPosts]);
+
+  // ── Active Contributors ─────────────────────────────────────────────────────
+  const activeContributors = useMemo(() => {
+    const map = {};
+    allPosts.forEach((p) => {
       const user = p.postedBy?.username || 'Unknown';
-      if (!map[user]) map[user] = { username: user, postCount: 0, totalLikes: 0 };
+      if (!map[user]) map[user] = { username: user, postCount: 0, totalLikes: 0, totalComments: 0 };
       map[user].postCount += 1;
       map[user].totalLikes += p.likesCount || 0;
+      map[user].totalComments += p.commentsCount || 0;
     });
     return Object.values(map)
       .sort((a, b) => b.postCount - a.postCount || b.totalLikes - a.totalLikes)
       .slice(0, 10);
-  }, [posts]);
+  }, [allPosts]);
+
+  const isEmpty = !loading && allPosts.length === 0;
 
   return (
     <div className="app-root">
       <div className="app-container">
         <DashboardNav />
-        <h1 className="app-title">Leaderboard</h1>
-        <p className="page-subtitle post-subtitle">
-          Game recommendation rankings only.
+        <h1 className="app-title">Community Trends</h1>
+        <p className="page-subtitle trends-subtitle">
+          Explore popular games, active discussions, and community activity.
         </p>
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              className={activeTab === tab.key ? 'btn-primary' : 'btn-ghost'}
-              style={{ height: 38, padding: '0 18px', fontSize: 13 }}
-              onClick={() => setActiveTab(tab.key)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {loading && <p className="trends-status">Loading…</p>}
+        {error && <p className="trends-status trends-status--error">Error: {error.message}</p>}
 
-        {loading && <p style={{ color: '#aaa', textAlign: 'center' }}>Loading…</p>}
-        {error && <p style={{ color: '#ff6b6b', textAlign: 'center' }}>Error: {error.message}</p>}
-
-        {!loading && posts.length === 0 && (
+        {isEmpty && (
           <div className="empty-state">
             <p>No community posts yet. Be the first to post a game recommendation!</p>
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {activeTab === 'rated' && topRated.map((post, i) => (
-            <LeaderboardRow
-              key={post.id}
-              rank={i + 1}
-              name={post.title}
-              subtitle={`by ${post.postedBy?.username || 'Unknown'} · ${post.genre || ''} ${post.platform ? '· ' + post.platform : ''}`}
-              stat={post.rating + '/10'}
-              statLabel="rating"
-            />
-          ))}
+        {!isEmpty && (
+          <div className="trends-grid">
 
-          {activeTab === 'liked' && mostLiked.map((post, i) => (
-            <LeaderboardRow
-              key={post.id}
-              rank={i + 1}
-              name={post.title}
-              subtitle={`by ${post.postedBy?.username || 'Unknown'} · ${post.genre || ''}`}
-              stat={post.likesCount}
-              statLabel="likes"
-            />
-          ))}
+            {/* ── Trending Games ─────────────────────────────────────────── */}
+            <SectionCard title="🔥 Trending Games">
+              {trendingGames.length === 0
+                ? <p className="trends-empty">No game posts yet.</p>
+                : (
+                  <ol className="trends-game-list">
+                    {trendingGames.map((post, i) => (
+                      <li key={post.id} className="trends-game-row">
+                        <div className="trends-game-row__rank">
+                          <MedalIcon rank={i + 1} />
+                        </div>
+                        <div className="trends-game-row__body">
+                          <p className="trends-game-row__title">{post.title}</p>
+                          <p className="trends-game-row__meta">
+                            {[post.genre, post.platform].filter(Boolean).join(' · ')}
+                          </p>
+                        </div>
+                        <div className="trends-game-row__stats">
+                          {post.rating != null && (
+                            <span className="trends-stat">⭐ {post.rating}/10</span>
+                          )}
+                          <span className="trends-stat">♥ {post.likesCount || 0}</span>
+                          <span className="trends-stat">💬 {post.commentsCount || 0}</span>
+                          {post.bookmarksCount != null && (
+                            <span className="trends-stat">🔖 {post.bookmarksCount}</span>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+            </SectionCard>
 
-          {activeTab === 'commented' && mostCommented.map((post, i) => (
-            <LeaderboardRow
-              key={post.id}
-              rank={i + 1}
-              name={post.title}
-              subtitle={`by ${post.postedBy?.username || 'Unknown'}`}
-              stat={post.commentsCount}
-              statLabel="comments"
-            />
-          ))}
+            {/* ── Popular Tags ───────────────────────────────────────────── */}
+            <SectionCard title="🏷 Popular Tags">
+              {popularTags.length === 0
+                ? <p className="trends-empty">No tags found.</p>
+                : (
+                  <div className="trends-tag-cloud">
+                    {popularTags.map(([tag, count]) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className="trends-tag-chip"
+                        onClick={() => navigate('/community', { state: { search: tag } })}
+                      >
+                        #{tag}
+                        <span className="trends-tag-chip__count">{count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+            </SectionCard>
 
-          {activeTab === 'contributors' && contributors.map((c, i) => (
-            <LeaderboardRow
-              key={c.username}
-              rank={i + 1}
-              name={c.username}
-              subtitle={`${c.postCount} post${c.postCount !== 1 ? 's' : ''} · ${c.totalLikes} total likes`}
-              stat={c.postCount}
-              statLabel="posts"
-            />
-          ))}
+            {/* ── Recent Discussions ─────────────────────────────────────── */}
+            <SectionCard title="💬 Recent Discussions">
+              {recentDiscussions.length === 0
+                ? <p className="trends-empty">No discussions yet.</p>
+                : (
+                  <ul className="trends-discussion-list">
+                    {recentDiscussions.map((post) => (
+                      <li key={post.id} className="trends-discussion-row">
+                        <div className="trends-discussion-row__body">
+                          <p className="trends-discussion-row__title">
+                            {post.title || <em>Idea post</em>}
+                          </p>
+                          <p className="trends-discussion-row__meta">
+                            by {post.postedBy?.username || 'Unknown'}
+                            {post.genre ? ` · ${post.genre}` : ''}
+                          </p>
+                        </div>
+                        <div className="trends-discussion-row__stats">
+                          <span className="trends-stat">💬 {post.commentsCount || 0}</span>
+                          <span className="trends-stat">♥ {post.likesCount || 0}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+            </SectionCard>
+
+            {/* ── Active Contributors ────────────────────────────────────── */}
+            <SectionCard title="👥 Active Contributors">
+              {activeContributors.length === 0
+                ? <p className="trends-empty">No contributors yet.</p>
+                : (
+                  <ol className="trends-contributor-list">
+                    {activeContributors.map((c, i) => (
+                      <li key={c.username} className="trends-contributor-row">
+                        <div className="trends-contributor-row__rank">
+                          <MedalIcon rank={i + 1} />
+                        </div>
+                        <div className="trends-contributor-row__body">
+                          <p className="trends-contributor-row__name">{c.username}</p>
+                          <p className="trends-contributor-row__meta">
+                            {c.postCount} post{c.postCount !== 1 ? 's' : ''}
+                            {' · '}♥ {c.totalLikes}
+                            {' · '}💬 {c.totalComments}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+            </SectionCard>
+
+          </div>
+        )}
+
+        {/* ── Ask AI CTA ─────────────────────────────────────────────────────── */}
+        <div className="trends-ai-cta">
+          <button
+            type="button"
+            className="btn-primary trends-ai-cta__btn"
+            onClick={() =>
+              navigate('/agent', {
+                state: { prompt: 'Based on current community trends, what games should I try next?' },
+              })
+            }
+          >
+            ✨ Ask AI About These Trends
+          </button>
         </div>
+
       </div>
     </div>
   );

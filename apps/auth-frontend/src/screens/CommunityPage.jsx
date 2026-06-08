@@ -1,7 +1,7 @@
 ﻿// src/screens/CommunityPage.jsx — Browse & interact with game recommendation posts
 import React, { useState } from 'react';
 import { useQuery, useMutation, gql } from '@apollo/client';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
 import {
   ALL_POSTS,
@@ -365,7 +365,8 @@ function PostModal({ post, currentUser, onClose, onRefetch }) {
 }
 
 export default function CommunityPage() {
-  const [search, setSearch] = useState('');
+  const location = useLocation();
+  const [search, setSearch] = useState(location.state?.search ?? '');
   const [filterGenre, setFilterGenre] = useState('');
   const [filterPlatform, setFilterPlatform] = useState('');
   const [sort, setSort] = useState('newest');

@@ -8,7 +8,7 @@ const links = [
   { to: '/community', label: 'Community' },
   { to: '/bookmarks', label: 'Bookmarks' },
   { to: '/agent', label: 'AI Agent' },
-  { to: '/leaderboard', label: 'Leaderboard' },
+  { to: '/leaderboard', label: 'Trends' },
   { to: '/profile', label: 'Profile' },
 ];
 

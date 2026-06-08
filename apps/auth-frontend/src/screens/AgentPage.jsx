@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useMutation, useQuery } from '@apollo/client';
+import { useLocation } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
 import { ASK_AI, CLEAR_AI_HISTORY, MY_AI_HISTORY } from '../gql/askAI';
 
@@ -47,6 +48,7 @@ function RecommendedCard({ post }) {
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function AgentPage() {
   const bottomRef = useRef(null);
+  const location = useLocation();
 
   // Load previous conversation history on mount
   const { data: historyData, loading: historyLoading } = useQuery(MY_AI_HISTORY, {
@@ -54,7 +56,7 @@ export default function AgentPage() {
   });
 
   const [messages, setMessages] = useState(null); // null = not yet initialised
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(location.state?.prompt ?? '');
 
   // Initialise messages once history loads
   useEffect(() => {
