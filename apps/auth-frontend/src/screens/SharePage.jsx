@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
-import { CREATE_POST } from '../gql/gamePosts';
+import { CREATE_POST, ALL_POSTS } from '../gql/gamePosts';
 import './Share.css';
 
 const IDEA_TEXT_REGEX = /^[\p{L}\p{N}\p{P}\p{S}\p{Z}\r\n\t]+$/u;
@@ -13,7 +13,10 @@ export default function SharePage() {
   const [content, setContent] = useState('');
   const [message, setMessage] = useState(null);
 
-  const [createPost, { loading }] = useMutation(CREATE_POST);
+  const [createPost, { loading }] = useMutation(CREATE_POST, {
+    refetchQueries: [{ query: ALL_POSTS }],
+    awaitRefetchQueries: true,
+  });
 
   const handlePublish = async () => {
     setMessage(null);

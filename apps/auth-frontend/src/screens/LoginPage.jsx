@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useMutation } from '@apollo/client';
+import { useMutation, useApolloClient } from '@apollo/client';
 import { Link, useNavigate } from 'react-router-dom';
 import { LOGIN } from '../gql/login';
 
@@ -28,6 +28,7 @@ const FEATURES = [
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const client = useApolloClient();
   const [msg, setMsg] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -70,6 +71,9 @@ export default function LoginPage() {
         localStorage.setItem('me', JSON.stringify(res.user));
         localStorage.setItem('rememberMe', rememberMe ? 'true' : 'false');
 
+        // Clear stale cache from a previously logged-in account before
+        // navigating. resetStore re-runs active queries with the new token.
+        await client.resetStore().catch(() => {});
         navigate('/home', { replace: true });
       } else {
         setMsg(res?.message || 'Login failed. Please try again.');

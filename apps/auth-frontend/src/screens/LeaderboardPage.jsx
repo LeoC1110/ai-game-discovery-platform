@@ -114,19 +114,6 @@ export default function LeaderboardPage() {
                         </div>
                         <div className="trends-game-row__body">
                           <p className="trends-game-row__title">{post.title}</p>
-                          <p className="trends-game-row__meta">
-                            {[post.genre, post.platform].filter(Boolean).join(' · ')}
-                          </p>
-                        </div>
-                        <div className="trends-game-row__stats">
-                          {post.rating != null && (
-                            <span className="trends-stat">Rating: {post.rating}/10</span>
-                          )}
-                          <span className="trends-stat">Likes: {post.likesCount || 0}</span>
-                          <span className="trends-stat">Comments: {post.commentsCount || 0}</span>
-                          {post.bookmarksCount != null && (
-                            <span className="trends-stat">Bookmarks: {post.bookmarksCount}</span>
-                          )}
                         </div>
                       </li>
                     ))}

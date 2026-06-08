@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
-import { useMutation } from '@apollo/client';
+import { useMutation, useApolloClient } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import { LOGOUT } from '../gql/logout.js';
 
 export default function LogoutPage() {
   const navigate = useNavigate();
+  const client = useApolloClient();
   const [logout] = useMutation(LOGOUT);
 
   useEffect(() => {
@@ -16,11 +17,12 @@ export default function LogoutPage() {
       } finally {
         localStorage.removeItem('token');
         localStorage.removeItem('me');
+        await client.clearStore().catch(() => {});
         navigate('/', { replace: true });
       }
     };
     run();
-  }, [logout, navigate]);
+  }, [logout, navigate, client]);
 
   return (
     <div className="app-root">

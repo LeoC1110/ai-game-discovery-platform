@@ -1,7 +1,7 @@
 // src/screens/HomePage.jsx
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { gql, useQuery, useMutation } from '@apollo/client';
+import { gql, useQuery, useMutation, useApolloClient } from '@apollo/client';
 import DashboardNav from '../components/DashboardNav';
 import { LOGOUT } from '../gql/logout.js';
 
@@ -49,11 +49,12 @@ const sections = [
 ];
 
 export default function HomePage() {
-  const { data } = useQuery(ME_QUERY, { fetchPolicy: 'cache-first' });
+  const { data } = useQuery(ME_QUERY, { fetchPolicy: 'cache-and-network' });
   const username = data?.me?.username || 'Player';
   const role = data?.me?.role;
 
   const navigate = useNavigate();
+  const client = useApolloClient();
   const [logout] = useMutation(LOGOUT);
 
   const handleSignOut = async () => {
@@ -64,6 +65,7 @@ export default function HomePage() {
     } finally {
       localStorage.removeItem('token');
       localStorage.removeItem('me');
+      await client.clearStore().catch(() => {});
       navigate('/login', { replace: true });
     }
   };

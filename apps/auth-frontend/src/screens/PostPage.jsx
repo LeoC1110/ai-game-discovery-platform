@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useMutation, useQuery, gql } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
-import { CREATE_POST } from '../gql/gamePosts';
+import { CREATE_POST, ALL_POSTS, MY_POSTS } from '../gql/gamePosts';
 import './Post.css';
 
 const ME_QUERY = gql`query MePost { me { id role } }`;
@@ -51,7 +51,13 @@ export default function PostPage() {
   const { data: meData } = useQuery(ME_QUERY, { fetchPolicy: 'cache-first' });
   const isAdmin = meData?.me?.role === 'Admin';
 
-  const [createPost, { loading }] = useMutation(CREATE_POST);
+  const [createPost, { loading }] = useMutation(CREATE_POST, {
+    refetchQueries: [
+      { query: ALL_POSTS },
+      { query: MY_POSTS },
+    ],
+    awaitRefetchQueries: true,
+  });
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
