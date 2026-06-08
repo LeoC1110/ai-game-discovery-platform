@@ -192,6 +192,14 @@ export default function LeaderboardPage() {
                     ))}
                   </ol>
                 )}
+              <button
+                type="button"
+                className="btn-ghost"
+                style={{ alignSelf: 'flex-start', fontSize: 13, marginTop: 4 }}
+                onClick={() => navigate('/users')}
+              >
+                Find Users →
+              </button>
             </SectionCard>
 
           </div>

@@ -22,6 +22,8 @@ import BookmarksPage from './screens/BookmarksPage.jsx';
 import ProfilePage from './screens/ProfilePage.jsx';
 import AgentPage from './screens/AgentPage.jsx';
 import LeaderboardPage from './screens/LeaderboardPage.jsx';
+import UsersPage from './screens/UsersPage.jsx';
+import UserProfilePage from './screens/UserProfilePage.jsx';
 import RequireAuth from './screens/RequireAuth.jsx';
 
 createRoot(document.getElementById('root')).render(
@@ -46,6 +48,8 @@ createRoot(document.getElementById('root')).render(
             <Route path="/agent" element={<AgentPage />} />
             <Route path="/assistant" element={<AgentPage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/users/:id" element={<UserProfilePage />} />
             <Route path="/logout" element={<LogoutPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

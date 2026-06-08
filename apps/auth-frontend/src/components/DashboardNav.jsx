@@ -9,6 +9,7 @@ const links = [
   { to: '/bookmarks', label: 'Bookmarks' },
   { to: '/agent', label: 'AI Agent' },
   { to: '/leaderboard', label: 'Trends' },
+  { to: '/users', label: 'Users' },
   { to: '/profile', label: 'Profile' },
 ];
 

@@ -1,0 +1,262 @@
+/* Users module — matches app design system */
+
+.users-subtitle {
+  margin: -10px auto 28px;
+  max-width: 560px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  letter-spacing: -0.1px;
+}
+
+.users-status {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  margin: 24px 0;
+}
+
+.users-status--error {
+  color: var(--color-danger);
+}
+
+/* ── Search form ──────────────────────────────────────────────────────────── */
+.users-search-form {
+  display: flex;
+  gap: 10px;
+  max-width: 600px;
+  margin: 0 auto 32px;
+}
+
+.users-search-form__field {
+  flex: 1;
+}
+
+.users-search-form__btn {
+  flex-shrink: 0;
+  min-width: 90px;
+}
+
+/* ── Results list ─────────────────────────────────────────────────────────── */
+.users-results {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 660px;
+  margin: 0 auto;
+}
+
+/* ── User card ────────────────────────────────────────────────────────────── */
+.users-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.12s;
+}
+
+.users-card:hover {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+}
+
+.users-card__header {
+  flex: 1;
+  min-width: 0;
+}
+
+.users-card__username {
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.users-card__id {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-family: "SF Mono", "Fira Code", monospace;
+  word-break: break-all;
+}
+
+.users-card__stats {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.users-card__btn {
+  flex-shrink: 0;
+  font-size: 13px;
+  height: 36px;
+  padding: 0 16px;
+}
+
+/* ── Back button ──────────────────────────────────────────────────────────── */
+.users-back-btn {
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: var(--color-primary);
+}
+
+/* ── Profile card ─────────────────────────────────────────────────────────── */
+.users-profile-card {
+  max-width: 700px;
+  margin: 0 auto 28px;
+  padding: 28px 32px;
+  text-align: center;
+}
+
+.users-profile-card__name {
+  margin: 0 0 6px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--color-text);
+}
+
+.users-profile-card__id {
+  margin: 0 0 22px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.users-profile-card__stats {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.users-profile-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.users-profile-stat__num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.users-profile-stat__label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+.users-tabs {
+  display: flex;
+  gap: 8px;
+  max-width: 700px;
+  margin: 0 auto 20px;
+}
+
+.users-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.users-tab:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.users-tab--active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.users-tab__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.users-tab:not(.users-tab--active) .users-tab__count {
+  background: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+/* ── Post grid ────────────────────────────────────────────────────────────── */
+.users-post-grid {
+  max-width: 700px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Star rating helpers ──────────────────────────────────────────────────── */
+.users-profile__stars {
+  color: #ffd60a;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.users-profile__stars-num {
+  color: #aaa;
+  margin-left: 4px;
+}
+
+.users-profile__no-rating {
+  color: #666;
+  font-size: 13px;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .users-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .users-card__btn {
+    width: 100%;
+  }
+
+  .users-profile-card__stats {
+    gap: 20px;
+  }
+
+  .users-search-form {
+    flex-direction: column;
+  }
+}

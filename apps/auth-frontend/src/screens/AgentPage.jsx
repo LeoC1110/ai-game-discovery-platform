@@ -159,7 +159,7 @@ export default function AgentPage() {
           <div className="agent-chat">
             {isLoading ? (
               <div className="agent-message agent-message--agent">
-                <span className="agent-message__label">🤖 Agent</span>
+                <span className="agent-message__label">Nova</span>
                 <p className="agent-message__text agent-message__text--muted">Loading conversation history…</p>
               </div>
             ) : (
@@ -169,7 +169,7 @@ export default function AgentPage() {
                   className={`agent-message agent-message--${msg.role} ${msg.isError ? 'agent-message--error' : ''}`}
                 >
                   <span className="agent-message__label">
-                    {msg.role === 'user' ? 'You' : '🤖 Agent'}
+                    {msg.role === 'user' ? 'You' : 'Nova'}
                   </span>
                   {msg.role === 'agent' ? (
                     <div className="agent-message__markdown">
@@ -194,7 +194,7 @@ export default function AgentPage() {
             {/* Thinking indicator */}
             {asking && (
               <div className="agent-message agent-message--agent">
-                <span className="agent-message__label">🤖 Agent</span>
+                <span className="agent-message__label">Nova</span>
                 <p className="agent-message__text agent-message__text--muted">
                   AI Game Agent is thinking…{' '}
                   <span className="agent-message__subtext">First response may take a few seconds.</span>

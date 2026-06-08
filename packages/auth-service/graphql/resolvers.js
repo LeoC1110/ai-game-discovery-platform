@@ -455,6 +455,81 @@ export const resolvers = {
         .populate('likedBy', '_id')
         .populate('bookmarkedBy', '_id');
     },
+
+    // ── User search & public profiles ────────────────────────────────────────
+    searchUsers: async (_parent, { query }, { user }) => {
+      requireUser(user);
+      const q = (query || '').trim();
+      if (!q) return [];
+
+      const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+      let users;
+      if (OBJECT_ID_REGEX.test(q)) {
+        const found = await User.findById(q);
+        users = found ? [found] : [];
+      } else {
+        users = await User.find({ username: { $regex: q, $options: 'i' } }).limit(20);
+      }
+
+      return Promise.all(users.map(async (u) => {
+        const userId = u._id;
+        const [userPosts, bookmarkCount] = await Promise.all([
+          GamePost.find({ postedBy: userId }).select('likedBy comments'),
+          GamePost.countDocuments({ bookmarkedBy: userId }),
+        ]);
+        const postCount = userPosts.length;
+        const likesReceived = userPosts.reduce((acc, p) => acc + (p.likedBy?.length || 0), 0);
+        const commentCount = userPosts.reduce((acc, p) => acc + (p.comments?.length || 0), 0);
+        return {
+          id: userId.toString(),
+          username: u.username,
+          postCount,
+          bookmarkCount,
+          likesReceived,
+          commentCount,
+          posts: null,
+          bookmarkedPosts: null,
+        };
+      }));
+    },
+
+    publicUserProfile: async (_parent, { id }, { user }) => {
+      requireUser(user);
+      const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+      if (!OBJECT_ID_REGEX.test(id)) {
+        throw new GraphQLError('Invalid user ID', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+      const u = await User.findById(id);
+      if (!u) return null;
+
+      const populateOpts = [
+        { path: 'postedBy' },
+        { path: 'comments.author' },
+        { path: 'likedBy', select: '_id' },
+        { path: 'bookmarkedBy', select: '_id' },
+      ];
+
+      const [userPosts, bookmarkedByUser] = await Promise.all([
+        GamePost.find({ postedBy: id }).populate(populateOpts).sort({ createdAt: -1 }),
+        GamePost.find({ bookmarkedBy: id }).populate(populateOpts).sort({ createdAt: -1 }),
+      ]);
+
+      const postCount = userPosts.length;
+      const bookmarkCount = bookmarkedByUser.length;
+      const likesReceived = userPosts.reduce((acc, p) => acc + (p.likedBy?.length || 0), 0);
+      const commentCount = userPosts.reduce((acc, p) => acc + (p.comments?.length || 0), 0);
+
+      return {
+        id: u._id.toString(),
+        username: u.username,
+        postCount,
+        bookmarkCount,
+        likesReceived,
+        commentCount,
+        posts: userPosts,
+        bookmarkedPosts: bookmarkedByUser,
+      };
+    },
     myRecentResults: async (_parent, { limit = 10 }, { user }) => {
       const current = requireUser(user);
       const results = await TournamentResult.find({ user: current._id })

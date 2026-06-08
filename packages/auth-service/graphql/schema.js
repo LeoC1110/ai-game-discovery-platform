@@ -274,6 +274,20 @@ export const typeDefs = /* GraphQL */ `
 
   # ── Queries & Mutations ──────────────────────────────────────────────────────
 
+  """Public-safe profile returned by searchUsers and publicUserProfile"""
+  type PublicUserProfile {
+    id: ID!
+    username: String!
+    postCount: Int!
+    bookmarkCount: Int!
+    likesReceived: Int!
+    commentCount: Int!
+    """Only populated by publicUserProfile, not searchUsers"""
+    posts: [GamePost!]
+    """Only populated by publicUserProfile, not searchUsers"""
+    bookmarkedPosts: [GamePost!]
+  }
+
   type Query {
     _health: String!
     me: User
@@ -291,6 +305,8 @@ export const typeDefs = /* GraphQL */ `
     bookmarkedPosts: [GamePost!]!
     getPost(id: ID!): GamePost
     myPreferences: UserPreference
+    searchUsers(query: String!): [PublicUserProfile!]!
+    publicUserProfile(id: ID!): PublicUserProfile
   }
 
   """Result of a send-reset-code request"""
