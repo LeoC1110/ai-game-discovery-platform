@@ -298,18 +298,18 @@ export const typeDefs = /* GraphQL */ `
     _health: String!
     me: User
     myAIHistory: [AIHistoryMessage!]!
-    myGames: [Game!]!
-    getAllGames: [Game!]!
-    players: [Player!]!
-    tournaments: [Tournament!]!
+    myGames(limit: Int, offset: Int): [Game!]!
+    getAllGames(search: String, sourceType: GameSourceType, platform: String, tag: String, limit: Int, offset: Int): [Game!]!
+    players(limit: Int, offset: Int): [Player!]!
+    tournaments(limit: Int, offset: Int): [Tournament!]!
     myRecentTournaments(limit: Int): [Tournament!]!
-    tournamentLeaderboard(tournamentId: ID!, limit: Int): [TournamentResult!]!
-    gameLeaderboard(gameId: ID!, limit: Int): [TournamentResult!]!
-    myRecentResults(limit: Int): [TournamentResult!]!
-    allPosts(search: String, genre: String, platform: String, tag: String, sort: String, postType: PostType): [GamePost!]!
+    tournamentLeaderboard(tournamentId: ID!, limit: Int, offset: Int): [TournamentResult!]!
+    gameLeaderboard(gameId: ID!, limit: Int, offset: Int): [TournamentResult!]!
+    myRecentResults(limit: Int, offset: Int): [TournamentResult!]!
+    allPosts(search: String, genre: String, platform: String, tag: String, sort: String, postType: PostType, limit: Int, offset: Int): [GamePost!]!
     pagedPosts(search: String, genre: String, platform: String, tag: String, sort: String, postType: PostType, limit: Int, offset: Int): GamePostPage!
-    myPosts: [GamePost!]!
-    bookmarkedPosts: [GamePost!]!
+    myPosts(limit: Int, offset: Int): [GamePost!]!
+    bookmarkedPosts(limit: Int, offset: Int): [GamePost!]!
     pagedBookmarks(limit: Int, offset: Int): GamePostPage!
     getPost(id: ID!): GamePost
     myPreferences: UserPreference

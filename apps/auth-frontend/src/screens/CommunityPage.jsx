@@ -60,6 +60,11 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
         />
       )}
       <div className="community-card__body">
+        <div className="community-card__type-badge">
+          <span className={`badge ${isIdea ? 'badge--type-idea' : 'badge--type-game'}`}>
+            {isIdea ? 'Idea' : 'Game Post'}
+          </span>
+        </div>
         <div className="community-card__top">
           {isIdea ? (
             <h3 className="community-card__title community-card__title--idea">
@@ -84,9 +89,12 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
         )}
         {!isIdea && post.tags?.length > 0 && (
           <div className="community-card__tags">
-            {post.tags.map((t) => (
+            {post.tags.slice(0, 3).map((t) => (
               <span key={t} className="tag">#{t}</span>
             ))}
+            {post.tags.length > 3 && (
+              <span className="tag tag--more">+{post.tags.length - 3}</span>
+            )}
           </div>
         )}
         <p className="community-card__review">
@@ -400,6 +408,7 @@ export default function CommunityPage() {
   const [sort, setSort] = useState('newest');
   const [expandedPost, setExpandedPost] = useState(null);
   const [editingPost, setEditingPost] = useState(null);
+  const [filterType, setFilterType] = useState('');
 
   // ── Pagination state ─────────────────────────────────────────────────────
   const PAGE_SIZE = 10;
@@ -434,12 +443,17 @@ export default function CommunityPage() {
       if (pageRef.current === 0) {
         setPosts(pagedPosts.posts);
       } else {
-        setPosts((prev) => [...prev, ...pagedPosts.posts]);
+        setPosts((prev) => {
+          const seen = new Set(prev.map((post) => post.id));
+          const next = pagedPosts.posts.filter((post) => !seen.has(post.id));
+          return [...prev, ...next];
+        });
       }
     },
   });
 
   const hasMore = posts.length < totalCount;
+  const displayedPosts = filterType ? posts.filter((p) => p.postType === filterType) : posts;
 
   // ── Mutations — patch local state instead of full refetch ────────────────
   const patchPost = (updated) =>
@@ -482,15 +496,27 @@ export default function CommunityPage() {
         <DashboardNav />
         <h1 className="app-title">Community</h1>
         <p className="page-subtitle post-subtitle">
-          
+          Explore games, ideas, and conversations from the community.
         </p>
 
         {/* Filters */}
         <div className="community-filters card community-filters--panel">
+          <div className="community-filters__type-row">
+            {[['', 'All'], ['GAME', 'Games'], ['IDEA', 'Ideas']].map(([val, label]) => (
+              <button
+                key={val}
+                className={filterType === val ? 'btn-primary' : 'btn-ghost'}
+                style={{ height: 34, padding: '0 16px', fontSize: 13 }}
+                onClick={() => setFilterType(val)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="community-filters__row">
             <input
               className="input community-filters__search"
-              placeholder="Search games, keywords…"
+              placeholder="Search posts or games…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -526,9 +552,14 @@ export default function CommunityPage() {
             <p>No posts found. Be the first to post a game recommendation!</p>
           </div>
         )}
+        {!loading && posts.length > 0 && displayedPosts.length === 0 && (
+          <div className="empty-state">
+            <p>No {filterType === 'GAME' ? 'game posts' : 'idea posts'} found.</p>
+          </div>
+        )}
 
         <div className="community-grid">
-          {posts.map((post) => (
+          {displayedPosts.map((post) => (
             <PostCard
               key={post.id}
               post={post}
@@ -557,7 +588,7 @@ export default function CommunityPage() {
           </div>
         )}
         {!hasMore && posts.length > 0 && (
-          <p className="community-load-more__end">All {totalCount} posts loaded.</p>
+          <p className="community-load-more__end">You’re all caught up.</p>
         )}
       </div>
 

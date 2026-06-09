@@ -35,5 +35,7 @@ const TournamentSchema = new Schema(
 
 TournamentSchema.index({ status: 1, date: 1 });
 TournamentSchema.index({ gameRef: 1 });
+TournamentSchema.index({ date: 1, createdAt: -1 });
+TournamentSchema.index({ createdAt: -1 });
 
 export default mongoose.model('Tournament', TournamentSchema);

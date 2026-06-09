@@ -12,10 +12,19 @@ import { expressMiddleware } from '@as-integrations/express4';
 import { typeDefs } from './graphql/schema.js';
 import { resolvers } from './graphql/resolvers.js';
 import { getUserFromToken } from './middleware/auth.js';
+import { createRateLimitMiddleware, getClientIp } from './middleware/rateLimit.js';
 import { warmUpAIAgent } from './services/aiAgentService.js';
 
 // ====== App ======
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
+
+const graphqlGlobalLimiter = createRateLimitMiddleware({
+  bucket: 'graphql-global',
+  limit: 120,
+  windowMs: 60_000,
+  keyFn: getClientIp,
+});
 
 // CORS: allow configured origins + local dev defaults
 const allowedOrigins = process.env.ALLOWED_ORIGINS
@@ -61,7 +70,9 @@ async function start() {
   // 1) Connect to MongoDB
   await mongoose.connect(mongoUri);
   console.log('✅ MongoDB connected');
-  console.log('   Database:', mongoose.connection.name);
+  if (!isProduction) {
+    console.log('   Database:', mongoose.connection.name);
+  }
 
   // 2) Start Apollo Server
   const apollo = new ApolloServer({
@@ -73,6 +84,7 @@ async function start() {
   // 3) GraphQL middleware
   app.use(
     '/graphql',
+    graphqlGlobalLimiter,
     expressMiddleware(apollo, {
       context: async ({ req, res }) => {
         const user = await getUserFromToken(req);
@@ -83,17 +95,19 @@ async function start() {
 
   // 4) Start HTTP server
   app.listen(PORT, () => {
-    console.log(`🚀 HTTP server ready at http://localhost:${PORT}`);
-    console.log(`🔧 GraphQL endpoint    -> http://localhost:${PORT}/graphql`);
-    console.log('🧪 Apollo Studio Sandbox: https://studio.apollographql.com/sandbox/explorer');
+    console.log(`🚀 Auth service started on port ${PORT}`);
+    if (!isProduction) {
+      console.log(`🔧 GraphQL endpoint    -> http://localhost:${PORT}/graphql`);
+      console.log('🧪 Apollo Studio Sandbox: https://studio.apollographql.com/sandbox/explorer');
+    }
 
-    // Email config diagnostics (no secrets printed)
+    // Email config diagnostics (never print account values)
     const emailUser = process.env.EMAIL_USER;
     const emailPass = process.env.EMAIL_APP_PASSWORD;
     if (emailUser && emailPass) {
-      console.log(`📧 Email service configured: ${emailUser} (password: ${emailPass.length} chars, service: ${process.env.EMAIL_SERVICE || 'gmail'})`);
+      console.log('📧 Email service configured');
     } else {
-      console.warn('⚠️  Email service NOT configured — EMAIL_USER or EMAIL_APP_PASSWORD is missing. Password reset emails will fail.');
+      console.warn('⚠️  Email service not configured. Password reset emails may fail.');
     }
 
     // Optional AI warm-up (controlled by AI_WARMUP_ON_START=true in .env)
@@ -103,10 +117,17 @@ async function start() {
 
 // Process-level error handling
 process.on('unhandledRejection', (reason) => {
-  console.error('UNHANDLED REJECTION:', reason);
+  const message = reason instanceof Error ? reason.message : String(reason);
+  console.error('UNHANDLED REJECTION:', message);
+  if (!isProduction && reason instanceof Error && reason.stack) {
+    console.error(reason.stack);
+  }
 });
 process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
+  console.error('UNCAUGHT EXCEPTION:', err?.message || 'unknown error');
+  if (!isProduction && err?.stack) {
+    console.error(err.stack);
+  }
 });
 
 start().catch((err) => {

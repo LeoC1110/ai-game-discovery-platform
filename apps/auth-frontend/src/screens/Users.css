@@ -1,7 +1,7 @@
 /* Users module — matches app design system */
 
 .users-subtitle {
-  margin: -10px auto 28px;
+  margin: 0 auto 28px;
   max-width: 560px;
   text-align: center;
   color: var(--color-text-muted);

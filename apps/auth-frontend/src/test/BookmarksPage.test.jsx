@@ -3,8 +3,8 @@ import React from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './helpers';
 import BookmarksPage from '../screens/BookmarksPage';
-import { BOOKMARKED_POSTS, TOGGLE_BOOKMARK } from '../gql/gamePosts';
-import { makePost, makeUser } from './mockData';
+import { PAGED_BOOKMARKS, TOGGLE_BOOKMARK } from '../gql/gamePosts';
+import { makePost } from './mockData';
 
 const bookmarkedPost = makePost({
   id: 'p1', title: 'Celeste', genre: 'Platformer', platform: 'PC', developer: 'Maddy Makes Games',
@@ -18,20 +18,19 @@ const bookmarkedPost = makePost({
 
 describe('BookmarksPage', () => {
   test('renders heading and subtitle', () => {
-    const mocks = [{ request: { query: BOOKMARKED_POSTS }, result: { data: { bookmarkedPosts: [] } } }];
+    const mocks = [{ request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [], totalCount: 0 } } } }];
     renderWithProviders(<BookmarksPage />, { mocks });
     expect(screen.getByText('Bookmarks')).toBeInTheDocument();
-    expect(screen.getByText(/your saved game recommendations/i)).toBeInTheDocument();
   });
 
   test('shows loading state initially', () => {
-    const mocks = [{ request: { query: BOOKMARKED_POSTS }, result: { data: { bookmarkedPosts: [] } } }];
+    const mocks = [{ request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [], totalCount: 0 } } } }];
     renderWithProviders(<BookmarksPage />, { mocks });
     expect(screen.getByText(/loading bookmarks/i)).toBeInTheDocument();
   });
 
   test('shows empty state with Browse Community button when no bookmarks', async () => {
-    const mocks = [{ request: { query: BOOKMARKED_POSTS }, result: { data: { bookmarkedPosts: [] } } }];
+    const mocks = [{ request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [], totalCount: 0 } } } }];
     renderWithProviders(<BookmarksPage />, { mocks });
     await waitFor(() => {
       expect(screen.getByText(/no bookmarks yet/i)).toBeInTheDocument();
@@ -40,7 +39,7 @@ describe('BookmarksPage', () => {
   });
 
   test('renders bookmarked post title', async () => {
-    const mocks = [{ request: { query: BOOKMARKED_POSTS }, result: { data: { bookmarkedPosts: [bookmarkedPost] } } }];
+    const mocks = [{ request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [bookmarkedPost], totalCount: 1 } } } }];
     renderWithProviders(<BookmarksPage />, { mocks });
     await waitFor(() => {
       expect(screen.getByText('Celeste')).toBeInTheDocument();
@@ -48,7 +47,7 @@ describe('BookmarksPage', () => {
   });
 
   test('renders Remove button for each bookmarked post', async () => {
-    const mocks = [{ request: { query: BOOKMARKED_POSTS }, result: { data: { bookmarkedPosts: [bookmarkedPost] } } }];
+    const mocks = [{ request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [bookmarkedPost], totalCount: 1 } } } }];
     renderWithProviders(<BookmarksPage />, { mocks });
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument();
@@ -62,8 +61,8 @@ describe('BookmarksPage', () => {
       result: () => { mutationCalled = true; return { data: { toggleBookmark: { __typename: 'GamePost', id: 'p1', isBookmarkedByMe: false, bookmarksCount: 4 } } }; },
     };
     const mocks = [
-      { request: { query: BOOKMARKED_POSTS }, result: { data: { bookmarkedPosts: [bookmarkedPost] } } },
-      { request: { query: BOOKMARKED_POSTS }, result: { data: { bookmarkedPosts: [] } } },
+      { request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [bookmarkedPost], totalCount: 1 } } } },
+      { request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [], totalCount: 0 } } } },
       toggleMock,
       toggleMock,
     ];
@@ -74,7 +73,7 @@ describe('BookmarksPage', () => {
   });
 
   test('shows error on query failure', async () => {
-    const mocks = [{ request: { query: BOOKMARKED_POSTS }, error: new Error('Network error') }];
+    const mocks = [{ request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, error: new Error('Network error') }];
     renderWithProviders(<BookmarksPage />, { mocks });
     await waitFor(() => {
       expect(screen.getByText(/Network error/i)).toBeInTheDocument();

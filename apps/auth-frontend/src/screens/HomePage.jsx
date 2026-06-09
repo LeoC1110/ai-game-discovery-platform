@@ -19,32 +19,32 @@ const sections = [
   {
     to: '/post',
     title: 'Post',
-    description: 'Post your passion. Rate, review, and tag your favorite games in seconds.',
+    description: 'Create a game recommendation or share a quick idea with the community.',
   },
   {
     to: '/community',
     title: 'Community',
-    description: 'Connect with players. Discover your next favorite game through the eyes of the community.',
+    description: 'Explore posts, comments, likes, and discussions from other users.',
   },
   {
     to: '/bookmarks',
     title: 'Bookmarks',
-    description: 'Your personal collection. Save the games you love and organize them beautifully.',
+    description: 'View and manage your saved game recommendations.',
   },
   {
     to: '/profile',
     title: 'Profile',
-    description: 'Everything you care about, all in one place. Your posts, your likes, your identity.',
+    description: 'Review your posts, likes, bookmarks, and account settings.',
   },
   {
     to: '/agent',
-    title: 'Ask Nova',
-    description: 'Meet Nova. A powerful AI designed to understand your taste and recommend perfection.',
+    title: 'Nova',
+    description: 'Ask Nova for AI-powered game suggestions based on your preferences and community data.',
   },
   {
     to: '/leaderboard',
-    title: 'Trends',
-    description: 'See what’s shaping the gaming world. The top games, the biggest posts, the best creators.',
+    title: 'Community Trends',
+    description: 'View popular game posts and active community discussions.',
   },
 ];
 
@@ -96,7 +96,7 @@ export default function HomePage() {
                 <h2>{section.title}</h2>
                 <p>{section.description}</p>
               </div>
-              <span className="home-card__cta">Enter</span>
+              <span className="home-card__cta">Open</span>
             </Link>
           ))}
         </section>

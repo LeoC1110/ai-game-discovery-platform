@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { useQuery } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
-import { ALL_POSTS } from '../gql/gamePosts';
+import { PAGED_POSTS } from '../gql/gamePosts';
 import './Trends.css';
 
 const RANK_PAGE_SIZE = 10;
@@ -56,15 +56,22 @@ export default function LeaderboardPage() {
   const navigate = useNavigate();
   const [rankPage, setRankPage] = useState(0);
 
-  const { data, loading, error } = useQuery(ALL_POSTS, {
+  const { data, loading, error } = useQuery(PAGED_POSTS, {
+    variables: {
+      postType: 'GAME',
+      sort: 'engagement',
+      limit: RANK_PAGE_SIZE,
+      offset: rankPage * RANK_PAGE_SIZE,
+    },
     fetchPolicy: 'cache-and-network',
+    notifyOnNetworkStatusChange: true,
   });
 
-  const allPosts = data?.allPosts ?? [];
-  const gamePosts = useMemo(() => allPosts.filter((p) => p.postType === 'GAME'), [allPosts]);
+  const rankPagePosts = data?.pagedPosts?.posts ?? [];
+  const totalCount = data?.pagedPosts?.totalCount ?? 0;
 
   const allTrending = useMemo(() =>
-    [...gamePosts]
+    [...rankPagePosts]
       .map((p) => ({
         ...p,
         trendScore:
@@ -74,35 +81,31 @@ export default function LeaderboardPage() {
           (p.bookmarksCount || 0) * 2,
       }))
       .sort((a, b) => b.trendScore - a.trendScore),
-    [gamePosts]);
+    [rankPagePosts]);
 
-  const rankTotalPages = Math.ceil(allTrending.length / RANK_PAGE_SIZE);
-  const rankPageGames = allTrending.slice(
-    rankPage * RANK_PAGE_SIZE,
-    (rankPage + 1) * RANK_PAGE_SIZE,
-  );
+  const rankTotalPages = Math.max(1, Math.ceil(totalCount / RANK_PAGE_SIZE));
 
   const popularTags = useMemo(() => {
     const map = {};
-    gamePosts.forEach((p) => {
+    rankPagePosts.forEach((p) => {
       (p.tags || []).forEach((t) => { map[t] = (map[t] || 0) + 1; });
     });
     return Object.entries(map)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 20);
-  }, [gamePosts]);
+  }, [rankPagePosts]);
 
   const recentDiscussions = useMemo(() =>
-    [...allPosts]
+    [...rankPagePosts]
       .sort((a, b) =>
         (b.commentsCount || 0) - (a.commentsCount || 0) ||
         new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 5),
-    [allPosts]);
+    [rankPagePosts]);
 
   const activeContributors = useMemo(() => {
     const map = {};
-    allPosts.forEach((p) => {
+    rankPagePosts.forEach((p) => {
       const user = p.postedBy?.username || 'Unknown';
       if (!map[user]) map[user] = { username: user, postCount: 0, totalLikes: 0, totalComments: 0 };
       map[user].postCount += 1;
@@ -112,16 +115,18 @@ export default function LeaderboardPage() {
     return Object.values(map)
       .sort((a, b) => b.postCount - a.postCount || b.totalLikes - a.totalLikes)
       .slice(0, 5);
-  }, [allPosts]);
+  }, [rankPagePosts]);
 
-  const isEmpty = !loading && allPosts.length === 0;
+  const isEmpty = !loading && totalCount === 0;
 
   return (
     <div className="app-root">
       <div className="app-container">
         <DashboardNav />
         <h1 className="app-title">Community Trends</h1>
-        <p className="page-subtitle trends-subtitle"></p>
+        <p className="page-subtitle trends-subtitle">
+          See what’s popular in the community.
+        </p>
 
         {loading && <p className="trends-status">Loading...</p>}
         {error && <p className="trends-status trends-status--error">Error: {error.message}</p>}
@@ -135,13 +140,13 @@ export default function LeaderboardPage() {
         {!isEmpty && (
           <div className="trends-grid">
 
-            <SectionCard title={`Game Rankings (${allTrending.length} total)`}>
+            <SectionCard title={`Game Rankings (${totalCount} total)`}>
               {allTrending.length === 0
                 ? <p className="trends-empty">No games ranked yet.</p>
                 : (
                   <>
                     <ol className="trends-game-list" start={rankPage * RANK_PAGE_SIZE + 1}>
-                      {rankPageGames.map((post, i) => {
+                      {allTrending.map((post, i) => {
                         const globalRank = rankPage * RANK_PAGE_SIZE + i + 1;
                         return (
                           <li key={post.id} className="trends-game-row">
@@ -165,6 +170,7 @@ export default function LeaderboardPage() {
                       })}
                     </ol>
                     <Pagination page={rankPage} totalPages={rankTotalPages} onPage={(p) => setRankPage(p)} />
+                    {loading && <p className="trends-status">Loading rankings...</p>}
                   </>
                 )}
             </SectionCard>

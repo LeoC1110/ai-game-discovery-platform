@@ -58,7 +58,7 @@ export default function UsersPage() {
 
         <h1 className="app-title">Users</h1>
         <p className="page-subtitle users-subtitle">
-          
+          Find player in the community.
         </p>
 
         {/* Search bar */}

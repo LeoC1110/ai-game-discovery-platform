@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
-import { BOOKMARKED_POSTS, TOGGLE_BOOKMARK } from '../gql/gamePosts';
+import { PAGED_BOOKMARKS, TOGGLE_BOOKMARK } from '../gql/gamePosts';
 
 const PAGE_SIZE = 8;
 
@@ -21,18 +21,30 @@ export default function BookmarksPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(0);
 
-  const { data, loading, error, refetch } = useQuery(BOOKMARKED_POSTS, {
+  const { data, loading, error, refetch } = useQuery(PAGED_BOOKMARKS, {
+    variables: {
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    },
     fetchPolicy: 'cache-and-network',
+    notifyOnNetworkStatusChange: true,
   });
 
   const [toggleBookmark, { loading: toggling }] = useMutation(TOGGLE_BOOKMARK, {
-    onCompleted: () => refetch(),
+    onCompleted: async () => {
+      const result = await refetch();
+      const totalCount = result?.data?.pagedBookmarks?.totalCount ?? 0;
+      const nextTotalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+      if (page > nextTotalPages - 1) {
+        setPage(nextTotalPages - 1);
+      }
+    },
   });
 
-  const allPosts = data?.bookmarkedPosts ?? [];
-  const totalPages = Math.max(1, Math.ceil(allPosts.length / PAGE_SIZE));
+  const posts = data?.pagedBookmarks?.posts ?? [];
+  const totalCount = data?.pagedBookmarks?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
-  const posts = allPosts.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return (
     <div className="app-root">
@@ -40,13 +52,13 @@ export default function BookmarksPage() {
         <DashboardNav />
         <h1 className="app-title">Bookmarks</h1>
         <p className="page-subtitle post-subtitle">
-          
+          Your saved games, all in one place.
         </p>
 
         {loading && <p style={{ color: '#aaa', textAlign: 'center' }}>Loading bookmarks…</p>}
         {error && <p style={{ color: '#ff6b6b', textAlign: 'center' }}>Error: {error.message}</p>}
 
-        {!loading && allPosts.length === 0 && (
+        {!loading && totalCount === 0 && (
           <div className="empty-state">
             <p>No bookmarks yet.</p>
             <p style={{ color: '#888', fontSize: 14 }}>Save games from the Community page.</p>
@@ -115,7 +127,7 @@ export default function BookmarksPage() {
         </div>
 
         {/* Pagination */}
-        {allPosts.length > PAGE_SIZE && (
+        {totalCount > PAGE_SIZE && (
           <div className="bookmarks-pagination">
             <button
               className="btn-ghost bookmarks-pagination__btn"
@@ -141,7 +153,7 @@ export default function BookmarksPage() {
               Next ›
             </button>
             <span className="bookmarks-pagination__info">
-              {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, allPosts.length)} of {allPosts.length}
+              {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, totalCount)} of {totalCount}
             </span>
           </div>
         )}

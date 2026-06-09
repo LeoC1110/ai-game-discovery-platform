@@ -37,5 +37,8 @@ const GameSchema = new Schema(
 
 GameSchema.index({ user: 1, title: 1 });
 GameSchema.index({ tags: 1 });
+GameSchema.index({ createdAt: -1 });
+GameSchema.index({ sourceType: 1, createdAt: -1 });
+GameSchema.index({ platform: 1, createdAt: -1 });
 
 export default mongoose.model('Game', GameSchema);

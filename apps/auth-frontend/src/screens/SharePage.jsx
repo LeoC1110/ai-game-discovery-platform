@@ -44,7 +44,7 @@ export default function SharePage() {
         },
       });
       setContent('');
-      setMessage({ type: 'success', text: 'Idea published! Redirecting to Community...' });
+      setMessage({ type: 'success', text: 'Your idea has been published.' });
       setTimeout(() => navigate('/community'), 1200);
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
@@ -55,16 +55,15 @@ export default function SharePage() {
     <div className="app-root">
       <div className="app-container">
         <DashboardNav />
-        <h1 className="app-title">Share Your Idea</h1>
+        <h1 className="app-title">Share an Idea</h1>
         <p className="page-subtitle share-subtitle">
-    
+          Share a thought with the community.
         </p>
 
         <div className="share-grid">
           <div className="share-card">
             <header className="share-card__header">
-              <h2>New Idea</h2>
-     
+              <h2></h2>
             </header>
 
             {message && (
@@ -78,28 +77,30 @@ export default function SharePage() {
 
             <div className="share-form">
               <label className="share-form__label">
-                
                 <textarea
                   className="input textarea share-form__textarea"
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   maxLength={500}
-                  placeholder="Write something or share an idea with the community..."
+                  placeholder="Share a thought, question, or idea..."
                   rows={7}
                 />
               </label>
-              <div className="share-form__count">{content.length}/500</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: '#6e6e73' }}>Text and emoji only. 500 characters max.</span>
+                <span className="share-form__count" style={{ margin: 0 }}>{content.length}/500</span>
+              </div>
 
               <div className="share-form__footer">
                 <button
                   type="button"
                   className={`btn-primary ${loading ? 'is-loading' : ''}`}
-                  disabled={loading}
+                  disabled={loading || !content.trim()}
                   aria-busy={loading}
                   onClick={handlePublish}
                   style={{ flex: 1 }}
                 >
-                  {loading ? 'Publishing...' : 'Publish'}
+                  {loading ? 'Publishing…' : 'Publish Idea'}
                 </button>
                 <button
                   type="button"

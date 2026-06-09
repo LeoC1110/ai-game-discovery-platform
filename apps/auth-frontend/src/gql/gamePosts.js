@@ -30,8 +30,8 @@ export const POST_FRAGMENT = gql`
 
 export const ALL_POSTS = gql`
   ${POST_FRAGMENT}
-  query AllPosts($search: String, $genre: String, $platform: String, $tag: String, $sort: String, $postType: PostType) {
-    allPosts(search: $search, genre: $genre, platform: $platform, tag: $tag, sort: $sort, postType: $postType) {
+  query AllPosts($search: String, $genre: String, $platform: String, $tag: String, $sort: String, $postType: PostType, $limit: Int, $offset: Int) {
+    allPosts(search: $search, genre: $genre, platform: $platform, tag: $tag, sort: $sort, postType: $postType, limit: $limit, offset: $offset) {
       ...PostFields
     }
   }
@@ -49,15 +49,15 @@ export const PAGED_POSTS = gql`
 
 export const MY_POSTS = gql`
   ${POST_FRAGMENT}
-  query MyPosts {
-    myPosts { ...PostFields }
+  query MyPosts($limit: Int, $offset: Int) {
+    myPosts(limit: $limit, offset: $offset) { ...PostFields }
   }
 `;
 
 export const BOOKMARKED_POSTS = gql`
   ${POST_FRAGMENT}
-  query BookmarkedPosts {
-    bookmarkedPosts { ...PostFields }
+  query BookmarkedPosts($limit: Int, $offset: Int) {
+    bookmarkedPosts(limit: $limit, offset: $offset) { ...PostFields }
   }
 `;
 

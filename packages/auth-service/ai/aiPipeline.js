@@ -35,6 +35,14 @@ import { validate, evaluateResponse, loadKnownTitles } from './validatorAgent.js
 import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE, QUOTA_EXCEEDED_RESPONSE } from '../prompts/fallbackResponses.js';
 import { buildUserMemoryContext, saveExplicitPreferences } from '../services/userMemoryService.js';
 
+const isProduction = process.env.NODE_ENV === 'production';
+const debugLog = (...args) => {
+  if (!isProduction) console.log(...args);
+};
+const debugWarn = (...args) => {
+  if (!isProduction) console.warn(...args);
+};
+
 // ── Greeting fast-path ───────────────────────────────────────────────────────
 // Matches simple one-word greetings in English, Pinyin, or Chinese characters.
 // Extend the alternation list to add more languages.
@@ -73,13 +81,21 @@ function isSimpleGreeting(msg) {
  * }>}
  */
 export async function runPipeline({ userId, username, message }) {
-  console.time('[pipeline] total');
-  console.log('[pipeline] START — user:', username, '| message:', message.slice(0, 60));
+  if (!isProduction) {
+    console.time('[pipeline] total');
+  }
+  debugLog('[pipeline] START', {
+    userId: String(userId),
+    requestType: 'askAI',
+    messageLength: (message || '').length,
+  });
 
   // ── Greeting fast-path — skip Gemini entirely ────────────────────────────
   if (isSimpleGreeting(message)) {
-    console.log('[pipeline] greeting fast-path — skipping Gemini');
-    console.timeEnd('[pipeline] total');
+    debugLog('[pipeline] greeting fast-path — skipping Gemini');
+    if (!isProduction) {
+      console.timeEnd('[pipeline] total');
+    }
     // Fire-and-forget — not awaited so the response returns immediately
     saveExchange(userId, username, message, GREETING_RESPONSE).catch(() => {});
     return {
@@ -92,7 +108,9 @@ export async function runPipeline({ userId, username, message }) {
   }
 
   // ── Step 1: Conversation Manager ─────────────────────────────────────────
-  console.time('[pipeline] step1 conversationManager');
+  if (!isProduction) {
+    console.time('[pipeline] step1 conversationManager');
+  }
   const [historyRecords, userTurnCount, userMemory, userMemoryContext] = await Promise.all([
     loadHistory(userId),
     getUserTurnCount(userId),
@@ -113,25 +131,37 @@ export async function runPipeline({ userId, username, message }) {
   }
 
   const newTurnCount = userTurnCount + 1;
-  console.log(
+  debugLog(
     `[pipeline] turn #${newTurnCount}, history: ${historyRecords.length} msg(s), topics: ${topicContext?.join(', ') ?? 'none'}`,
   );
-  console.timeEnd('[pipeline] step1 conversationManager');
+  if (!isProduction) {
+    console.timeEnd('[pipeline] step1 conversationManager');
+  }
 
   // ── Step 2: Router Agent ──────────────────────────────────────────────────
-  console.time('[pipeline] step2 routerAgent');
+  if (!isProduction) {
+    console.time('[pipeline] step2 routerAgent');
+  }
   const { intent, confidence } = classifyIntent(message);
-  console.log(`[pipeline] intent="${intent}" confidence="${confidence}"`);
-  console.timeEnd('[pipeline] step2 routerAgent');
+  debugLog(`[pipeline] intent="${intent}" confidence="${confidence}"`);
+  if (!isProduction) {
+    console.timeEnd('[pipeline] step2 routerAgent');
+  }
 
   // ── Step 3: Platform Tools ────────────────────────────────────────────────
-  console.time('[pipeline] step3 platformTools');
+  if (!isProduction) {
+    console.time('[pipeline] step3 platformTools');
+  }
   const platformData = await fetchDataForIntent(intent, userId, message);
-  console.log(`[pipeline] platformData: ${platformData.length} chars`);
-  console.timeEnd('[pipeline] step3 platformTools');
+  debugLog(`[pipeline] platformData: ${platformData.length} chars`);
+  if (!isProduction) {
+    console.timeEnd('[pipeline] step3 platformTools');
+  }
 
   // ── Step 4: Answer Agent ──────────────────────────────────────────────────
-  console.time('[pipeline] step4 answerAgent');
+  if (!isProduction) {
+    console.time('[pipeline] step4 answerAgent');
+  }
   let answer;
   try {
     answer = await generateAnswer({ userMessage: message, intent, conversationContext, platformData, userMemoryContext });
@@ -139,38 +169,50 @@ export async function runPipeline({ userId, username, message }) {
     console.error('[pipeline] answerAgent error:', err?.message);
     const is429 = err?.message?.includes('429') || err?.message?.includes('Too Many Requests') || err?.message?.includes('quota');
     if (err?.isTimeout) {
-      console.warn('[pipeline] Gemini timed out');
+      debugWarn('[pipeline] Gemini timed out');
     } else if (is429) {
-      console.warn('[pipeline] Gemini quota exceeded (429)');
+      debugWarn('[pipeline] Gemini quota exceeded (429)');
     } else {
       resetModel(); // clear stale singleton on unexpected errors
     }
-    console.timeEnd('[pipeline] step4 answerAgent');
-    console.timeEnd('[pipeline] total');
+    if (!isProduction) {
+      console.timeEnd('[pipeline] step4 answerAgent');
+      console.timeEnd('[pipeline] total');
+    }
     throw new Error(is429 ? QUOTA_EXCEEDED_RESPONSE : GENERIC_ERROR_RESPONSE);
   }
-  console.timeEnd('[pipeline] step4 answerAgent');
+  if (!isProduction) {
+    console.timeEnd('[pipeline] step4 answerAgent');
+  }
 
   // ── Step 4b: Extract recommendations + load known titles in parallel ─────────
-  console.time('[pipeline] step4b extractRecommendations');
+  if (!isProduction) {
+    console.time('[pipeline] step4b extractRecommendations');
+  }
   const [{ cleanAnswer: rawClean, recommendations: rawReco }, knownTitles] = await Promise.all([
     extractRecommendedPosts(answer),
     loadKnownTitles(),
   ]);
   let cleanAnswer = rawClean;
   let recommendations = rawReco;
-  console.log(`[pipeline] recommendations extracted: ${recommendations.length}, knownTitles: ${knownTitles.length}`);
-  console.timeEnd('[pipeline] step4b extractRecommendations');
+  debugLog(`[pipeline] recommendations extracted: ${recommendations.length}, knownTitles: ${knownTitles.length}`);
+  if (!isProduction) {
+    console.timeEnd('[pipeline] step4b extractRecommendations');
+  }
 
   // ── Step 5: Semantic evaluation + optional reflection pass ────────────────
-  console.time('[pipeline] step5 evaluateAndReflect');
+  if (!isProduction) {
+    console.time('[pipeline] step5 evaluateAndReflect');
+  }
   let { evaluation, needsReflection } = evaluateResponse(cleanAnswer, recommendations, knownTitles);
   let wasReflected = false;
 
   if (needsReflection) {
-    console.warn('[pipeline] Reflection triggered. Flags:', evaluation.flags);
+    debugWarn('[pipeline] Reflection triggered. Flags:', evaluation.flags);
     try {
-      console.time('[pipeline] step5 reflection');
+      if (!isProduction) {
+        console.time('[pipeline] step5 reflection');
+      }
       const reflectedText = await generateReflection({
         badAnswer: cleanAnswer,
         flags: evaluation.flags,
@@ -179,16 +221,18 @@ export async function runPipeline({ userId, username, message }) {
         platformData,
         userMemoryContext,
       });
-      console.timeEnd('[pipeline] step5 reflection');
+      if (!isProduction) {
+        console.timeEnd('[pipeline] step5 reflection');
+      }
 
       const re = await extractRecommendedPosts(reflectedText);
       cleanAnswer    = re.cleanAnswer;
       recommendations = re.recommendations;
       ({ evaluation } = evaluateResponse(cleanAnswer, recommendations, knownTitles));
       wasReflected = true;
-      console.log('[pipeline] Reflection complete. Remaining flags:', evaluation.flags.length);
+      debugLog('[pipeline] Reflection complete. Remaining flags:', evaluation.flags.length);
     } catch (err) {
-      console.warn('[pipeline] Reflection failed — using original answer:', err?.message);
+      debugWarn('[pipeline] Reflection failed — using original answer:', err?.message);
     }
   }
 
@@ -197,9 +241,11 @@ export async function runPipeline({ userId, username, message }) {
   // Basic structural validation (blank / non-string guard)
   const { valid, reason } = validate(cleanAnswer);
   if (!valid) {
-    console.warn('[pipeline] Structural validation failed:', reason);
-    console.timeEnd('[pipeline] step5 evaluateAndReflect');
-    console.timeEnd('[pipeline] total');
+    debugWarn('[pipeline] Structural validation failed:', reason);
+    if (!isProduction) {
+      console.timeEnd('[pipeline] step5 evaluateAndReflect');
+      console.timeEnd('[pipeline] total');
+    }
     return {
       answer: GENERIC_ERROR_RESPONSE,
       intent,
@@ -208,31 +254,35 @@ export async function runPipeline({ userId, username, message }) {
       evaluation: null,
     };
   }
-  console.log(
+  debugLog(
     `[pipeline] Evaluation done. grounding=${
       evaluation.groundingScore != null ? evaluation.groundingScore.toFixed(2) : 'n/a'
     } hallucinations=${evaluation.hallucinations.length} safety=${
       evaluation.safetyPassed ? 'OK' : 'FAIL'
     } reflected=${wasReflected}`,
   );
-  console.timeEnd('[pipeline] step5 evaluateAndReflect');
+  if (!isProduction) {
+    console.timeEnd('[pipeline] step5 evaluateAndReflect');
+  }
 
   // ── Step 6: Save exchange (clean answer — block already stripped) ─────────
   await saveExchange(userId, username, message, cleanAnswer);
-  console.log('[pipeline] Exchange saved');
+  debugLog('[pipeline] Exchange saved');
 
   // ── 5-turn summary trigger ─────────────────────────────────────────────
   // Every 5th user turn: compress history + current exchange into a rolling
   // summary stored in UserMemory, so long conversations don’t overflow context.
   if (newTurnCount % 5 === 0) {
-    console.log(`[pipeline] 5-turn milestone (turn ${newTurnCount}) — saving summary`);
+    debugLog(`[pipeline] 5-turn milestone (turn ${newTurnCount}) — saving summary`);
     const summary = buildSimpleSummary(historyRecords, message, cleanAnswer);
     const latestTopics = extractTopicContext(historyRecords, message) ?? [];
     // Fire-and-forget — non-blocking so it doesn’t delay the response
     saveConversationSummary(userId, summary, latestTopics).catch(() => {});
   }
 
-  console.timeEnd('[pipeline] total');
+  if (!isProduction) {
+    console.timeEnd('[pipeline] total');
+  }
 
   // Return shape matches the AIResponse GraphQL type.
   return {

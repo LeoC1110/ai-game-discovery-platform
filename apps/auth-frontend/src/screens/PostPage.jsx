@@ -1,7 +1,7 @@
 ﻿// src/screens/PostPage.jsx — Create a game recommendation post
 import React, { useState } from 'react';
 import { useMutation, useQuery, gql } from '@apollo/client';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
 import { CREATE_POST, ALL_POSTS, MY_POSTS } from '../gql/gamePosts';
 import './Post.css';
@@ -121,8 +121,8 @@ export default function PostPage() {
         },
       });
       setForm(INITIAL_FORM);
-      setMessage({ type: 'success', text: 'Game post published! Redirecting to Community...' });
-      setTimeout(() => navigate('/community'), 1200);
+      setMessage({ type: 'success', text: 'Your game recommendation has been published.' });
+      setTimeout(() => navigate('/community'), 2500);
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     }
@@ -139,22 +139,28 @@ export default function PostPage() {
         <DashboardNav />
         <h1 className="app-title">Post a Game</h1>
         <p className="page-subtitle post-subtitle">
-          
+          Post a game you recommend.
         </p>
 
         <div className="post-grid" style={{ gridTemplateColumns: '1fr' }}>
           <div className="post-card">
             <header className="post-card__header">
-              <h2>New Recommendation</h2>
-              <p>Fill in the details below. Title and Review are required.</p>
+              <h2>Game Details</h2>
+              <p>Add the basic information for your recommendation. Game Title and Review are required.</p>
             </header>
 
             {message && (
               <div
                 className={message.type === 'success' ? 'msg-success' : 'msg-error'}
                 role="alert"
+                style={message.type === 'success' ? { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 } : undefined}
               >
-                {message.text}
+                <span>{message.text}</span>
+                {message.type === 'success' && (
+                  <Link to="/community" style={{ fontSize: 13, fontWeight: 500, color: 'inherit', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+                    View in Community
+                  </Link>
+                )}
               </div>
             )}
 
@@ -223,8 +229,8 @@ export default function PostPage() {
                     ) : (
                       <div className="cover-upload-area__placeholder">
                         <span className="cover-upload-area__icon">🖼</span>
-                        <span>Click to upload JPG / PNG</span>
-                        <span className="cover-upload-area__hint">Max 2 MB</span>
+                        <span>Upload cover image</span>
+                        <span className="cover-upload-area__hint">JPG or PNG, max 2 MB</span>
                       </div>
                     )}
                   </div>
@@ -269,9 +275,13 @@ export default function PostPage() {
                   value={form.review}
                   onChange={handleChange}
                   rows={5}
+                  maxLength={1500}
                   required
                   style={{ minHeight: 120 }}
                 />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                  <span style={{ fontSize: 12, color: '#6e6e73' }}>{form.review.length}/1500</span>
+                </div>
               </label>
 
               {isAdmin && (
@@ -289,7 +299,7 @@ export default function PostPage() {
 
               <div className="post-form__footer">
                 <button className={`btn-primary ${loading ? 'is-loading' : ''}`} type="submit" disabled={loading} aria-busy={loading} style={{ flex: 1 }}>
-                  {loading ? 'Publishing...' : 'Post'}
+                  {loading ? 'Publishing…' : 'Publish Game'}
                 </button>
                 <button
                   type="button"
@@ -328,7 +338,7 @@ export default function PostPage() {
                   await publishGamePost();
                 }}
               >
-                Post a Game
+                Publish Game
               </button>
             </div>
           </div>

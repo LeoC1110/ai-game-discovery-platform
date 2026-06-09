@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 
 const EMAIL_SEND_TIMEOUT_MS = 10_000;
+const isProduction = process.env.NODE_ENV === 'production';
 
 let transport;
 
@@ -48,16 +49,20 @@ export const sendResetPasswordCodeEmail = async ({ to, code }) => {
     text: `Your verify code: ${code}\n\n-- Discovery Platform`,
   };
 
-  console.log(`[Email] Attempting to send reset code to: ${to}`);
+  if (!isProduction) {
+    console.log('[Email] Attempting to send reset code email');
+  }
   try {
-    const info = await withTimeout(
+    await withTimeout(
       getTransport().sendMail(mailOptions),
       EMAIL_SEND_TIMEOUT_MS,
       'sendMail',
     );
-    console.log(`[Email] Sent successfully to: ${to} | messageId: ${info.messageId}`);
+    if (!isProduction) {
+      console.log('[Email] Reset code email sent successfully');
+    }
   } catch (err) {
-    console.error(`[Email] SMTP error sending to ${to}: ${err.message}`);
+    console.error('[Email] Failed to send reset code email:', err?.message || 'unknown error');
     throw err;
   }
 };

@@ -42,5 +42,10 @@ const GamePostSchema = new Schema(
 );
 
 GamePostSchema.index({ title: 'text', review: 'text', tags: 'text' });
+GamePostSchema.index({ createdAt: -1 });
+GamePostSchema.index({ postType: 1, createdAt: -1 });
+GamePostSchema.index({ postedBy: 1, createdAt: -1 });
+GamePostSchema.index({ featured: 1, createdAt: -1 });
+GamePostSchema.index({ genre: 1, platform: 1, createdAt: -1 });
 
 export default mongoose.model('GamePost', GamePostSchema);

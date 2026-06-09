@@ -122,19 +122,10 @@ export default function AgentPage() {
         <DashboardNav />
 
         <div className="agent-header">
-          <div>
-            <h1 className="app-title">Ask Nova</h1>
-            <p className="page-subtitle post-subtitle">
-              
-            </p>
-          </div>
-          <button
-            className="btn-ghost agent-clear-btn"
-            onClick={handleClear}
-            title="Delete all your AI conversation history"
-          >
-            🗑 Clear History
-          </button>
+          <h1 className="app-title">Ask Nova</h1>
+          <p className="page-subtitle">
+            Your intelligent game discovery assistant.
+          </p>
         </div>
 
         <div className="card agent-container">
@@ -223,6 +214,17 @@ export default function AgentPage() {
               aria-busy={asking}
             >
               {asking ? '…' : 'Send'}
+            </button>
+          </div>
+
+          {/* Clear history */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              className="btn-ghost agent-clear-btn"
+              onClick={handleClear}
+              title="Delete all your AI conversation history"
+            >
+              Clear History
             </button>
           </div>
         </div>

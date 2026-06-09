@@ -4,6 +4,8 @@
 import GamePost from '../models/GamePost.js';
 import { INTENTS } from './routerAgent.js';
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 // ── Shared post formatter (mirrors the one in aiAgentService.js) ─────────────
 function formatPost(p) {
   return (
@@ -118,9 +120,11 @@ export async function searchWeb(query, userId = 'global') {
   if (!response.ok) throw new Error(`Tavily API error: ${response.status}`);
   const data = await response.json();
   _webSearchLimiter.increment(String(userId));
-  console.log(
-    `[platformTools:web-search] "${query.slice(0, 60)}" — global today: ${_webSearchLimiter._global.count}/${_webSearchLimiter.GLOBAL_DAILY_LIMIT}`,
-  );
+  if (!isProduction) {
+    console.log(
+      `[platformTools:web-search] queryLength=${query.length} — global today: ${_webSearchLimiter._global.count}/${_webSearchLimiter.GLOBAL_DAILY_LIMIT}`,
+    );
+  }
   if (!data.results?.length && !data.answer) return '';
   let output = `Web search results for "${query}":\n`;
   // Tavily's direct answer is the most token-efficient summary — use it first

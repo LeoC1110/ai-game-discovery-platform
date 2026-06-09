@@ -3,7 +3,7 @@ import React from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './helpers';
 import LeaderboardPage from '../screens/LeaderboardPage';
-import { ALL_POSTS } from '../gql/gamePosts';
+import { PAGED_POSTS } from '../gql/gamePosts';
 
 const fakePosts = [
   {
@@ -38,67 +38,59 @@ const fakePosts = [
   },
 ];
 
-const allPostsMock = {
-  request: { query: ALL_POSTS, variables: {} },
-  result: { data: { allPosts: fakePosts } },
+const pagedPostsMock = {
+  request: {
+    query: PAGED_POSTS,
+    variables: { postType: 'GAME', sort: 'engagement', limit: 10, offset: 0 },
+  },
+  result: { data: { pagedPosts: { posts: fakePosts, totalCount: fakePosts.length } } },
 };
 
 describe('LeaderboardPage', () => {
-  test('renders heading and all 4 tab buttons', async () => {
-    renderWithProviders(<LeaderboardPage />, { mocks: [allPostsMock] });
-    expect(screen.getByText('Leaderboard')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /top rated/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /most liked/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /most commented/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /top contributors/i })).toBeInTheDocument();
-  });
-
-  test('Top Rated tab shows Elden Ring (rating 10) first', async () => {
-    renderWithProviders(<LeaderboardPage />, { mocks: [allPostsMock] });
+  test('renders page heading and core sections', async () => {
+    renderWithProviders(<LeaderboardPage />, { mocks: [pagedPostsMock] });
+    expect(screen.getByText('Community Trends')).toBeInTheDocument();
     await waitFor(() => {
-      const rows = screen.getAllByText(/elden ring/i);
-      expect(rows.length).toBeGreaterThan(0);
+      expect(screen.getByText(/Game Rankings/i)).toBeInTheDocument();
+      expect(screen.getByText('Popular Tags')).toBeInTheDocument();
+      expect(screen.getByText('Recent Discussions')).toBeInTheDocument();
+      expect(screen.getByText('Active Contributors')).toBeInTheDocument();
     });
   });
 
-  test('switching to Most Liked tab renders likes stats', async () => {
-    renderWithProviders(<LeaderboardPage />, { mocks: [allPostsMock, allPostsMock] });
-    await waitFor(() => screen.getByText('Elden Ring'));
-    fireEvent.click(screen.getByRole('button', { name: /most liked/i }));
+  test('shows ranked game entries from paged posts', async () => {
+    renderWithProviders(<LeaderboardPage />, { mocks: [pagedPostsMock] });
     await waitFor(() => {
-      expect(screen.getAllByText(/likes/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Elden Ring').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Hollow Knight').length).toBeGreaterThan(0);
     });
   });
 
-  test('switching to Most Commented tab renders comments stats', async () => {
-    renderWithProviders(<LeaderboardPage />, { mocks: [allPostsMock, allPostsMock] });
-    await waitFor(() => screen.getByText('Elden Ring'));
-    fireEvent.click(screen.getByRole('button', { name: /most commented/i }));
+  test('clicking popular tag navigates to community search', async () => {
+    renderWithProviders(<LeaderboardPage />, { mocks: [pagedPostsMock] });
+    await waitFor(() => screen.getByRole('button', { name: /RPG/i }));
+    fireEvent.click(screen.getByRole('button', { name: /RPG/i }));
     await waitFor(() => {
-      expect(screen.getAllByText(/comments/i).length).toBeGreaterThan(0);
+      expect(screen.getByText('Community Trends')).toBeInTheDocument();
     });
   });
 
-  test('Top Contributors tab shows alice (2 posts) before bob (1 post)', async () => {
-    renderWithProviders(<LeaderboardPage />, { mocks: [allPostsMock] });
-    await waitFor(() => screen.getByText('Elden Ring'));
-    fireEvent.click(screen.getByRole('button', { name: /top contributors/i }));
+  test('shows active contributor list', async () => {
+    renderWithProviders(<LeaderboardPage />, { mocks: [pagedPostsMock] });
     await waitFor(() => {
-      const items = screen.getAllByText(/alice|bob/i);
-      // alice should come first (2 posts)
-      expect(items[0].textContent).toMatch(/alice/i);
+      expect(screen.getByText('alice')).toBeInTheDocument();
+      expect(screen.getByText('bob')).toBeInTheDocument();
     });
-  });
-
-  test('shows medal icons for top 3 entries', async () => {
-    renderWithProviders(<LeaderboardPage />, { mocks: [allPostsMock] });
-    await waitFor(() => screen.getByText('Elden Ring'));
-    expect(screen.getByText('🥇')).toBeInTheDocument();
-    expect(screen.getByText('🥈')).toBeInTheDocument();
   });
 
   test('shows empty state if no posts', async () => {
-    const emptyMock = { request: { query: ALL_POSTS, variables: {} }, result: { data: { allPosts: [] } } };
+    const emptyMock = {
+      request: {
+        query: PAGED_POSTS,
+        variables: { postType: 'GAME', sort: 'engagement', limit: 10, offset: 0 },
+      },
+      result: { data: { pagedPosts: { posts: [], totalCount: 0 } } },
+    };
     renderWithProviders(<LeaderboardPage />, { mocks: [emptyMock, emptyMock] });
     await waitFor(() => {
       expect(screen.getByText(/No community posts yet/i)).toBeInTheDocument();

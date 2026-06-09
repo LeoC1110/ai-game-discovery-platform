@@ -73,9 +73,9 @@ select:focus-visible {
 
 .app-title {
   text-align: center;
-  font-size: 40px;
+  font-size: clamp(24px, 3.5vw, 32px);
   font-weight: 700;
-  margin-bottom: 28px;
+  margin-bottom: 12px;
   letter-spacing: -0.5px;
 }
 
@@ -96,7 +96,10 @@ select:focus-visible {
   color: var(--color-text);
   font-size: 14px;
   padding: 10px 14px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
+/* Standardize non-textarea input height across all pages */
+.input:not(textarea) { height: 44px; }
 .input:focus, .textarea:focus {
   outline: none;
   border-color: var(--color-primary);
@@ -141,10 +144,11 @@ select:focus-visible {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
-  border-radius: 10px;
-  padding: 0 14px;
-  height: 40px;
+  border-radius: var(--radius-md);
+  padding: 0 16px;
+  height: 42px;
   font-weight: 600;
+  font-size: 14px;
 }
 .btn-ghost:hover:not(:disabled):not([aria-disabled="true"]):not([aria-busy="true"]):not(.is-loading) {
   transform: translateY(-1px);
@@ -157,9 +161,10 @@ select:focus-visible {
   background: var(--color-danger);
   color: #fff;
   font-weight: 700;
-  border-radius: 10px;
-  padding: 0 14px;
-  height: 36px;
+  border-radius: var(--radius-md);
+  padding: 0 16px;
+  height: 38px;
+  font-size: 14px;
 }
 .btn-danger:hover:not(:disabled):not([aria-disabled="true"]):not([aria-busy="true"]):not(.is-loading) {
   transform: translateY(-1px);
@@ -234,6 +239,59 @@ select:focus-visible {
 @media (min-width: 1024px) {
   .game-list { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-items: stretch; }
   .game-item { max-width: none; }
+}
+
+/* ===== Error boundary fallback ===== */
+.error-boundary {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #111111;
+  padding: 24px;
+}
+
+.error-boundary__card {
+  width: min(640px, 100%);
+  border: 1px solid #d2d2d7;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 28px;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.08);
+}
+
+.error-boundary__title {
+  margin: 0 0 10px;
+  font-size: 28px;
+  letter-spacing: -0.2px;
+}
+
+.error-boundary__subtitle {
+  margin: 0 0 20px;
+  color: #3a3a3c;
+  font-size: 16px;
+}
+
+.error-boundary__home-btn {
+  min-width: 140px;
+}
+
+.error-boundary__details {
+  margin-top: 16px;
+  font-size: 13px;
+  color: #444;
+}
+
+.error-boundary__details pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #e3e3e7;
+  background: #f8f8fa;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ===== 登录 / 注册 ===== */
@@ -396,11 +454,12 @@ select:focus-visible {
 }
 
 .dashboard-link {
-  padding: 10px 18px;
+  padding: 9px 18px;
   border-radius: 999px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   color: var(--color-text);
+  font-size: 14px;
   font-weight: 600;
   text-decoration: none;
   transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
@@ -572,7 +631,8 @@ select:focus-visible {
   text-align: center;
   color: var(--color-text-muted);
   font-size: 14px;
-  margin: -10px auto 22px;
+  line-height: 1.55;
+  margin: 0 auto 28px;
   max-width: 560px;
   letter-spacing: -0.1px;
 }
@@ -641,6 +701,36 @@ select:focus-visible {
 
 .community-filters--panel {
   margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.community-filters__type-row {
+  display: flex;
+  gap: 8px;
+}
+
+.community-card__type-badge {
+  margin-bottom: 8px;
+}
+
+.badge--type-game {
+  background: rgba(0, 122, 255, 0.08);
+  color: #007aff;
+  border: 1px solid rgba(0, 122, 255, 0.2);
+}
+
+.badge--type-idea {
+  background: rgba(48, 209, 88, 0.08);
+  color: #1d8a3a;
+  border: 1px solid rgba(48, 209, 88, 0.25);
+}
+
+.tag--more {
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
 }
 
 .community-filters__search {
@@ -774,8 +864,8 @@ select:focus-visible {
 .community-card__body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 16px;
+  gap: 10px;
+  padding: 18px;
 }
 .community-card__top {
   display: flex;
@@ -1139,14 +1229,10 @@ select:focus-visible {
 }
 
 .agent-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
   max-width: 760px;
   margin: 0 auto;
   width: 100%;
+  text-align: center;
 }
 
 .agent-clear-btn {
@@ -1367,11 +1453,11 @@ select:focus-visible {
 
 .login-brand__name {
   margin: 0 0 6px;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--color-text);
-  letter-spacing: -0.3px;
-  line-height: 1.25;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
 }
 
 .login-brand__tagline {
@@ -1383,9 +1469,9 @@ select:focus-visible {
 }
 
 .login-overview__desc {
-  margin: 0 0 18px;
+  margin: 0 0 14px;
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.65;
   color: var(--color-text-muted);
   letter-spacing: -0.1px;
 }
@@ -1400,6 +1486,15 @@ select:focus-visible {
   margin-bottom: 12px;
 }
 
+.login-overview__section-label {
+  margin: 20px 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
 .login-features {
   list-style: none;
   padding: 0;
@@ -1409,7 +1504,7 @@ select:focus-visible {
 }
 
 .login-feature {
-  padding: 13px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -1418,7 +1513,7 @@ select:focus-visible {
 }
 
 .login-feature__label {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--color-text);
   display: block;
@@ -1428,10 +1523,10 @@ select:focus-visible {
 
 .login-feature__desc {
   margin: 0;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--color-text-muted);
   line-height: 1.55;
-  letter-spacing: -0.1px;
+  letter-spacing: -0.05px;
 }
 
 /* Right column: login form */
@@ -1603,6 +1698,29 @@ select:focus-visible {
   }
   .login-panel {
     padding: 40px 28px;
+  }
+}
+
+/* ===== Mobile layout ===== */
+@media (max-width: 640px) {
+  .app-root {
+    padding: 32px 16px 56px;
+  }
+  .home-grid {
+    grid-template-columns: 1fr;
+  }
+  .community-grid {
+    grid-template-columns: 1fr;
+  }
+  .trends-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-nav {
+    gap: 8px;
+  }
+  .dashboard-link {
+    padding: 8px 14px;
+    font-size: 13px;
   }
 }
 

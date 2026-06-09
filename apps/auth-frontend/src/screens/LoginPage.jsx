@@ -5,24 +5,24 @@ import { LOGIN } from '../gql/login';
 
 const FEATURES = [
   {
-    label: 'Game Discovery Community',
-    desc: 'Create game posts, ideas, comments, likes, and bookmarks.',
+    label: 'Discover Games',
+    desc: 'Find game recommendations from the community.',
   },
   {
-    label: 'AI Recommendation Assistant',
-    desc: 'Get personalized game recommendations using user preferences and community data.',
+    label: 'Share and Save',
+    desc: 'Post games or ideas, comment, like, and bookmark favorites.',
   },
   {
-    label: 'Leaderboards',
-    desc: 'Rank posts by likes, ratings, and recent activity.',
+    label: 'AI Recommendations',
+    desc: 'Get personalized suggestions based on user preferences and community data.',
   },
   {
-    label: 'User Login and Roles',
-    desc: 'The platform includes user login, protected pages, role-based access, and account-related features.',
+    label: 'Community Trends',
+    desc: 'View popular posts and active game discussions.',
   },
   {
-    label: 'AI Agent Pipeline',
-    desc: 'Intent Router → Platform Tools → AI Generation → Validation → User Memory',
+    label: 'Account Features',
+    desc: 'Sign in, create an account, reset your password, and access protected pages.',
   },
 ];
 
@@ -105,12 +105,14 @@ export default function LoginPage() {
         </div>
 
         <p className="login-overview__desc">
-          A deployed full-stack platform for game discovery, community posts, bookmarks, leaderboards, and AI-powered game recommendations.
+          A deployed full-stack platform for game discovery, community posts, saved favorites, trends, and AI-powered recommendations.
         </p>
 
         <p className="login-overview__desc">
-          <strong>Key Features</strong>
+          Built for quick review with a demo account.
         </p>
+
+        <p className="login-overview__section-label">Key Features</p>
 
         <ul className="login-features" aria-label="Platform features">
           {FEATURES.map((f) => (
@@ -175,14 +177,9 @@ export default function LoginPage() {
                 <span>Remember me</span>
               </label>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                <Link to="/change-password" className="login-reset-link">
-                  Change password
-                </Link>
-                <Link to="/forgot-password" className="login-reset-link">
-                  Forgot password
-                </Link>
-              </div>
+              <Link to="/forgot-password" className="login-reset-link">
+                Forgot password?
+              </Link>
             </div>
 
             <button
@@ -207,23 +204,23 @@ export default function LoginPage() {
             )}
           </form>
 
-          {/* Demo / test account */}
-          <div className="login-demo-card" aria-label="Test account credentials">
+          {/* Demo account */}
+          <div className="login-demo-card" aria-label="Demo account credentials">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <p className="login-demo-label" style={{ margin: 0 }}>Test Account</p>
+              <p className="login-demo-label" style={{ margin: 0 }}>Demo Account</p>
               <button
                 type="button"
                 className="btn-ghost"
                 style={{ fontSize: '0.75rem', padding: '4px 10px' }}
                 onClick={fillDemo}
               >
-                Quick Login
+                Use Demo Account
               </button>
             </div>
 
             <div className="login-demo-row">
               <span>Username</span>
-              <code>demo@example.com</code>
+              <code>Demo</code>
             </div>
 
             <div className="login-demo-row">

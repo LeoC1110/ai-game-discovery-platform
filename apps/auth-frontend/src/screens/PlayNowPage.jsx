@@ -5,9 +5,11 @@ import { gql, useQuery } from '@apollo/client';
 import DashboardNav from '../components/DashboardNav';
 import './PlayNow.css';
 
+const PAGE_SIZE = 10;
+
 const GET_ALL_GAMES = gql`
-  query GetAllGames {
-    getAllGames {
+  query GetAllGames($search: String, $sourceType: GameSourceType, $platform: String, $tag: String, $limit: Int, $offset: Int) {
+    getAllGames(search: $search, sourceType: $sourceType, platform: $platform, tag: $tag, limit: $limit, offset: $offset) {
       id
       title
       description
@@ -39,14 +41,37 @@ const DEFAULT_FILTERS = {
 };
 
 export default function PlayNowPage() {
-  const { data, loading, error, refetch } = useQuery(GET_ALL_GAMES, {
-    fetchPolicy: 'cache-and-network',
-  });
-
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [page, setPage] = useState(0);
+  const [games, setGames] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
   const [activeEmbed, setActiveEmbed] = useState(null);
 
-  const games = data?.getAllGames ?? [];
+  const { loading, error, refetch } = useQuery(GET_ALL_GAMES, {
+    variables: {
+      search: filters.search.trim() || undefined,
+      sourceType: filters.sourceType === 'All' ? undefined : filters.sourceType,
+      platform: filters.platform === 'All' ? undefined : filters.platform,
+      tag: filters.tag || undefined,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    },
+    fetchPolicy: 'cache-and-network',
+    notifyOnNetworkStatusChange: true,
+    onCompleted: ({ getAllGames }) => {
+      const batch = getAllGames ?? [];
+      setHasMore(batch.length === PAGE_SIZE);
+      if (page === 0) {
+        setGames(batch);
+        return;
+      }
+      setGames((prev) => {
+        const seen = new Set(prev.map((game) => game.id));
+        const next = batch.filter((game) => !seen.has(game.id));
+        return [...prev, ...next];
+      });
+    },
+  });
 
   const uniquePlatforms = useMemo(
     () => Array.from(new Set(games.map((game) => game.platform).filter(Boolean))).sort(),
@@ -58,44 +83,23 @@ export default function PlayNowPage() {
     [games],
   );
 
-  const filteredGames = useMemo(() => {
-    const searchQuery = filters.search.trim().toLowerCase();
-    return games.filter((game) => {
-      if (filters.sourceType !== 'All' && game.sourceType !== filters.sourceType) {
-        return false;
-      }
-      if (filters.platform !== 'All' && filters.platform) {
-        if ((game.platform || '').toLowerCase() !== filters.platform.toLowerCase()) {
-          return false;
-        }
-      }
-      if (filters.tag) {
-        const hasTag = (game.tags || []).some((tag) => tag.toLowerCase() === filters.tag.toLowerCase());
-        if (!hasTag) {
-          return false;
-        }
-      }
-      if (searchQuery) {
-        const haystack = [game.title, game.description, game.genre, game.developer]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        if (!haystack.includes(searchQuery)) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [filters, games]);
-
-  const totalResults = filteredGames.length;
-  const totalGames = games.length;
+  const totalResults = games.length;
 
   const handleFilterChange = (key, value) => {
+    if (key === 'search' || key === 'sourceType' || key === 'platform' || key === 'tag') {
+      setPage(0);
+      setGames([]);
+      setHasMore(true);
+    }
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  const resetFilters = () => setFilters(DEFAULT_FILTERS);
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    setPage(0);
+    setGames([]);
+    setHasMore(true);
+  };
 
   const handlePlay = (game) => {
     if (game.sourceType === 'ExternalLink' && game.externalUrl) {
@@ -186,7 +190,7 @@ export default function PlayNowPage() {
 
         {!loading && !error && (
           <div className="playnow-summary" role="status" aria-live="polite">
-            <span className="playnow-summary__count">{totalResults} / {totalGames} games match your filters</span>
+            <span className="playnow-summary__count">{totalResults}{hasMore ? '+' : ''} games loaded</span>
             {filters.search && (
               <span className="playnow-summary__hint">Currently filtering by “{filters.search}”</span>
             )}
@@ -194,7 +198,7 @@ export default function PlayNowPage() {
         )}
 
         <ul className="game-list playnow-list" aria-live="polite">
-          {filteredGames.map((game) => (
+          {games.map((game) => (
             <li key={game.id} className="game-item playnow-item">
               <div className="game-card__media playnow-media" aria-hidden="true">
                 {game.coverImage ? (
@@ -268,6 +272,25 @@ export default function PlayNowPage() {
             </li>
           )}
         </ul>
+
+        {!loading && games.length === 0 && (
+          <div className="empty-state">
+            <p>No games found for the current filters.</p>
+          </div>
+        )}
+
+        {hasMore && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+            <button
+              className={`btn-ghost ${loading ? 'is-loading' : ''}`}
+              type="button"
+              disabled={loading}
+              onClick={() => setPage((prev) => prev + 1)}
+            >
+              {loading ? 'Loading...' : 'Load More'}
+            </button>
+          </div>
+        )}
 
         {activeEmbed && (
           <div className="modal-overlay" role="dialog" aria-modal="true">

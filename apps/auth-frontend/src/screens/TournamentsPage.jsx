@@ -6,9 +6,11 @@ import ThreeBackground from '../components/ThreeBackground';
 import DashboardNav from '../components/DashboardNav';
 import './Tournaments.css';
 
+const PAGE_SIZE = 10;
+
 const GET_TOURNAMENTS = gql`
-  query GetTournaments {
-    tournaments {
+  query GetTournaments($tournamentLimit: Int, $tournamentOffset: Int, $gamesLimit: Int, $playersLimit: Int) {
+    tournaments(limit: $tournamentLimit, offset: $tournamentOffset) {
       id
       name
       game
@@ -32,11 +34,11 @@ const GET_TOURNAMENTS = gql`
         }
       }
     }
-    myGames {
+    myGames(limit: $gamesLimit, offset: 0) {
       id
       title
     }
-    players {
+    players(limit: $playersLimit, offset: 0) {
       id
       user {
         id
@@ -89,8 +91,17 @@ const EXTENDED_TOURNAMENT = {
 };
 
 export default function TournamentsPage() {
+  const [page, setPage] = useState(0);
+
   const { data, loading, error, refetch } = useQuery(GET_TOURNAMENTS, {
+    variables: {
+      tournamentLimit: PAGE_SIZE,
+      tournamentOffset: page * PAGE_SIZE,
+      gamesLimit: 50,
+      playersLimit: 50,
+    },
     fetchPolicy: 'cache-and-network',
+    notifyOnNetworkStatusChange: true,
   });
   const [form, setForm] = useState(EXTENDED_TOURNAMENT);
   const [expandedId, setExpandedId] = useState(null);
@@ -108,7 +119,7 @@ export default function TournamentsPage() {
     onCompleted: () => refetch(),
   });
 
-  if (loading) {
+  if (loading && !data) {
     return <div style={{ padding: 20, color: '#fff' }}>Loading…</div>;
   }
   if (error) {
@@ -116,6 +127,7 @@ export default function TournamentsPage() {
   }
 
   const tournaments = data?.tournaments ?? [];
+  const hasMoreTournaments = tournaments.length === PAGE_SIZE;
   const games = data?.myGames ?? [];
   const players = data?.players ?? [];
   const me = data?.me;
@@ -308,7 +320,32 @@ export default function TournamentsPage() {
           <button className="btn-ghost" type="button" onClick={() => refetch()}>
             Refresh
           </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn-ghost"
+              type="button"
+              disabled={page === 0 || loading}
+              onClick={() => setPage((prev) => Math.max(0, prev - 1))}
+            >
+              Prev
+            </button>
+            <button
+              className="btn-ghost"
+              type="button"
+              disabled={!hasMoreTournaments || loading}
+              onClick={() => setPage((prev) => prev + 1)}
+            >
+              Next
+            </button>
+          </div>
         </div>
+
+        {loading && <p style={{ color: '#aaa' }}>Loading tournaments...</p>}
+        {!loading && tournaments.length === 0 && (
+          <div className="empty-state">
+            <p>No tournaments available on this page.</p>
+          </div>
+        )}
 
         <ul className="game-list tournaments-list">
           {tournaments.map((tournament) => (

@@ -36,8 +36,8 @@ const bookmarkedPost = {
 describe('ProfilePage', () => {
   const baseMocks = () => {
     const meMock = { request: { query: ME_QUERY }, result: { data: { me: meData } } };
-    const myPostsMock = { request: { query: MY_POSTS }, result: { data: { myPosts: [myPost] } } };
-    const bookmarksMock = { request: { query: BOOKMARKED_POSTS }, result: { data: { bookmarkedPosts: [bookmarkedPost] } } };
+    const myPostsMock = { request: { query: MY_POSTS, variables: {} }, result: { data: { myPosts: [myPost] } } };
+    const bookmarksMock = { request: { query: BOOKMARKED_POSTS, variables: {} }, result: { data: { bookmarkedPosts: [bookmarkedPost] } } };
     // Duplicate each mock: cache-and-network fires a network request even when cache has data
     return [meMock, meMock, myPostsMock, myPostsMock, bookmarksMock, bookmarksMock];
   };
@@ -89,7 +89,7 @@ describe('ProfilePage', () => {
         request: { query: DELETE_POST, variables: { id: 'p1' } },
         result: () => { deleteCalled = true; return { data: { deletePost: true } }; },
       },
-      { request: { query: MY_POSTS }, result: { data: { myPosts: [] } } },
+      { request: { query: MY_POSTS, variables: {} }, result: { data: { myPosts: [] } } },
     ];
     renderWithProviders(<ProfilePage />, { mocks });
     await waitFor(() => screen.getByText('Elden Ring'));

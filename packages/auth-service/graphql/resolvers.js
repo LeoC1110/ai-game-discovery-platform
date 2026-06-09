@@ -11,6 +11,7 @@ import TournamentResult from '../models/TournamentResult.js';
 import { askAIAgent, clearAIHistory, getAIHistory, geminiHealthTest } from '../services/aiAgentService.js';
 import { loadStoredPreferences, upsertUserPreferences, clearUserPreferences } from '../services/userMemoryService.js';
 import { sendResetPasswordCodeEmail } from '../services/emailService.js';
+import { checkRateLimit, getClientIp } from '../middleware/rateLimit.js';
 import {
   signAuthToken,
   setAuthCookie,
@@ -57,6 +58,17 @@ const RESET_PASSWORD_PURPOSE = 'RESET_PASSWORD';
 const RESET_CODE_TTL_MS = 10 * 60 * 1000;
 const RESET_CODE_COOLDOWN_MS = 60 * 1000;
 const RESET_CODE_MAX_ATTEMPTS = 5;
+const DEFAULT_PAGE_LIMIT = 10;
+const MAX_PAGE_LIMIT = 50;
+const AI_MESSAGE_MAX_LENGTH = 1000;
+
+const LIMITS = {
+  register: { limit: 5, windowMs: 10 * 60 * 1000 },
+  login: { limit: 10, windowMs: 10 * 60 * 1000 },
+  sendPasswordResetCode: { limit: 5, windowMs: 10 * 60 * 1000 },
+  resetPasswordWithCode: { limit: 10, windowMs: 10 * 60 * 1000 },
+  askAI: { limit: 20, windowMs: 60 * 1000 },
+};
 
 const requireAdmin = (user) => {
   if (user?.role !== 'Admin') {
@@ -69,6 +81,107 @@ const requireAdmin = (user) => {
 const normalizeEmail = (email = '') => email.trim().toLowerCase();
 
 const isValidEmail = (email = '') => EMAIL_REGEX.test(email);
+
+const requireRateLimit = ({ req, bucket, key, limit, windowMs, message }) => {
+  const ip = getClientIp(req);
+  const composedKey = key ? `${ip}:${key}` : ip;
+  const result = checkRateLimit({ bucket, key: composedKey, limit, windowMs });
+  if (!result.allowed) {
+    throw new GraphQLError(message || 'Too many requests. Please try again later.', {
+      extensions: {
+        code: 'RATE_LIMITED',
+        retryAfterMs: result.retryAfterMs,
+      },
+    });
+  }
+};
+
+const toObjectIdString = (value) => (value?._id || value)?.toString?.() || String(value);
+
+const buildPagination = ({ limit = DEFAULT_PAGE_LIMIT, offset = 0 } = {}) => {
+  const safeLimit = Number(limit);
+  const safeOffset = Number(offset);
+  return {
+    cap: Number.isFinite(safeLimit)
+      ? Math.min(Math.max(1, Math.floor(safeLimit)), MAX_PAGE_LIMIT)
+      : DEFAULT_PAGE_LIMIT,
+    skip: Number.isFinite(safeOffset) ? Math.max(0, Math.floor(safeOffset)) : 0,
+  };
+};
+
+const buildPostFilter = ({ search, genre, platform, tag, postType } = {}) => {
+  const filter = {};
+  if (POST_TYPES.has(postType)) filter.postType = postType;
+  if (search) {
+    filter.$or = [
+      { title: { $regex: search, $options: 'i' } },
+      { review: { $regex: search, $options: 'i' } },
+      { tags: { $regex: search, $options: 'i' } },
+    ];
+  }
+  if (genre) filter.genre = { $regex: genre, $options: 'i' };
+  if (platform) filter.platform = { $regex: platform, $options: 'i' };
+  if (tag) filter.tags = tag;
+  return filter;
+};
+
+const buildPostSort = (sort = 'newest') => {
+  if (sort === 'rating') return { rating: -1, createdAt: -1 };
+  if (sort === 'likes') return { likesCountSort: -1, createdAt: -1 };
+  if (sort === 'comments') return { commentsCountSort: -1, createdAt: -1 };
+  if (sort === 'engagement') return { engagementScoreSort: -1, createdAt: -1 };
+  return { createdAt: -1 };
+};
+
+// Only pull the User fields that the GraphQL schema exposes; passwordHash etc. are never sent.
+const USER_SELECT = '_id username email role createdAt updatedAt';
+
+const populatePostQuery = (query) =>
+  query
+    .populate({ path: 'postedBy', select: USER_SELECT })
+    .populate({ path: 'comments.author', select: USER_SELECT })
+    .populate('likedBy', '_id')
+    .populate('bookmarkedBy', '_id');
+
+const fetchPostsPage = async ({ filter, sort, skip, cap }) => {
+  if (sort === 'likes' || sort === 'comments' || sort === 'engagement') {
+    const ids = await GamePost.aggregate([
+      { $match: filter },
+      {
+        $addFields: {
+          likesCountSort: { $size: { $ifNull: ['$likedBy', []] } },
+          commentsCountSort: { $size: { $ifNull: ['$comments', []] } },
+          bookmarksCountSort: { $size: { $ifNull: ['$bookmarkedBy', []] } },
+        },
+      },
+      {
+        $addFields: {
+          engagementScoreSort: {
+            $add: [
+              { $ifNull: ['$rating', 0] },
+              '$likesCountSort',
+              { $multiply: ['$commentsCountSort', 2] },
+              { $multiply: ['$bookmarksCountSort', 2] },
+            ],
+          },
+        },
+      },
+      { $sort: buildPostSort(sort) },
+      { $skip: skip },
+      { $limit: cap },
+      { $project: { _id: 1 } },
+    ]);
+
+    if (!ids.length) return [];
+    const orderedIds = ids.map((entry) => toObjectIdString(entry._id));
+    const posts = await populatePostQuery(GamePost.find({ _id: { $in: orderedIds } }));
+    const map = new Map(posts.map((post) => [toObjectIdString(post._id), post]));
+    return orderedIds.map((id) => map.get(id)).filter(Boolean);
+  }
+
+  const query = GamePost.find(filter).sort(buildPostSort(sort)).skip(skip).limit(cap);
+  return populatePostQuery(query);
+};
 
 const ensurePlayerForUser = async (userId) => {
   if (!userId) return null;
@@ -87,7 +200,7 @@ const getPlayerForUser = async (userId) => {
 
 const populateTournament = (doc) =>
   doc.populate([
-    { path: 'players', populate: { path: 'user' } },
+    { path: 'players', populate: { path: 'user', select: USER_SELECT } },
     { path: 'gameRef' },
   ]);
 
@@ -96,13 +209,13 @@ const populateResult = (doc) =>
     {
       path: 'tournament',
       populate: [
-        { path: 'players', populate: { path: 'user' } },
+        { path: 'players', populate: { path: 'user', select: USER_SELECT } },
         { path: 'gameRef' },
       ],
     },
-    { path: 'user' },
+    { path: 'user', select: USER_SELECT },
     { path: 'game' },
-    { path: 'submittedBy' },
+    { path: 'submittedBy', select: USER_SELECT },
   ]);
 
 const sanitizeGameInput = (input = {}) => {
@@ -333,30 +446,60 @@ export const resolvers = {
         createdAt: m.createdAt ? m.createdAt.toISOString?.() ?? String(m.createdAt) : null,
       }));
     },
-    myGames: async (_parent, _args, { user }) => {
+    myGames: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
-      const games = await Game.find({ user: current._id }).sort({ createdAt: -1 });
+      const { cap, skip } = buildPagination({ limit, offset });
+      const games = await Game.find({ user: current._id }).sort({ createdAt: -1 }).skip(skip).limit(cap);
       return games;
     },
-    getAllGames: async (_parent, _args, { user }) => {
+    getAllGames: async (_parent, {
+      search,
+      sourceType,
+      platform,
+      tag,
+      limit,
+      offset,
+    } = {}, { user }) => {
       requireUser(user);
-      const games = await Game.find()
+      const { cap, skip } = buildPagination({ limit, offset });
+      const filter = {};
+      if (sourceType && GAME_SOURCE_TYPES.has(sourceType)) filter.sourceType = sourceType;
+      if (platform) filter.platform = { $regex: platform, $options: 'i' };
+      if (tag) filter.tags = tag;
+      if (search) {
+        filter.$or = [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+          { genre: { $regex: search, $options: 'i' } },
+          { developer: { $regex: search, $options: 'i' } },
+        ];
+      }
+
+      const games = await Game.find(filter)
         .sort({ updatedAt: -1, createdAt: -1 })
-        .populate('user');
+        .skip(skip)
+        .limit(cap)
+        .populate({ path: 'user', select: USER_SELECT });
       return games;
     },
-    players: async (_parent, _args, { user }) => {
+    players: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
       await ensurePlayerForUser(current._id);
+      const { cap, skip } = buildPagination({ limit, offset });
       const list = await Player.find()
-        .populate('user')
-        .sort({ createdAt: -1 });
+        .populate({ path: 'user', select: USER_SELECT })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(cap);
       return list;
     },
-    tournaments: async (_parent, _args, { user }) => {
+    tournaments: async (_parent, { limit, offset } = {}, { user }) => {
       requireUser(user);
+      const { cap, skip } = buildPagination({ limit, offset });
       const list = await Tournament.find()
         .sort({ date: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(cap)
         .populate([
           { path: 'players', populate: { path: 'user' } },
           { path: 'gameRef' },
@@ -376,115 +519,102 @@ export const resolvers = {
         ]);
       return list;
     },
-    tournamentLeaderboard: async (_parent, { tournamentId, limit = 25 }, { user }) => {
+    tournamentLeaderboard: async (_parent, { tournamentId, limit, offset } = {}, { user }) => {
       requireUser(user);
+      const { cap, skip } = buildPagination({ limit, offset });
       const results = await TournamentResult.find({ tournament: tournamentId })
         .sort({ position: 1, score: -1, updatedAt: 1 })
-        .limit(Math.min(limit, 100))
+        .skip(skip)
+        .limit(cap)
         .populate([
           {
             path: 'tournament',
             populate: [{ path: 'gameRef' }],
           },
-          { path: 'user' },
+          { path: 'user', select: USER_SELECT },
           { path: 'game' },
-          { path: 'submittedBy' },
+          { path: 'submittedBy', select: USER_SELECT },
         ]);
       return results;
     },
-    gameLeaderboard: async (_parent, { gameId, limit = 25 }, { user }) => {
+    gameLeaderboard: async (_parent, { gameId, limit, offset } = {}, { user }) => {
       requireUser(user);
+      const { cap, skip } = buildPagination({ limit, offset });
       const results = await TournamentResult.find({ game: gameId })
         .sort({ position: 1, score: -1, updatedAt: 1 })
-        .limit(Math.min(limit, 100))
+        .skip(skip)
+        .limit(cap)
         .populate([
           {
             path: 'tournament',
             populate: [{ path: 'gameRef' }],
           },
-          { path: 'user' },
+          { path: 'user', select: USER_SELECT },
           { path: 'game' },
-          { path: 'submittedBy' },
+          { path: 'submittedBy', select: USER_SELECT },
         ]);
       return results;
     },
-    allPosts: async (_parent, { search, genre, platform, tag, sort, postType }, { user }) => {
+    allPosts: async (_parent, {
+      search,
+      genre,
+      platform,
+      tag,
+      sort,
+      postType,
+      limit,
+      offset,
+    } = {}, { user }) => {
       requireUser(user);
-      const filter = {};
-      if (POST_TYPES.has(postType)) filter.postType = postType;
-      if (search) filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { review: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } },
-      ];
-      if (genre) filter.genre = { $regex: genre, $options: 'i' };
-      if (platform) filter.platform = { $regex: platform, $options: 'i' };
-      if (tag) filter.tags = tag;
-      let query = GamePost.find(filter).populate('postedBy').populate({ path: 'comments.author' }).populate('likedBy', '_id').populate('bookmarkedBy', '_id');
-      if (sort === 'rating') query = query.sort({ rating: -1, createdAt: -1 });
-      else if (sort === 'likes') query = query.sort({ _likedByLength: -1, createdAt: -1 });
-      else query = query.sort({ createdAt: -1 });
-      const posts = await query;
-      if (sort === 'likes') posts.sort((a, b) => b.likedBy.length - a.likedBy.length);
-      if (sort === 'comments') posts.sort((a, b) => b.comments.length - a.comments.length);
+      const { cap, skip } = buildPagination({ limit, offset });
+      const filter = buildPostFilter({ search, genre, platform, tag, postType });
+      const posts = await fetchPostsPage({ filter, sort, skip, cap });
       return posts;
     },
-    pagedPosts: async (_parent, { search, genre, platform, tag, sort, postType, limit = 10, offset = 0 }, { user }) => {
+    pagedPosts: async (_parent, {
+      search,
+      genre,
+      platform,
+      tag,
+      sort,
+      postType,
+      limit,
+      offset,
+    } = {}, { user }) => {
       requireUser(user);
-      const cap = Math.min(Math.max(1, limit), 50);
-      const skip = Math.max(0, offset);
-      const filter = {};
-      if (POST_TYPES.has(postType)) filter.postType = postType;
-      if (search) filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { review: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } },
-      ];
-      if (genre) filter.genre = { $regex: genre, $options: 'i' };
-      if (platform) filter.platform = { $regex: platform, $options: 'i' };
-      if (tag) filter.tags = tag;
+      const { cap, skip } = buildPagination({ limit, offset });
+      const filter = buildPostFilter({ search, genre, platform, tag, postType });
       const totalCount = await GamePost.countDocuments(filter);
-      const baseQuery = GamePost.find(filter)
-        .populate('postedBy')
-        .populate({ path: 'comments.author' })
-        .populate('likedBy', '_id')
-        .populate('bookmarkedBy', '_id');
-      let posts;
-      if (sort === 'likes' || sort === 'comments') {
-        // In-memory sort — correct for small datasets
-        const all = await baseQuery.sort({ createdAt: -1 });
-        if (sort === 'likes') all.sort((a, b) => b.likedBy.length - a.likedBy.length);
-        else all.sort((a, b) => b.comments.length - a.comments.length);
-        posts = all.slice(skip, skip + cap);
-      } else if (sort === 'rating') {
-        posts = await baseQuery.sort({ rating: -1, createdAt: -1 }).skip(skip).limit(cap);
-      } else {
-        posts = await baseQuery.sort({ createdAt: -1 }).skip(skip).limit(cap);
-      }
+      const posts = await fetchPostsPage({ filter, sort, skip, cap });
       return { posts, totalCount };
     },
-    myPosts: async (_parent, _args, { user }) => {
+    myPosts: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
+      const { cap, skip } = buildPagination({ limit, offset });
       return GamePost.find({ postedBy: current._id })
         .populate('postedBy')
         .populate({ path: 'comments.author' })
         .populate('likedBy', '_id')
         .populate('bookmarkedBy', '_id')
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(cap);
     },
-    bookmarkedPosts: async (_parent, _args, { user }) => {
+    bookmarkedPosts: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
+      const { cap, skip } = buildPagination({ limit, offset });
       return GamePost.find({ bookmarkedBy: current._id })
         .populate('postedBy')
         .populate({ path: 'comments.author' })
         .populate('likedBy', '_id')
         .populate('bookmarkedBy', '_id')
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(cap);
     },
-    pagedBookmarks: async (_parent, { limit = 8, offset = 0 }, { user }) => {
+    pagedBookmarks: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
-      const cap = Math.min(Math.max(1, limit), 50);
-      const skip = Math.max(0, offset);
+      const { cap, skip } = buildPagination({ limit, offset });
       const filter = { bookmarkedBy: current._id };
       const totalCount = await GamePost.countDocuments(filter);
       const posts = await GamePost.find(filter)
@@ -521,17 +651,38 @@ export const resolvers = {
         users = await User.find({ username: { $regex: q, $options: 'i' } }).limit(20);
       }
 
-      return Promise.all(users.map(async (u) => {
-        const userId = u._id;
-        const [userPosts, bookmarkCount] = await Promise.all([
-          GamePost.find({ postedBy: userId }).select('likedBy comments'),
-          GamePost.countDocuments({ bookmarkedBy: userId }),
-        ]);
+      // Batch: 2 queries total regardless of how many users matched, replacing the previous N*2 pattern.
+      const userIds = users.map((u) => u._id);
+      const [allUserPosts, bookmarkAgg] = await Promise.all([
+        GamePost.find({ postedBy: { $in: userIds } }).select('postedBy likedBy comments').lean(),
+        GamePost.aggregate([
+          { $match: { bookmarkedBy: { $in: userIds } } },
+          { $unwind: '$bookmarkedBy' },
+          { $match: { bookmarkedBy: { $in: userIds } } },
+          { $group: { _id: '$bookmarkedBy', count: { $sum: 1 } } },
+        ]),
+      ]);
+
+      const postsByUserId = {};
+      for (const post of allUserPosts) {
+        const uid = String(post.postedBy);
+        if (!postsByUserId[uid]) postsByUserId[uid] = [];
+        postsByUserId[uid].push(post);
+      }
+      const bookmarkCountByUserId = {};
+      for (const entry of bookmarkAgg) {
+        bookmarkCountByUserId[String(entry._id)] = entry.count;
+      }
+
+      return users.map((u) => {
+        const uid = String(u._id);
+        const userPosts = postsByUserId[uid] || [];
         const postCount = userPosts.length;
         const likesReceived = userPosts.reduce((acc, p) => acc + (p.likedBy?.length || 0), 0);
         const commentCount = userPosts.reduce((acc, p) => acc + (p.comments?.length || 0), 0);
+        const bookmarkCount = bookmarkCountByUserId[uid] || 0;
         return {
-          id: userId.toString(),
+          id: uid,
           username: u.username,
           postCount,
           bookmarkCount,
@@ -540,7 +691,7 @@ export const resolvers = {
           posts: null,
           bookmarkedPosts: null,
         };
-      }));
+      });
     },
 
     publicUserProfile: async (_parent, { id }, { user }) => {
@@ -580,19 +731,21 @@ export const resolvers = {
         bookmarkedPosts: bookmarkedByUser,
       };
     },
-    myRecentResults: async (_parent, { limit = 10 }, { user }) => {
+    myRecentResults: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
+      const { cap, skip } = buildPagination({ limit, offset });
       const results = await TournamentResult.find({ user: current._id })
         .sort({ submittedAt: -1, updatedAt: -1 })
-        .limit(Math.min(limit, 50))
+        .skip(skip)
+        .limit(cap)
         .populate([
           {
             path: 'tournament',
             populate: [{ path: 'gameRef' }],
           },
-          { path: 'user' },
+          { path: 'user', select: USER_SELECT },
           { path: 'game' },
-          { path: 'submittedBy' },
+          { path: 'submittedBy', select: USER_SELECT },
         ]);
       return results;
     },
@@ -608,10 +761,19 @@ export const resolvers = {
     },
   },
   Mutation: {
-    register: async (_parent, { input }, { res }) => {
+    register: async (_parent, { input }, { res, req } = {}) => {
       const { username, email, password, role } = input;
       const usernameNorm = normalizeName(username);
       const emailNorm = normalizeEmail(email);
+
+      requireRateLimit({
+        req,
+        bucket: 'mutation-register',
+        key: emailNorm || usernameNorm || 'anonymous',
+        ...LIMITS.register,
+        message: 'Too many registration attempts. Please wait and try again.',
+      });
+
       if (!usernameNorm || !emailNorm || !password) {
         return { ok: false, message: 'Missing required fields', token: null, user: null };
       }
@@ -635,9 +797,18 @@ export const resolvers = {
 
       return authSuccess(user, res, 'Registration successful');
     },
-    login: async (_parent, { identifier, password }, { res }) => {
+    login: async (_parent, { identifier, password }, { res, req } = {}) => {
       const lookup = (identifier || '').trim();
       const lookupEmail = normalizeEmail(lookup);
+
+      requireRateLimit({
+        req,
+        bucket: 'mutation-login',
+        key: lookupEmail || lookup || 'anonymous',
+        ...LIMITS.login,
+        message: 'Too many login attempts. Please wait and try again.',
+      });
+
       if (!lookup || !password) {
         return { ok: false, message: 'Invalid credentials', token: null, user: null };
       }
@@ -662,11 +833,25 @@ export const resolvers = {
       clearAuthCookie(res);
       return true;
     },
-    askAI: async (_parent, { message }, { user }) => {
+    askAI: async (_parent, { message }, { user, req } = {}) => {
       const current = requireUser(user);
       const trimmed = (message || '').trim();
+
+      requireRateLimit({
+        req,
+        bucket: 'mutation-ask-ai',
+        key: current._id?.toString() || 'anonymous',
+        ...LIMITS.askAI,
+        message: 'Too many AI requests. Please wait and try again.',
+      });
+
       if (!trimmed) {
         throw new GraphQLError('Message cannot be empty', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+      if (trimmed.length > AI_MESSAGE_MAX_LENGTH) {
+        throw new GraphQLError(`Message is too long (max ${AI_MESSAGE_MAX_LENGTH} characters).`, {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
       }
       try {
         return await askAIAgent({
@@ -675,6 +860,12 @@ export const resolvers = {
           message: trimmed,
         });
       } catch (err) {
+        if (err instanceof GraphQLError) {
+          throw err;
+        }
+        if (err?.code === 'BAD_USER_INPUT') {
+          throw new GraphQLError(err.message, { extensions: { code: 'BAD_USER_INPUT' } });
+        }
         // Log the real error on the server before sending a safe message to the client
         console.error('[Resolver] askAI error — name:', err?.name, '| message:', err?.message);
         const msg = err?.message ?? 'AI Agent is unavailable. Please try again later.';
@@ -728,8 +919,17 @@ export const resolvers = {
       await user.save();
       return authSuccess(user, res, 'Password changed successfully.');
     },
-    sendPasswordResetCode: async (_parent, { email }) => {
+    sendPasswordResetCode: async (_parent, { email }, { req } = {}) => {
       const normalizedEmail = normalizeEmail(email);
+
+      requireRateLimit({
+        req,
+        bucket: 'mutation-send-reset-code',
+        key: normalizedEmail || 'anonymous',
+        ...LIMITS.sendPasswordResetCode,
+        message: 'Too many reset code requests. Please wait and try again.',
+      });
+
       if (!isValidEmail(normalizedEmail)) {
         throw new GraphQLError('Please provide a valid email address.', {
           extensions: { code: 'BAD_USER_INPUT' },
@@ -779,7 +979,6 @@ export const resolvers = {
       // EMAIL_DEMO_MODE: skip SMTP entirely and return code directly in response.
       // Set EMAIL_DEMO_MODE=true in Railway env vars when SMTP is unavailable.
       if (process.env.EMAIL_DEMO_MODE === 'true') {
-        console.log(`[Email] DEMO MODE — code for ${normalizedEmail}: ${code}`);
         return { ok: true, demoCode: code };
       }
 
@@ -805,11 +1004,20 @@ export const resolvers = {
     resetPasswordWithCode: async (
       _parent,
       { email, code, newPassword, confirmPassword },
+      { req } = {},
     ) => {
       const normalizedEmail = normalizeEmail(email);
       const sanitizedCode = (code || '').trim();
       const nextPassword = (newPassword || '').trim();
       const nextConfirmPassword = (confirmPassword || '').trim();
+
+      requireRateLimit({
+        req,
+        bucket: 'mutation-reset-password-with-code',
+        key: normalizedEmail || 'anonymous',
+        ...LIMITS.resetPasswordWithCode,
+        message: 'Too many password reset attempts. Please wait and try again.',
+      });
 
       if (!isValidEmail(normalizedEmail)) {
         throw new GraphQLError('Please provide a valid email address.', {

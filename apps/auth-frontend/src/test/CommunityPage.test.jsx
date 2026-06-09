@@ -3,7 +3,7 @@ import React from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './helpers';
 import CommunityPage from '../screens/CommunityPage';
-import { ALL_POSTS, LIKE_POST, TOGGLE_BOOKMARK, DELETE_POST, FEATURE_POST } from '../gql/gamePosts';
+import { PAGED_POSTS, LIKE_POST, TOGGLE_BOOKMARK, DELETE_POST, FEATURE_POST } from '../gql/gamePosts';
 import { gql } from '@apollo/client';
 
 const ME_QUERY = gql`query MeCommunity { me { id username role } }`;
@@ -36,16 +36,27 @@ const makePosts = (overrides = []) => [
   },
 ];
 
-const allPostsMock = (posts, variables = {}) => ({
-  request: { query: ALL_POSTS, variables: { search: undefined, genre: undefined, platform: undefined, sort: 'newest', ...variables } },
-  result: { data: { allPosts: posts } },
+const pagedPostsMock = (posts, variables = {}) => ({
+  request: {
+    query: PAGED_POSTS,
+    variables: {
+      search: undefined,
+      genre: undefined,
+      platform: undefined,
+      sort: 'newest',
+      limit: 10,
+      offset: 0,
+      ...variables,
+    },
+  },
+  result: { data: { pagedPosts: { posts, totalCount: posts.length } } },
 });
 
 describe('CommunityPage — layout & post rendering', () => {
   test('renders page heading and search filters', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     expect(screen.getByText('Community')).toBeInTheDocument();
@@ -57,7 +68,7 @@ describe('CommunityPage — layout & post rendering', () => {
   test('renders post titles after data loads', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => {
@@ -69,7 +80,7 @@ describe('CommunityPage — layout & post rendering', () => {
   test('shows Featured badge on featured posts', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => {
@@ -80,7 +91,7 @@ describe('CommunityPage — layout & post rendering', () => {
   test('shows empty state when no posts', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
-      allPostsMock([]),
+      pagedPostsMock([]),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => {
@@ -93,7 +104,7 @@ describe('CommunityPage — Player permissions', () => {
   test('Player sees Like, Bookmark and View buttons', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => screen.getByText('Elden Ring'));
@@ -104,7 +115,7 @@ describe('CommunityPage — Player permissions', () => {
   test('Player sees Edit and Delete only on own posts', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: playerMe } } }, // alice = u1
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => screen.getByText('Elden Ring')); // owned by alice
@@ -117,7 +128,7 @@ describe('CommunityPage — Player permissions', () => {
   test('Player does NOT see Feature button', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => screen.getByText('Elden Ring'));
@@ -130,7 +141,7 @@ describe('CommunityPage — Admin permissions', () => {
   test('Admin sees Delete button on all posts', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: adminMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => screen.getByText('Elden Ring'));
@@ -141,7 +152,7 @@ describe('CommunityPage — Admin permissions', () => {
   test('Admin sees Feature button on unfeatured posts', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: adminMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => screen.getByText('Elden Ring'));
@@ -151,7 +162,7 @@ describe('CommunityPage — Admin permissions', () => {
   test('Admin sees Unfeature button on featured posts', async () => {
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: adminMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => screen.getByText('Hollow Knight'));
@@ -164,12 +175,12 @@ describe('CommunityPage — interactions', () => {
     let likeCalled = false;
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
       {
         request: { query: LIKE_POST, variables: { id: 'p1' } },
         result: () => { likeCalled = true; return { data: { likePost: { id: 'p1', likesCount: 6, isLikedByMe: true } } }; },
       },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => screen.getByText('Elden Ring'));
@@ -183,12 +194,12 @@ describe('CommunityPage — interactions', () => {
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: adminMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
       {
         request: { query: DELETE_POST, variables: { id: 'p1' } },
         result: () => { deleteCalled = true; return { data: { deletePost: true } }; },
       },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
     ];
     renderWithProviders(<CommunityPage />, { mocks });
     await waitFor(() => screen.getByText('Elden Ring'));
@@ -202,7 +213,7 @@ describe('CommunityPage — interactions', () => {
     vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
     const mocks = [
       { request: { query: ME_QUERY }, result: { data: { me: adminMe } } },
-      allPostsMock(makePosts()),
+      pagedPostsMock(makePosts()),
       {
         request: { query: DELETE_POST, variables: { id: 'p1' } },
         result: () => { deleteCalled = true; return { data: { deletePost: true } }; },

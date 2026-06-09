@@ -19,5 +19,7 @@ const TournamentResultSchema = new Schema(
 TournamentResultSchema.index({ tournament: 1, score: -1 });
 TournamentResultSchema.index({ game: 1, score: -1 });
 TournamentResultSchema.index({ user: 1, createdAt: -1 });
+TournamentResultSchema.index({ tournament: 1, position: 1, score: -1, updatedAt: 1 });
+TournamentResultSchema.index({ game: 1, position: 1, score: -1, updatedAt: 1 });
 
 export default mongoose.model('TournamentResult', TournamentResultSchema);
