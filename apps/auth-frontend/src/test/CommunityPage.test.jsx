@@ -3,7 +3,7 @@ import React from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './helpers';
 import CommunityPage from '../screens/CommunityPage';
-import { PAGED_POSTS, LIKE_POST, TOGGLE_BOOKMARK, DELETE_POST, FEATURE_POST } from '../gql/gamePosts';
+import { PAGED_POSTS, LIKE_POST, TOGGLE_BOOKMARK, DELETE_POST, FEATURE_POST, RATE_POST } from '../gql/gamePosts';
 import { gql } from '@apollo/client';
 
 const ME_QUERY = gql`query MeCommunity { me { id username role } }`;
@@ -75,6 +75,7 @@ describe('CommunityPage — layout & post rendering', () => {
       expect(screen.getByText('Elden Ring')).toBeInTheDocument();
       expect(screen.getByText('Hollow Knight')).toBeInTheDocument();
     });
+    expect(screen.queryByText(/author rating:/i)).toBeNull();
   });
 
   test('shows Featured badge on featured posts', async () => {
@@ -187,6 +188,40 @@ describe('CommunityPage — interactions', () => {
     const likeButtons = screen.getAllByTitle('Like');
     fireEvent.click(likeButtons[0]);
     await waitFor(() => expect(likeCalled).toBe(true));
+  });
+
+  test('non-owner can rate from card popover and UI updates immediately', async () => {
+    const mocks = [
+      { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
+      pagedPostsMock(makePosts()),
+      {
+        request: { query: RATE_POST, variables: { postId: 'p2', score: 7 } },
+        result: {
+          data: {
+            ratePost: {
+              __typename: 'GamePost',
+              id: 'p2',
+              rating: 9,
+              authorRating: 9,
+              communityRating: 7,
+              ratingCount: 1,
+              myCommunityRating: 7,
+            },
+          },
+        },
+      },
+    ];
+    renderWithProviders(<CommunityPage />, { mocks });
+    await waitFor(() => screen.getByText('Hollow Knight'));
+
+    fireEvent.click(screen.getByTitle('Rate this game'));
+    fireEvent.click(screen.getByRole('button', { name: '7' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Community Rating: 7.0/10 ⭐')).toBeInTheDocument();
+      expect(screen.getByText('(1)')).toBeInTheDocument();
+    });
   });
 
   test('confirming delete fires DELETE_POST mutation', async () => {

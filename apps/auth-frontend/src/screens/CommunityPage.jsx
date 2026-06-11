@@ -36,10 +36,37 @@ const PLATFORM_OPTIONS = [
   'Web Browser', 'Steam Deck', 'Other',
 ];
 
-function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, onEdit, onFeature }) {
+function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, onEdit, onFeature, onRate }) {
   const isOwner = currentUser?.id === post.postedBy?.id;
   const isAdmin = currentUser?.role === 'Admin';
   const isIdea = post.postType === 'IDEA';
+  const canRate = Boolean(currentUser?.id) && !isOwner && !isIdea;
+  const [showRatePopover, setShowRatePopover] = useState(false);
+  const [ratingValue, setRatingValue] = useState(post.myCommunityRating != null ? String(post.myCommunityRating) : '');
+  const [ratingError, setRatingError] = useState(null);
+  const [savingRating, setSavingRating] = useState(false);
+
+  useEffect(() => {
+    setRatingValue(post.myCommunityRating != null ? String(post.myCommunityRating) : '');
+  }, [post.myCommunityRating]);
+
+  const submitCardRating = async () => {
+    const score = Number(ratingValue);
+    if (!Number.isInteger(score) || score < 1 || score > 10) {
+      setRatingError('Rating must be an integer from 1 to 10.');
+      return;
+    }
+    setSavingRating(true);
+    setRatingError(null);
+    try {
+      await onRate(post.id, score);
+      setShowRatePopover(false);
+    } catch (err) {
+      setRatingError(err?.message || 'Unable to submit rating.');
+    } finally {
+      setSavingRating(false);
+    }
+  };
 
   return (
     <div className={`community-card card ${isIdea ? 'community-card--idea' : ''}`}>
@@ -72,14 +99,59 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
           )}
           {!isIdea && (
             <PostRatingSummary
-              authorRating={post.authorRating}
               communityRating={post.communityRating}
               ratingCount={post.ratingCount}
+              interactive
+              disabled={!canRate}
+              onCommunityClick={() => {
+                if (!canRate) return;
+                setRatingError(null);
+                setShowRatePopover((prev) => !prev);
+              }}
               align="end"
               compact
             />
           )}
         </div>
+        {!isIdea && showRatePopover && canRate && (
+          <div className="community-rating-popover" role="dialog" aria-label="Rate this game">
+            <p className="community-rating-popover__title">Rate this game</p>
+            <div className="community-rating-popover__grid">
+              {Array.from({ length: 10 }, (_entry, idx) => {
+                const value = String(idx + 1);
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`community-rating-popover__score ${ratingValue === value ? 'community-rating-popover__score--active' : ''}`}
+                    onClick={() => setRatingValue(value)}
+                  >
+                    {value}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="community-rating-popover__actions">
+              <button
+                type="button"
+                className={`btn-primary ${savingRating ? 'is-loading' : ''}`}
+                disabled={savingRating}
+                aria-busy={savingRating}
+                onClick={submitCardRating}
+              >
+                {savingRating ? 'Saving…' : post.myCommunityRating != null ? 'Update' : 'Submit'}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setShowRatePopover(false)}
+              >
+                Cancel
+              </button>
+            </div>
+            {ratingError && <p className="msg-error msg-error--spaced">{ratingError}</p>}
+          </div>
+        )}
         {!isIdea && (
           <div className="community-card__meta">
             {post.genre && <span className="badge">{post.genre}</span>}
@@ -286,6 +358,7 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
   const [ratingError, setRatingError] = useState(null);
   const isAdmin = currentUser?.role === 'Admin';
   const isIdea = post.postType === 'IDEA';
+  const isOwner = currentUser?.id === post.postedBy?.id;
 
   const formatCommentDate = (iso) => {
     if (!iso) return '';
@@ -345,7 +418,6 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
         )}
         {!isIdea && (
           <PostRatingSummary
-            authorRating={post.authorRating}
             communityRating={post.communityRating}
             ratingCount={post.ratingCount}
             myCommunityRating={post.myCommunityRating}
@@ -376,7 +448,7 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
           · ♥ {post.likesCount} · 💬 {post.commentsCount}
         </p>
 
-        {!isIdea && (
+        {!isIdea && !isOwner && (
           <div className="card" style={{ padding: 16, marginBottom: 18, background: 'rgba(255,255,255,0.03)' }}>
             <p style={{ margin: '0 0 10px', fontWeight: 600 }}>Your Community Rating</p>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -403,6 +475,11 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
             </div>
             {ratingError && <p className="msg-error msg-error--spaced">{ratingError}</p>}
           </div>
+        )}
+        {!isIdea && isOwner && (
+          <p style={{ margin: '0 0 14px', color: '#9a9aa3', fontSize: 13 }}>
+            You cannot rate your own post.
+          </p>
         )}
 
         <h4 className="community-modal__comments-title">Comments ({post.commentsCount})</h4>
@@ -526,6 +603,7 @@ export default function CommunityPage() {
   const [featurePost] = useMutation(FEATURE_POST, {
     onCompleted: ({ featurePost: updated }) => patchPost(updated),
   });
+  const [ratePost] = useMutation(RATE_POST);
 
   const handleDelete = (id) => {
     if (!window.confirm('Delete this post?')) return;
@@ -540,6 +618,12 @@ export default function CommunityPage() {
 
   const handleFeature = (id, featured) => {
     featurePost({ variables: { id, featured } });
+  };
+
+  const handleRate = async (postId, score) => {
+    const { data } = await ratePost({ variables: { postId, score } });
+    if (data?.ratePost) patchPost(data.ratePost);
+    return data?.ratePost;
   };
 
   // Always derive the modal's post from the live posts array so comments stay fresh
@@ -627,6 +711,7 @@ export default function CommunityPage() {
               onDelete={handleDelete}
               onEdit={(p) => setEditingPost(p)}
               onFeature={handleFeature}
+              onRate={handleRate}
             />
           ))}
         </div>

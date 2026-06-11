@@ -1349,6 +1349,11 @@ export const resolvers = {
       if (!post || post.postType !== 'GAME') {
         throw new GraphQLError('Game post not found', { extensions: { code: 'NOT_FOUND' } });
       }
+      if (post.postedBy?.toString() === current._id.toString()) {
+        throw new GraphQLError('You cannot rate your own post', {
+          extensions: { code: 'FORBIDDEN' },
+        });
+      }
 
       await CommunityRating.findOneAndUpdate(
         { postId: post._id, userId: current._id },
