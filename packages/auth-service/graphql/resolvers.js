@@ -18,6 +18,7 @@ import {
   getWeightedCommunityRating,
 } from '../services/communityRatingService.js';
 import { loadStoredPreferences, upsertUserPreferences, clearUserPreferences } from '../services/userMemoryService.js';
+import { invalidateTitlesCache } from '../ai/validatorAgent.js';
 import { sendResetPasswordCodeEmail } from '../services/emailService.js';
 import { checkRateLimit, getClientIp } from '../middleware/rateLimit.js';
 import {
@@ -1294,6 +1295,7 @@ export const resolvers = {
       await post.populate({ path: 'comments.author' });
       await post.populate('likedBy', '_id');
       await post.populate('bookmarkedBy', '_id');
+      invalidateTitlesCache();
       return attachCommunityRatingDataToPost(post, current._id);
     },
     deletePost: async (_parent, { id }, { user }) => {
@@ -1305,6 +1307,7 @@ export const resolvers = {
       }
       await GamePost.findByIdAndDelete(id);
       await CommunityRating.deleteMany({ postId: id });
+      invalidateTitlesCache();
       return true;
     },
     editPost: async (_parent, { id, input }, { user }) => {
@@ -1343,6 +1346,7 @@ export const resolvers = {
       await post.populate({ path: 'comments.author' });
       await post.populate('likedBy', '_id');
       await post.populate('bookmarkedBy', '_id');
+      invalidateTitlesCache();
       return attachCommunityRatingDataToPost(post, current._id);
     },
     ratePost: async (_parent, { postId, score }, { user }) => {

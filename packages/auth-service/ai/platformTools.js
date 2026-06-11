@@ -1,6 +1,7 @@
 // packages/auth-service/ai/platformTools.js
-// Data-fetching functions keyed to router intents.
-// Reuses the existing GamePost Mongoose model — no new DB dependencies.
+// Context Ingestion Layer — Fetches real-time structured data 
+// from MongoDB and external APIs based on intercepted routing intents.
+
 import mongoose from 'mongoose';
 import GamePost from '../models/GamePost.js';
 import { attachCommunityRatingData, calculateTrendScore } from '../services/communityRatingService.js';
@@ -10,7 +11,11 @@ const isProduction = process.env.NODE_ENV === 'production';
 const LOW_RATING_MAX_SCORE = 6;
 const DEFAULT_LOW_RATING_MIN_COUNT = Math.max(1, parseInt(process.env.LOW_RATING_MIN_COUNT ?? '2', 10));
 
-// ── Shared post formatter (mirrors the one in aiAgentService.js) ─────────────
+/**
+ * Shared post formatter to convert Mongoose documents into high-density tokens for LLM parsing.
+ * @param {object} p Enriched post item
+ * @returns {string} Fully formatted text line
+ */
 function formatPost(p) {
   const communityRatingLine = p.communityRating != null
     ? `Community Rating: ${p.communityRating.toFixed(1)}/10 · ${p.ratingCount} ${p.ratingCount === 1 ? 'rating' : 'ratings'}`
@@ -28,6 +33,9 @@ function formatPost(p) {
   );
 }
 
+/**
+ * Base data-loader abstraction layer interfacing directly with the GamePost aggregation pipeline.
+ */
 async function loadPlatformPosts({ filter = {}, sort = { createdAt: -1 }, limit = 10, userId } = {}) {
   const posts = await GamePost.find(filter)
     .sort(sort)
@@ -45,12 +53,15 @@ export async function getMyBookmarks(userId) {
   return `Bookmarked games (${ratedPosts.length}):\n` + ratedPosts.map(formatPost).join('\n');
 }
 
-/** Fetch the most recent community posts. */
-export async function getCommunityPosts(limit = 10) {
+/** Fetch the most recent community games. */
+export async function getRecentCommunityPosts(limit = 10) {
   const ratedPosts = await loadPlatformPosts({ sort: { createdAt: -1 }, limit });
   if (!ratedPosts.length) return 'No community posts found.';
   return `Recent community posts (${ratedPosts.length}):\n` + ratedPosts.map(formatPost).join('\n');
 }
+
+// Backward-compatible alias for older callers.
+export const getCommunityPosts = getRecentCommunityPosts;
 
 /** Fetch games sorted by rating (highest first). */
 export async function getTopRatedGames(limit = 10) {
@@ -69,7 +80,7 @@ export async function getTopRatedGames(limit = 10) {
 
 /**
  * Fetch low-rated games sorted by community rating ascending.
- * "Low rating" means community rating <= LOW_RATING_MAX_SCORE.
+ * "Low rating" implies an evaluation benchmark <= LOW_RATING_MAX_SCORE.
  */
 export async function getLowRatedGames({
   limit = 10,
@@ -106,8 +117,8 @@ export async function getLowRatedGames({
   );
 }
 
-/** Fetch games sorted by community trend score. */
-export async function getTrendingPosts(limit = 10) {
+/** Fetch community games sorted by trend score. */
+export async function getTrendingCommunityPosts(limit = 10) {
   const posts = await loadPlatformPosts({ filter: { postType: 'GAME' }, limit: limit * 4 });
   posts.sort((a, b) =>
     calculateTrendScore({
@@ -130,9 +141,11 @@ export async function getTrendingPosts(limit = 10) {
   return `Trending community posts (${topPosts.length}):\n` + topPosts.map(formatPost).join('\n');
 }
 
-/** Fetch games sorted by likes (most-liked first). */
-export async function getMostLikedPosts(limit = 10) {
-  // Over-fetch then sort in JS (MongoDB can't sort by array length without aggregation)
+// Backward-compatible alias for older callers.
+export const getTrendingPosts = getTrendingCommunityPosts;
+
+/** Fetch games sorted by community engagement (most-engaged first). */
+export async function getMostEngagedPosts(limit = 10) {
   const ratedPosts = await loadPlatformPosts({ limit: limit * 3 });
   ratedPosts.sort((a, b) =>
     calculateTrendScore({
@@ -152,11 +165,14 @@ export async function getMostLikedPosts(limit = 10) {
   );
   const top = ratedPosts.slice(0, limit);
   if (!top.length) return 'No posts found.';
-  return `Most-liked posts (${top.length}):\n` + top.map(formatPost).join('\n');
+  return `Most-engaged posts (${top.length}):\n` + top.map(formatPost).join('\n');
 }
 
+// Backward-compatible alias for older callers.
+export const getMostLikedPosts = getMostEngagedPosts;
+
 // ── Web search rate limiter (protects Tavily free-tier quota) ────────────────
-// Free tier: 1 000 calls / month — 30/day global, 3/hour per user.
+// Allocations: 1,000 calls/month — 30/day global ceiling, 3/hour threshold per individual profile.
 const _webSearchLimiter = {
   GLOBAL_DAILY_LIMIT: 30,
   PER_USER_HOURLY_LIMIT: 3,
@@ -188,8 +204,8 @@ const _webSearchLimiter = {
 };
 
 /**
- * Tavily web search — only called when TAVILY_API_KEY is set.
- * Returns formatted result text, or empty string on failure / rate limit.
+ * Tavily search processor — triggered exclusively when canonical tokens are bound to process.env.
+ * Prevents hallucinations by importing auxiliary grounding metadata.
  */
 export async function searchWeb(query, userId = 'global') {
   const check = _webSearchLimiter.check(String(userId));
@@ -220,7 +236,7 @@ export async function searchWeb(query, userId = 'global') {
   }
   if (!data.results?.length && !data.answer) return '';
   let output = `Web search results for "${query}":\n`;
-  // Tavily's direct answer is the most token-efficient summary — use it first
+  
   if (data.answer) {
     output += `Summary: ${data.answer}\n\n`;
   }
@@ -233,20 +249,13 @@ export async function searchWeb(query, userId = 'global') {
 }
 
 /**
- * Select and fetch the platform data most relevant to the classified intent.
+ * Core Orchestration Router — Dynamically binds intent scopes to matching data access sub-handlers.
+ * Combines collections to optimize context injection values for answer agents.
  *
- * Routing:
- *   bookmark_analysis   → getMyBookmarks
- *   community_summary   → low-rated games + trending posts
- *   leaderboard_query   → low-rated games + top-rated games
- *   low_rating_query    → getLowRatedGames
- *   game_recommendation → bookmarks + most-liked community posts
- *   general_chat        → Tavily web search (if TAVILY_API_KEY is set), else empty
- *
- * @param {string} intent      - one of the INTENTS constants
- * @param {string} userId
- * @param {string} userMessage - used as web-search query for general_chat
- * @returns {Promise<string>} formatted platform data for prompt injection
+ * @param {string} intent One of the structural INTENTS constants exported by routerAgent
+ * @param {string} userId Unique identity identifier mapping
+ * @param {string} userMessage Raw message string for web-search compilation
+ * @returns {Promise<string>} Concatenated context segments
  */
 export async function fetchDataForIntent(intent, userId, userMessage = '') {
   try {
@@ -257,7 +266,7 @@ export async function fetchDataForIntent(intent, userId, userMessage = '') {
       case INTENTS.COMMUNITY_SUMMARY:
         return [
           await getLowRatedGames(),
-          await getTrendingPosts(),
+          await getTrendingCommunityPosts(),
         ].join('\n\n');
 
       case INTENTS.LEADERBOARD_QUERY:
@@ -272,12 +281,11 @@ export async function fetchDataForIntent(intent, userId, userMessage = '') {
       case INTENTS.GAME_RECOMMENDATION: {
         const [bookmarks, community] = await Promise.all([
           getMyBookmarks(userId),
-          getMostLikedPosts(5),
+          getMostEngagedPosts(5),
         ]);
         let result = `${bookmarks}\n\n${community}`;
 
-        // Supplement with a web search when the user asks for something
-        // specific (e.g. a genre, play-style) that may not exist on the platform.
+        // Augment with internet snapshots if specific variables cross knowledge-base structures
         if (process.env.TAVILY_API_KEY && userMessage.trim()) {
           const webData = await searchWeb(`best ${userMessage}`, userId).catch(() => '');
           if (webData) {
@@ -292,7 +300,6 @@ export async function fetchDataForIntent(intent, userId, userMessage = '') {
 
       case INTENTS.GENERAL_CHAT:
       default:
-        // Web search for factual questions when Tavily is configured
         if (process.env.TAVILY_API_KEY && userMessage.trim()) {
           return await searchWeb(userMessage, userId).catch(() => '');
         }

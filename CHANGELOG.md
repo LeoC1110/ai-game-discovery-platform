@@ -5,6 +5,40 @@ New features and updates should be added under the relevant version or date sect
 
 ---
 
+## [2026-06-11] — Nova Streaming UX, SSE Pipeline, and AI Smoke Tests
+
+### `AgentPage.jsx` — Visible Progress and Streaming Response UI
+
+The Nova chat experience now shows user-visible progress during generation and can render streamed response text as it arrives.
+
+- Added a dedicated SSE client service in `apps/auth-frontend/src/services/aiStreamClient.js`
+- The chat UI now shows staged progress messages while Nova is analyzing, loading platform data, matching games, and generating recommendations
+- The frontend still keeps a GraphQL fallback path so the experience remains usable if SSE is unavailable
+
+### `auth-service` — SSE Stream Endpoint
+
+Added a backend SSE route at `POST /ai/stream` that emits `progress`, `token`, `final`, `done`, and `error` events.
+
+- Reuses the existing AI pipeline and auth checks
+- Keeps rate limiting in place for the streaming path
+- Streams the final answer in chunked token events so the frontend can update the chat progressively
+
+### `Nova` — Update Notes Section
+
+Added a dedicated Nova updates section to the README so future AI changes are easier to scan.
+
+- The new section summarizes the current streaming UX, smoke tests, and grounding safeguards
+- The changelog now records this update explicitly so it is easier to track over time
+
+### Smoke Tests
+
+Ran the auth-service AI mock-mode and pipeline smoke tests successfully.
+
+- Mock mode verifies that Gemini is bypassed when `AI_MOCK_MODE=true`
+- Pipeline tests verify greeting fast-paths, mock behavior, and real-mode failure handling when no API key is configured
+
+---
+
 ## [2026-05-26] — Markdown Rendering, Tavily for Game Recommendations, and UI Prompt Fixes
 
 ### `AgentPage.jsx` — Markdown Rendering for Agent Responses

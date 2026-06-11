@@ -12,6 +12,21 @@ This project is a product-style full-stack web application built for portfolio r
 
 The project demonstrates full-stack development, GraphQL API design, MongoDB data modeling, authentication, AI integration, automated testing, and production-readiness improvements such as pagination, rate limiting, input validation, safe logging, Error Boundary, and route-level code splitting.
 
+## Nova Updates
+
+### 2026-06-11 — Streaming Replies, Visible Progress, and Smoke-Tested AI Paths
+
+This release focuses on making Nova feel more responsive and easier to trust during generation.
+
+- Added an SSE-based stream client for Nova responses so the chat can receive progress updates and streamed output.
+- The chat UI now shows visible progress states such as analysis, platform-data loading, matching, and recommendation generation.
+- Added backend SSE support with progress, token, final, and done events so the flow works end to end.
+- Tightened recommendation extraction and platform-data helpers so AI results remain grounded in platform data.
+- Added mock-mode and pipeline smoke tests to verify both the AI shortcut path and the full pipeline behavior.
+- Updated local development instructions so Nova can be run and tested consistently in mock mode.
+
+The goal of Nova is still the same: help players discover games using platform data, community signals, and their own saved activity. This update mainly improves clarity, responsiveness, and testability.
+
 ## Key Features
 
 ### Game Community

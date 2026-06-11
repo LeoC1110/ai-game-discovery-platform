@@ -1,5 +1,5 @@
 // packages/auth-service/ai/answerAgent.js
-// Generates a Gemini response from intent-classified context and platform data.
+// Generates or streams Gemini responses from intent-classified context and platform data.
 // Reuses the same SDK and env vars as the existing AI service.
 //
 // Mock mode: set AI_MOCK_MODE=true in .env (or use `npm run dev:mock` from auth-service)
@@ -18,18 +18,21 @@ export function getModel() {
   if (_model) return _model;
   const key = process.env.GOOGLE_API_KEY;
   if (!key?.trim()) throw new Error('GOOGLE_API_KEY is missing in backend environment variables.');
+  
+  // High-performance default lean model ideal for streaming workloads
   const modelName = process.env.AI_MODEL ?? 'gemini-3.1-flash-lite';
   console.log('[answerAgent] Creating model:', modelName);
+  
   _model = new ChatGoogleGenerativeAI({
     model: modelName,
     apiKey: key.trim(),
-    maxOutputTokens: 512,
+    maxOutputTokens: 1024, // Expanded to 1024 to comfortably accommodate large trailing RECOMMENDATIONS machine blocks
     maxRetries: 0,
   });
   return _model;
 }
 
-/** Reset the singleton (e.g. after an API error). */
+/** Reset the singleton (e.g. after an API error or network drop). */
 export function resetModel() {
   _model = null;
 }
@@ -63,7 +66,6 @@ const RECO_FORMAT_RULE =
 
 /**
  * Build the system prompt used by Nova.
- *
  * This prompt is intentionally strict about platform grounding:
  * Nova may explain, summarize, and compare using platform data,
  * but should not invent games, ratings, bookmarks, or user activity.
@@ -94,11 +96,11 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
     `- Stay grounded in the platform data below.\n` +
     `- NEVER start a response with an apology, self-correction, or meta-commentary about a previous turn ` +
     `(e.g. do NOT use "I apologize for the oversight", "Let's refocus", "Sorry for the confusion", ` +
-    `"I should clarify", "Let me correct that") UNLESS the user's current message explicitly points out ` +
-    `an error or asks for a correction. For every new question, answer directly.\n` +
+    ` "I should clarify", "Let me correct that") UNLESS the user's current message explicitly points out ` +
+    ` an error or asks for a correction. For every new question, answer directly.\n` +
     `- For community trend or leaderboard questions, open with platform-centric wording such as ` +
-    `"Based on current community activity..." or "Here are the games currently trending on the platform." — ` +
-    `never with an apology or a reference to a previous response.\n` +
+    ` "Based on current community activity..." or "Here are the games currently trending on the platform." — ` +
+    ` never with an apology or a reference to a previous response.\n` +
     `- Do not invent or fabricate game titles that are not present in the provided platform data.\n` +
     `- Do not hallucinate ratings, tags, platforms, bookmarks, likes, comments, or user statistics.\n` +
     `- The RECOMMENDATIONS block must only include titles from the "Platform Data" section — never from Web Suggestions or training knowledge.\n` +
@@ -150,8 +152,6 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
   if (platformData) {
     prompt += `\n--- Platform Data ---\n${platformData}\n--- End Platform Data ---\n`;
   } else if (intent !== INTENTS.GENERAL_CHAT) {
-    // For non-conversational intents, tell Gemini there is no data so it doesn't invent games.
-    // For general_chat, skip this instruction so Nova can respond naturally.
     prompt +=
       `\nPlatform data: No community posts, bookmarks, or activity are available yet. ` +
       `Ask the user to create, browse, or bookmark some community posts first.\n`;
@@ -172,17 +172,71 @@ function withTimeout(promise, ms) {
   ]);
 }
 
+// ── Helper to wrap plain text into an AsyncIterable for Mock Mode ─────────────
+function createMockStreamAdapter(answerText) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      // Yield the full string mock chunk
+      yield { content: answerText };
+    }
+  };
+}
+
+// ── Exported Core Capabilities ────────────────────────────────────────────────
+
 /**
- * Generate an AI answer using Google Gemini.
+ * Generate a stream of AI answer chunks using Google Gemini.
+ * Perfect for EventStream (SSE) orchestration to eliminate client-side waiting states.
  *
  * @param {{
- *   userMessage: string,
- *   intent: string,
- *   conversationContext: string,
- *   platformData: string,
- *   userMemoryContext?: string
+ * userMessage: string,
+ * intent: string,
+ * conversationContext: string,
+ * platformData: string,
+ * userMemoryContext?: string
  * }} params
- * @returns {Promise<string>} raw text answer from Gemini
+ * @returns {Promise<AsyncIterable<any>>} An async iterable stream of token chunks
+ */
+export async function generateAnswerStream({
+  userMessage,
+  intent,
+  conversationContext,
+  platformData,
+  userMemoryContext = '',
+}) {
+  if (process.env.AI_MOCK_MODE === 'true') {
+    console.log('[answerAgent] MOCK MODE — Returning simulated iterable stream for intent:', intent);
+    const mockString = getMockAnswer({ intent });
+    return createMockStreamAdapter(mockString);
+  }
+
+  const model = getModel();
+  const messages = [new SystemMessage(buildSystemPrompt(intent, platformData, userMemoryContext))];
+
+  if (conversationContext) {
+    messages.push(new HumanMessage(`Previous conversation:\n${conversationContext}`));
+  }
+  messages.push(new HumanMessage(userMessage));
+
+  // Race the generation initialization against a strict platform time configuration barrier
+  return withTimeout(model.stream(messages), AI_TIMEOUT_MS).catch((err) => {
+    resetModel(); // Destroy faulty connection lifecycle references
+    throw err;
+  });
+}
+
+/**
+ * Generate a traditional full AI answer using Google Gemini.
+ * Keep this block active to retain backward compatibility with the current standard aiPipeline.js execution.
+ *
+ * @param {{
+ * userMessage: string,
+ * intent: string,
+ * conversationContext: string,
+ * platformData: string,
+ * userMemoryContext?: string
+ * }} params
+ * @returns {Promise<string>} raw unified text answer string from Gemini
  */
 export async function generateAnswer({
   userMessage,
@@ -202,11 +256,11 @@ export async function generateAnswer({
   if (conversationContext) {
     messages.push(new HumanMessage(`Previous conversation:\n${conversationContext}`));
   }
-
   messages.push(new HumanMessage(userMessage));
 
   const response = await withTimeout(model.invoke(messages), AI_TIMEOUT_MS);
 
+  // Normalize text payload formatting across array objects or raw data extensions safely
   return typeof response.content === 'string'
     ? response.content
     : response.content.map((c) => (typeof c === 'string' ? c : (c.text ?? ''))).join('');
@@ -218,12 +272,12 @@ export async function generateAnswer({
  * Called at most once per pipeline run (see aiPipeline.js).
  *
  * @param {{
- *   badAnswer: string,
- *   flags: string[],
- *   userMessage: string,
- *   intent: string,
- *   platformData: string,
- *   userMemoryContext?: string
+ * badAnswer: string,
+ * flags: string[],
+ * userMessage: string,
+ * intent: string,
+ * platformData: string,
+ * userMemoryContext?: string
  * }} params
  * @returns {Promise<string>} corrected answer text
  */

@@ -6,6 +6,7 @@ import { useLocation } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
 import PostRatingSummary from '../components/PostRatingSummary';
 import { ASK_AI, CLEAR_AI_HISTORY, MY_AI_HISTORY } from '../gql/askAI';
+import { streamNovaResponse } from '../services/aiStreamClient';
 
 const SUGGESTIONS = [
   'Show the top trending games in the community right now.',
@@ -16,6 +17,80 @@ const SUGGESTIONS = [
   'Analyze my game taste from bookmarks and suggest something new.',
   'Suggest 3 community games I might like, and explain each briefly.',
 ];
+
+const PROGRESS_STEPS = {
+  zh: {
+    default: [
+      'Nova 正在分析你的请求……',
+      'Nova 正在加载平台社区数据……',
+      'Nova 正在匹配相似类型……',
+      'Nova 正在生成推荐理由……',
+      'Nova 正在整理最终回复……',
+    ],
+    bookmark: [
+      'Nova 正在分析你的收藏游戏……',
+      'Nova 正在提取你的偏好特征……',
+      'Nova 正在匹配相似类型……',
+      'Nova 正在生成推荐理由……',
+      'Nova 正在整理最适合你的候选结果……',
+    ],
+    community: [
+      'Nova 正在读取当前社区活跃数据……',
+      'Nova 正在比较评分与互动热度……',
+      'Nova 正在筛选最相关的社区游戏……',
+      'Nova 正在生成结论与说明……',
+      'Nova 正在整理最终回复……',
+    ],
+  },
+  en: {
+    default: [
+      'Nova is analyzing your request...',
+      'Nova is loading community data...',
+      'Nova is matching similar genres and play styles...',
+      'Nova is generating recommendation reasons...',
+      'Nova is finalizing the response...',
+    ],
+    bookmark: [
+      'Nova is analyzing your bookmarked games...',
+      'Nova is extracting your preference profile...',
+      'Nova is matching similar genres and play styles...',
+      'Nova is generating recommendation reasons...',
+      'Nova is preparing the best-fit candidates for you...',
+    ],
+    community: [
+      'Nova is reading current community activity...',
+      'Nova is comparing ratings and engagement signals...',
+      'Nova is filtering the most relevant community games...',
+      'Nova is drafting insights and explanations...',
+      'Nova is finalizing the response...',
+    ],
+  },
+};
+
+function detectProgressLanguage(userText = '') {
+  // English-first: only switch to Chinese when the input is clearly Chinese.
+  const hasCjk = /[\u3400-\u9FFF\uF900-\uFAFF]/.test(userText);
+  const hasEnglishWord = /[A-Za-z]{2,}/.test(userText);
+  return hasCjk && !hasEnglishWord ? 'zh' : 'en';
+}
+
+function buildProgressSteps(userText = '') {
+  const lang = detectProgressLanguage(userText);
+  const copy = PROGRESS_STEPS[lang] ?? PROGRESS_STEPS.en;
+  const text = userText.toLowerCase();
+  const asksBookmark = /bookmark|bookmarks|收藏|已保存|saved/.test(text);
+  const asksCommunity = /community|trending|leaderboard|top-rated|低分|热门|社区/.test(text);
+
+  if (asksBookmark) {
+    return copy.bookmark;
+  }
+
+  if (asksCommunity) {
+    return copy.community;
+  }
+
+  return copy.default;
+}
 
 // ── Small recommendation card ──────────────────────────────────────────────────
 function RecommendedCard({ post }) {
@@ -55,6 +130,7 @@ function RecommendedCard({ post }) {
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function AgentPage() {
   const bottomRef = useRef(null);
+  const streamAbortRef = useRef(null);
   const location = useLocation();
   const sessionVersionRef = useRef(0);
   const greetingMessage = {
@@ -91,6 +167,11 @@ export default function AgentPage() {
 
   const [messages, setMessages] = useState(null); // null = not yet initialised
   const [input, setInput] = useState(location.state?.prompt ?? '');
+  const [progressSteps, setProgressSteps] = useState(PROGRESS_STEPS.en.default);
+  const [progressStepIndex, setProgressStepIndex] = useState(0);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const [streamingProgress, setStreamingProgress] = useState('');
 
   // Initialise messages once history loads
   useEffect(() => {
@@ -100,27 +181,91 @@ export default function AgentPage() {
     setMessages(restored.length ? restored : [greetingMessage]);
   }, [historyLoading, historyData, messages]);
 
-  const [askAI, { loading: asking }] = useMutation(ASK_AI);
+  const [askAI, { loading: askingFallback }] = useMutation(ASK_AI);
   const [clearHistory] = useMutation(CLEAR_AI_HISTORY);
+  const isThinking = isStreaming || askingFallback;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, asking]);
+  }, [messages, isThinking, streamingText]);
+
+  useEffect(() => () => {
+    streamAbortRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!isThinking) {
+      setProgressStepIndex(0);
+      return;
+    }
+
+    setProgressStepIndex(0);
+    const timer = setInterval(() => {
+      setProgressStepIndex((prev) => Math.min(prev + 1, progressSteps.length - 1));
+    }, 1400);
+
+    return () => clearInterval(timer);
+  }, [isThinking, progressSteps]);
 
   const sendMessage = async (text) => {
     const userText = (text ?? input).trim();
-    if (!userText || asking) return;
+    if (!userText || isThinking) return;
     const activeSessionVersion = sessionVersionRef.current;
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = new AbortController();
+
+    setProgressSteps(buildProgressSteps(userText));
+    setProgressStepIndex(0);
+    setStreamingProgress('');
+    setStreamingText('');
+    setIsStreaming(true);
     setInput('');
     setMessages((prev) => [
       ...(prev ?? []),
       { id: `user-${Date.now()}`, role: 'user', text: userText },
     ]);
 
+    let bufferedText = '';
+    let finalPayload = null;
+
     try {
-      const { data } = await askAI({ variables: { message: userText } });
+      await streamNovaResponse({
+        message: userText,
+        signal: streamAbortRef.current.signal,
+        onProgress: (progressMessage) => {
+          if (activeSessionVersion !== sessionVersionRef.current) return;
+          setStreamingProgress(progressMessage || '');
+        },
+        onToken: (chunk) => {
+          if (activeSessionVersion !== sessionVersionRef.current || !chunk) return;
+          bufferedText += chunk;
+          setStreamingText((prev) => prev + chunk);
+        },
+        onFinal: (payload) => {
+          if (activeSessionVersion !== sessionVersionRef.current) return;
+          finalPayload = payload ?? {};
+          if (!bufferedText && typeof finalPayload.answer === 'string') {
+            bufferedText = finalPayload.answer;
+            setStreamingText(finalPayload.answer);
+          }
+        },
+        onDone: (payload) => {
+          if (activeSessionVersion !== sessionVersionRef.current) return;
+          if (!finalPayload && payload && typeof payload === 'object') {
+            finalPayload = payload;
+          }
+        },
+      });
+
       if (activeSessionVersion !== sessionVersionRef.current) return;
-      const { answer, recommendedPosts } = data.askAI;
+      const answer =
+        (typeof finalPayload?.answer === 'string' && finalPayload.answer.trim()) ||
+        bufferedText.trim() ||
+        'No response generated.';
+      const recommendedPosts = Array.isArray(finalPayload?.recommendedPosts)
+        ? finalPayload.recommendedPosts
+        : [];
+
       setMessages((prev) => [
         ...(prev ?? []),
         {
@@ -138,20 +283,48 @@ export default function AgentPage() {
       if (latestHistory.length) {
         setMessages((prev) => hydrateHistoryWithRecommendations(latestHistory, prev));
       }
-    } catch (err) {
+    } catch (streamErr) {
       if (activeSessionVersion !== sessionVersionRef.current) return;
-      const errMsg =
-        err?.graphQLErrors?.[0]?.message ??
-        'Something went wrong. Please check that GOOGLE_API_KEY is configured on the server.';
-      setMessages((prev) => [
-        ...(prev ?? []),
-        { id: `error-${Date.now()}`, role: 'agent', text: `⚠️ ${errMsg}`, isError: true },
-      ]);
+      try {
+        // Fallback to existing mutation API when SSE endpoint is unavailable.
+        const { data } = await askAI({ variables: { message: userText } });
+        if (activeSessionVersion !== sessionVersionRef.current) return;
+        const { answer, recommendedPosts } = data.askAI;
+        setMessages((prev) => [
+          ...(prev ?? []),
+          {
+            id: `agent-${Date.now()}`,
+            role: 'agent',
+            text: answer,
+            recommendedPosts: recommendedPosts ?? [],
+          },
+        ]);
+      } catch (fallbackErr) {
+        if (activeSessionVersion !== sessionVersionRef.current) return;
+        const errMsg =
+          fallbackErr?.graphQLErrors?.[0]?.message ??
+          streamErr?.message ??
+          'Something went wrong. Please check that GOOGLE_API_KEY is configured on the server.';
+        setMessages((prev) => [
+          ...(prev ?? []),
+          { id: `error-${Date.now()}`, role: 'agent', text: `⚠️ ${errMsg}`, isError: true },
+        ]);
+      }
+    } finally {
+      if (activeSessionVersion === sessionVersionRef.current) {
+        setStreamingText('');
+        setStreamingProgress('');
+        setIsStreaming(false);
+      }
     }
   };
 
   const handleClear = async () => {
     sessionVersionRef.current += 1;
+    streamAbortRef.current?.abort();
+    setIsStreaming(false);
+    setStreamingText('');
+    setStreamingProgress('');
     await clearHistory();
     setInput('');
     setMessages([greetingMessage]);
@@ -181,7 +354,7 @@ export default function AgentPage() {
                   key={s}
                   className="btn-ghost agent-suggestion"
                   onClick={() => sendMessage(s)}
-                  disabled={asking || isLoading}
+                  disabled={isThinking || isLoading}
                 >
                   {s}
                 </button>
@@ -226,13 +399,19 @@ export default function AgentPage() {
             )}
 
             {/* Thinking indicator */}
-            {asking && (
+            {isThinking && (
               <div className="agent-message agent-message--agent">
                 <span className="agent-message__label">Nova</span>
-                <p className="agent-message__text agent-message__text--muted">
-                  AI Game Agent is thinking…{' '}
-                  <span className="agent-message__subtext">First response may take a few seconds.</span>
-                </p>
+                {streamingText ? (
+                  <div className="agent-message__markdown">
+                    <ReactMarkdown>{streamingText}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="agent-message__text agent-message__text--muted">
+                    {streamingProgress || progressSteps[progressStepIndex] || 'Nova is thinking...'}{' '}
+                    <span className="agent-message__subtext">First response may take a few seconds.</span>
+                  </p>
+                )}
               </div>
             )}
             <div ref={bottomRef} />
@@ -246,17 +425,17 @@ export default function AgentPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !asking && !isLoading) sendMessage();
+                if (e.key === 'Enter' && !isThinking && !isLoading) sendMessage();
               }}
-              disabled={asking || isLoading}
+              disabled={isThinking || isLoading}
             />
             <button
-              className={`btn-primary agent-input-row__send ${asking ? 'is-loading' : ''}`}
+              className={`btn-primary agent-input-row__send ${isThinking ? 'is-loading' : ''}`}
               onClick={() => sendMessage()}
-              disabled={asking || isLoading || !input.trim()}
-              aria-busy={asking}
+              disabled={isThinking || isLoading || !input.trim()}
+              aria-busy={isThinking}
             >
-              {asking ? '…' : 'Send'}
+              {isThinking ? '…' : 'Send'}
             </button>
           </div>
 

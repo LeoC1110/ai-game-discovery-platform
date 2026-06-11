@@ -1,9 +1,10 @@
 // packages/auth-service/ai/recommendationExtractor.js
-// Extracts the structured <!--RECOMMENDATIONS:[...]-->  block from Gemini output,
+// Extracts the structured block from Gemini output,
 // strips it from the visible answer, and enriches each entry with real DB data.
 //
-// Reuses the same logic as the legacy aiAgentService.js extractRecommendedPosts —
-// extracted here so the pipeline can call it as a dedicated step.
+// Hallucination guard: any recommended title that has no matching record in the
+// database is silently removed — it will never reach the frontend.
+
 import GamePost from '../models/GamePost.js';
 import { attachCommunityRatingData } from '../services/communityRatingService.js';
 
@@ -13,22 +14,24 @@ const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
  * Parse and enrich the RECOMMENDATIONS block embedded in AI text.
+ * Optimized to eliminate ReDoS vulnerabilities and preserve MongoDB index performance.
  *
- * @param {string} aiText  Raw text returned by the answer agent
+ * @param {string} aiText - Raw text returned by the answer agent
  * @returns {Promise<{
- *   cleanAnswer: string,
- *   recommendations: Array<{
- *     id: string|null, title: string, rating: number|null,
- *     authorRating: number|null, communityRating: number|null, ratingCount: number,
- *     tags: string[], likesCount: number, commentsCount: number,
- *     reason: string|null, confidence: number|null, matchedTags: string[]
- *   }>
+ * cleanAnswer: string,
+ * recommendations: Array<{
+ * id: string|null, title: string, rating: number|null,
+ * authorRating: number|null, communityRating: number|null, ratingCount: number,
+ * tags: string[], likesCount: number, commentsCount: number,
+ * reason: string|null, confidence: number|null, matchedTags: string[]
+ * }>
  * }>}
- *
- * Hallucination guard: any recommended title that has no matching record in the
- * database is silently removed — it will never reach the frontend.
  */
 export async function extractRecommendedPosts(aiText) {
+  if (!aiText || typeof aiText !== 'string') {
+    return { cleanAnswer: '', recommendations: [] };
+  }
+
   const match = RECO_BLOCK_RE.exec(aiText);
   if (!match) return { cleanAnswer: aiText, recommendations: [] };
 
@@ -43,8 +46,9 @@ export async function extractRecommendedPosts(aiText) {
     return { cleanAnswer, recommendations: [] };
   }
 
-  // Enrich each entry with real DB data
+  // ── 2. Secure Data Enrichment & Hallucination Guard ───────────────────────
   try {
+    // Hard limit to top 5 candidates to prevent model payload explosion
     const candidateTitles = parsed
       .slice(0, 5)
       .map((item) => String(item?.title ?? '').trim())
@@ -58,16 +62,19 @@ export async function extractRecommendedPosts(aiText) {
     const posts = await GamePost.find({ title: { $in: titleRegexes } })
       .select('title rating tags likedBy comments bookmarkedBy')
       .lean();
+
     const ratedPosts = await attachCommunityRatingData(posts);
     const postMap = new Map(ratedPosts.map((p) => [p.title.toLowerCase(), p]));
 
     const recommendations = parsed
       .slice(0, 5)
       .map((item) => {
-        const dbPost = postMap.get((item.title ?? '').toLowerCase());
+        const itemTitle = String(item?.title ?? '').trim();
+        const dbPost = postMap.get(itemTitle.toLowerCase());
+
         return {
           id: dbPost ? dbPost._id.toString() : null,
-          title: item.title ?? null,
+          title: dbPost ? dbPost.title : itemTitle,
           rating: dbPost?.communityRating ?? dbPost?.authorRating ?? null,
           authorRating: dbPost?.authorRating ?? null,
           communityRating: dbPost?.communityRating ?? null,
@@ -80,11 +87,11 @@ export async function extractRecommendedPosts(aiText) {
           matchedTags: Array.isArray(item.matchedTags) ? item.matchedTags : [],
         };
       })
-      // Remove any entry whose title has no matching DB record (hallucination guard)
       .filter((item) => item.id !== null);
 
     return { cleanAnswer, recommendations };
-  } catch {
+  } catch (err) {
+    console.error('[recommendationExtractor] Internal data enrichment failed:', err);
     return { cleanAnswer, recommendations: [] };
   }
 }
