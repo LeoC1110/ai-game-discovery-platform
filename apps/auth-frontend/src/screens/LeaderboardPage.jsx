@@ -161,7 +161,6 @@ export default function LeaderboardPage() {
                               <p className="trends-game-row__title">{post.title}</p>
                               <p className="trends-game-row__meta">
                                 {post.genre && <span className="badge">{post.genre}</span>}
-                                <span className="trends-game-row__score">Score: {post.trendScore}</span>
                               </p>
                               <PostRatingSummary
                                 authorRating={post.authorRating}
