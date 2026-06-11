@@ -58,8 +58,8 @@ const INTENT_PATTERNS = [
     intent: INTENTS.LEADERBOARD_QUERY,
     patterns: [
       /leaderboard/i,
-      /top[\s-]rated/i,
-      /highest[\s-]rated/i,
+      /top[\s-]?rated/i,
+      /highest[\s-]?rated/i,
       /best\s+game/i,
       /\#?1\s+game/i,
       /rank(ing)?/i,
@@ -92,80 +92,7 @@ const INTENT_PATTERNS = [
 
       // Narrow recommendation search pattern.
       // Avoid using /find.*game/i because it catches "find all games on the platform".
-      /find\s+(me\s+)?(a|some|new|similar)?\s*games?\s+(to\s+play|like|similar\s+to)?/i,
-    ],
-  },
-];
-
-  // Must be before GAME_RECOMMENDATION.
-  // Handles deterministic platform inventory queries like:
-  // "find all game in platform", "show all games", "list platform games".
-  {
-    intent: INTENTS.PLATFORM_INVENTORY_QUERY,
-    patterns: [
-      /\b(show|find|list|display|get)\b.*\b(all|every|available)\b.*\b(game|games|title|titles)\b/i,
-      /\b(all|every|available)\b.*\b(game|games|title|titles)\b.*\b(platform|community)\b/i,
-      /\bwhat\s+games\b.*\b(platform|available|listed)\b/i,
-      /\bgames?\s+(in|on)\s+(the\s+)?platform\b/i,
-      /\blist\s+(the\s+)?platform\s+games\b/i,
-      /\bshow\s+(the\s+)?platform\s+games\b/i,
-      /\bfind\s+(the\s+)?platform\s+games\b/i,
-      /\bavailable\s+games\b/i,
-    ],
-  },
-
-  {
-    intent: INTENTS.LOW_RATING_QUERY,
-    patterns: [
-      /low[\s-]?rated/i,
-      /lowest[\s-]?rated/i,
-      /lowest\s+rating/i,
-      /worst[\s-]?rated/i,
-      /worst\s+game/i,
-      /bottom\s+rated/i,
-      /poorly\s+rated/i,
-    ],
-  },
-
-  {
-    intent: INTENTS.LEADERBOARD_QUERY,
-    patterns: [
-      /leaderboard/i,
-      /top[\s-]rated/i,
-      /highest[\s-]rated/i,
-      /best\s+game/i,
-      /\#?1\s+game/i,
-      /rank(ing)?/i,
-    ],
-  },
-
-  {
-    intent: INTENTS.COMMUNITY_SUMMARY,
-    patterns: [
-      /community/i,
-      /popular\s+post/i,
-      /most\s+liked/i,
-      /trending/i,
-      /what.*people.*play(ing)?/i,
-      /latest\s+review/i,
-      /community\s+pick/i,
-    ],
-  },
-
-  {
-    intent: INTENTS.GAME_RECOMMENDATION,
-    patterns: [
-      /recommend/i,
-      /suggest/i,
-      /what.*should.*play/i,
-      /what.*to\s+play/i,
-      /next\s+game/i,
-      /similar\s+to/i,
-      /games?\s+like/i,
-
-      // More specific than the old /find.*game/i.
-      // Avoids catching "find all games on the platform".
-      /find\s+(me\s+)?(a|some|new|similar)?\s*games?\s+(to\s+play|like|similar\s+to)?/i,
+      /find\s+(me\s+)?(a\s+|some\s+|new\s+|similar\s+)?games?\s*(to\s+play|like|similar\s+to)?/i,
     ],
   },
 ];
