@@ -7,6 +7,8 @@ import { attachCommunityRatingData, calculateTrendScore } from '../services/comm
 import { INTENTS } from './routerAgent.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
+const LOW_RATING_MAX_SCORE = 6;
+const DEFAULT_LOW_RATING_MIN_COUNT = Math.max(1, parseInt(process.env.LOW_RATING_MIN_COUNT ?? '2', 10));
 
 // ── Shared post formatter (mirrors the one in aiAgentService.js) ─────────────
 function formatPost(p) {
@@ -63,6 +65,45 @@ export async function getTopRatedGames(limit = 10) {
     .slice(0, limit);
   if (!topPosts.length) return 'No rated games found.';
   return `Top-rated games (${topPosts.length}):\n` + topPosts.map(formatPost).join('\n');
+}
+
+/**
+ * Fetch low-rated games sorted by community rating ascending.
+ * "Low rating" means community rating <= LOW_RATING_MAX_SCORE.
+ */
+export async function getLowRatedGames({
+  limit = 10,
+  minRatingCount = DEFAULT_LOW_RATING_MIN_COUNT,
+  maxCommunityRating = LOW_RATING_MAX_SCORE,
+} = {}) {
+  const normalizedLimit = Math.max(1, limit);
+  const normalizedMinCount = Math.max(1, minRatingCount);
+  const posts = await loadPlatformPosts({
+    filter: { postType: 'GAME' },
+    limit: Math.max(normalizedLimit * 8, 40),
+  });
+
+  const lowRated = posts
+    .filter((post) =>
+      post.communityRating != null &&
+      post.communityRating <= maxCommunityRating &&
+      (post.ratingCount ?? 0) >= normalizedMinCount,
+    )
+    .sort((a, b) =>
+      (a.communityRating ?? 11) - (b.communityRating ?? 11) ||
+      (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
+      (a.authorRating ?? 0) - (b.authorRating ?? 0),
+    )
+    .slice(0, normalizedLimit);
+
+  if (!lowRated.length) {
+    return `Low-rated games (community rating <= ${maxCommunityRating}/10, min ${normalizedMinCount} ratings): none found.`;
+  }
+
+  return (
+    `Low-rated games (community rating <= ${maxCommunityRating}/10, min ${normalizedMinCount} ratings) (${lowRated.length}):\n` +
+    lowRated.map(formatPost).join('\n')
+  );
 }
 
 /** Fetch games sorted by community trend score. */
@@ -196,8 +237,9 @@ export async function searchWeb(query, userId = 'global') {
  *
  * Routing:
  *   bookmark_analysis   → getMyBookmarks
- *   community_summary   → getMostLikedPosts
- *   leaderboard_query   → getTopRatedGames
+ *   community_summary   → low-rated games + trending posts
+ *   leaderboard_query   → low-rated games + top-rated games
+ *   low_rating_query    → getLowRatedGames
  *   game_recommendation → bookmarks + most-liked community posts
  *   general_chat        → Tavily web search (if TAVILY_API_KEY is set), else empty
  *
@@ -213,10 +255,19 @@ export async function fetchDataForIntent(intent, userId, userMessage = '') {
         return await getMyBookmarks(userId);
 
       case INTENTS.COMMUNITY_SUMMARY:
-        return await getTrendingPosts();
+        return [
+          await getLowRatedGames(),
+          await getTrendingPosts(),
+        ].join('\n\n');
 
       case INTENTS.LEADERBOARD_QUERY:
-        return await getTopRatedGames();
+        return [
+          await getLowRatedGames(),
+          await getTopRatedGames(),
+        ].join('\n\n');
+
+      case INTENTS.LOW_RATING_QUERY:
+        return await getLowRatedGames();
 
       case INTENTS.GAME_RECOMMENDATION: {
         const [bookmarks, community] = await Promise.all([

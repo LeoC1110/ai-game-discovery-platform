@@ -44,6 +44,8 @@ const INTENT_ROLE_MAP = {
     'summarize community trends, popular posts, active discussions, and trending tags',
   [INTENTS.LEADERBOARD_QUERY]:
     'answer questions about popular, highly rated, or trending games in the community',
+  [INTENTS.LOW_RATING_QUERY]:
+    'find low-rated games in the community and explain why they are considered low-rated',
   [INTENTS.GENERAL_CHAT]:
     'have a helpful, friendly conversation about games, recommendations, and the platform',
 };
@@ -69,7 +71,9 @@ const RECO_FORMAT_RULE =
 function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
   const role = INTENT_ROLE_MAP[intent] ?? 'assist with game discovery questions';
   const isCommunityIntent =
-    intent === INTENTS.COMMUNITY_SUMMARY || intent === INTENTS.LEADERBOARD_QUERY;
+    intent === INTENTS.COMMUNITY_SUMMARY ||
+    intent === INTENTS.LEADERBOARD_QUERY ||
+    intent === INTENTS.LOW_RATING_QUERY;
   const isPersonalIntent =
     intent === INTENTS.GAME_RECOMMENDATION || intent === INTENTS.BOOKMARK_ANALYSIS;
 
@@ -109,6 +113,10 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
   if (isCommunityIntent) {
     prompt +=
       `\nCommunity and leaderboard response rules:\n` +
+      `- Low rating definition: any game with Community Rating <= 6.0/10 is considered low-rated.\n` +
+      `- If Platform Data includes a "Low-rated games" section, summarize that section first before any high-rated or trending section.\n` +
+      `- For requests about low-rated/worst/lowest games, rank results from lowest to highest Community Rating and include rating count in prose when available.\n` +
+      `- If the low-rated section says none found, explicitly say no games currently meet the <= 6.0/10 threshold.\n` +
       `- Focus on current platform/community activity, not personal preference by default.\n` +
       `- Treat Author Rating as the post author's personal score only, not the full community opinion.\n` +
       `- For trend, popularity, or community-opinion questions, prefer Community Rating, Rating Count, likes, bookmarks, and comments over Author Rating.\n` +

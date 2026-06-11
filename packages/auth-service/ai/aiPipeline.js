@@ -144,7 +144,9 @@ export async function runPipeline({ userId, username, message }) {
   }
 
   const isCommunityOrLeaderboard =
-    intent === 'community_summary' || intent === 'leaderboard_query';
+    intent === 'community_summary' ||
+    intent === 'leaderboard_query' ||
+    intent === 'low_rating_query';
 
   // Build conversation context: stored summary (if any) + recent history.
   // For community / leaderboard intents we deliberately drop the full history

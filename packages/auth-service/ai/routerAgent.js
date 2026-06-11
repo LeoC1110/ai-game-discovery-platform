@@ -1,5 +1,5 @@
 // packages/auth-service/ai/routerAgent.js
-// Classifies a user message into one of 5 supported intents using keyword patterns.
+// Classifies a user message into one of 6 supported intents using keyword patterns.
 // No Gemini call — purely rule-based so it adds zero latency to the pipeline.
 
 export const INTENTS = {
@@ -7,6 +7,7 @@ export const INTENTS = {
   BOOKMARK_ANALYSIS:   'bookmark_analysis',
   COMMUNITY_SUMMARY:   'community_summary',
   LEADERBOARD_QUERY:   'leaderboard_query',
+  LOW_RATING_QUERY:    'low_rating_query',
   GENERAL_CHAT:        'general_chat',
 };
 
@@ -21,6 +22,17 @@ const INTENT_PATTERNS = [
       /what.*i.*saved/i,
       /games?\s+i.*saved/i,
       /analyse.*my\s+taste/i,
+    ],
+  },
+  {
+    intent: INTENTS.LOW_RATING_QUERY,
+    patterns: [
+      /low[\s-]?rated/i,
+      /lowest[\s-]?rated/i,
+      /lowest\s+rating/i,
+      /worst[\s-]?rated/i,
+      /worst\s+game/i,
+      /bottom\s+rated/i,
     ],
   },
   {

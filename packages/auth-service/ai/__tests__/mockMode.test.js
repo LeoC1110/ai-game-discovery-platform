@@ -68,11 +68,13 @@ describe('mockAiService — getMockAnswer', () => {
     );
   });
 
-  test('community_summary and leaderboard_query responses do NOT include a RECOMMENDATIONS block', () => {
+  test('community_summary, leaderboard_query, and low_rating_query responses do NOT include a RECOMMENDATIONS block', () => {
     const community  = getMockAnswer({ intent: INTENTS.COMMUNITY_SUMMARY });
     const leaderboard = getMockAnswer({ intent: INTENTS.LEADERBOARD_QUERY });
+    const lowRating = getMockAnswer({ intent: INTENTS.LOW_RATING_QUERY });
     assert.ok(!community.includes('<!--RECOMMENDATIONS:'));
     assert.ok(!leaderboard.includes('<!--RECOMMENDATIONS:'));
+    assert.ok(!lowRating.includes('<!--RECOMMENDATIONS:'));
   });
 
   test('returns a non-empty fallback for an unknown intent', () => {

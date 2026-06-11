@@ -9,6 +9,7 @@ import { ASK_AI, CLEAR_AI_HISTORY, MY_AI_HISTORY } from '../gql/askAI';
 
 const SUGGESTIONS = [
   'Show the top trending games in the community right now.',
+  'Find low-rated games in the community.',
   'Recommend games for me based on my bookmarks.',
   'Find high-rated RPG games with strong community engagement.',
   'Summarize the most popular community posts this week.',

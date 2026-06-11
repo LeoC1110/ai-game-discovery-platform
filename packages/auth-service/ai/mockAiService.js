@@ -53,6 +53,14 @@ const MOCK_ANSWERS = {
     `3. **Celeste** — 9.3 / 10 (praised for accessibility features)\n\n` +
     `Rankings are based on community ratings and like counts.`,
 
+  [INTENTS.LOW_RATING_QUERY]:
+    `[MOCK MODE] Here are the current low-rated games on the platform ` +
+    `(community rating <= 6.0, minimum 2 ratings):\n\n` +
+    `1. **Game A** — 5.2 / 10 (12 ratings)\n` +
+    `2. **Game B** — 5.8 / 10 (8 ratings)\n` +
+    `3. **Game C** — 6.0 / 10 (6 ratings)\n\n` +
+    `These are ordered from lowest to highest community rating.`,
+
   [INTENTS.GENERAL_CHAT]:
     `[MOCK MODE] Hey! I'm running in local mock mode — no Gemini API calls are being made. ` +
     `This response is pre-defined for development and testing.\n\n` +
