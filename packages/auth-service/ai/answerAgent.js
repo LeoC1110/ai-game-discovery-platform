@@ -68,6 +68,10 @@ const RECO_FORMAT_RULE =
  */
 function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
   const role = INTENT_ROLE_MAP[intent] ?? 'assist with game discovery questions';
+  const isCommunityIntent =
+    intent === INTENTS.COMMUNITY_SUMMARY || intent === INTENTS.LEADERBOARD_QUERY;
+  const isPersonalIntent =
+    intent === INTENTS.GAME_RECOMMENDATION || intent === INTENTS.BOOKMARK_ANALYSIS;
 
   let prompt =
     `You are Nova, the AI assistant for an AI-powered game discovery community platform.\n` +
@@ -92,6 +96,23 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
     `- If the user states a preference, acknowledge it and use it in your reply.\n` +
     `- If the user asks for recommendations based on bookmarks, recommend different platform games that match the user's saved-game patterns. Do not simply re-list the bookmarked games.\n` +
     `- If there are not enough matching games, say so clearly and suggest the closest available matches from platform data.\n`;
+
+  if (isCommunityIntent) {
+    prompt +=
+      `\nCommunity and leaderboard response rules:\n` +
+      `- Focus on current platform/community activity, not personal preference by default.\n` +
+      `- Prefer community-centric wording such as: "Based on current community activity...", "These games are trending on the platform...", "Top-rated community post.", "High engagement from likes, comments, or bookmarks."\n` +
+      `- Avoid personalized phrases like "Matches your interest", "Fits your preference", or "Based on your taste" unless the user explicitly asks for personalized recommendations.\n` +
+      `- Keep summary prose consistent with recommendation cards: if the prose names specific games, include those same games in the RECOMMENDATIONS block; otherwise keep prose at category/theme level only.\n`;
+  }
+
+  if (isPersonalIntent) {
+    prompt +=
+      `\nPersonalized recommendation response rules:\n` +
+      `- Personalization is allowed and encouraged.\n` +
+      `- Phrases like "Based on your bookmarks...", "This fits your interest in...", and "Your saved games suggest..." are appropriate when supported by data.\n` +
+      `- For bookmark-based recommendations, propose different matching platform games instead of simply repeating the user's bookmarked titles.\n`;
+  }
 
   if (userMemoryContext) {
     prompt +=
