@@ -576,7 +576,7 @@ export default function CommunityPage() {
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     },
-    fetchPolicy: 'network-only',
+    fetchPolicy: 'cache-and-network',
     notifyOnNetworkStatusChange: true,
     onCompleted: ({ pagedPosts }) => {
       setTotalCount(pagedPosts.totalCount);

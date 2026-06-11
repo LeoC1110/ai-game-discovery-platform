@@ -38,7 +38,7 @@ export default function UsersPage() {
   const [searched, setSearched] = useState(false);
 
   const [runSearch, { data, loading, error }] = useLazyQuery(SEARCH_USERS, {
-    fetchPolicy: 'network-only',
+    fetchPolicy: 'cache-and-network',
   });
 
   const handleSearch = (e) => {

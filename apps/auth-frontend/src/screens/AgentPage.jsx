@@ -56,6 +56,11 @@ export default function AgentPage() {
   const bottomRef = useRef(null);
   const location = useLocation();
   const sessionVersionRef = useRef(0);
+  const greetingMessage = {
+    id: 'greeting',
+    role: 'agent',
+    text: "Hi, I'm Nova. I can help you find games you might like, understand community trends, and get recommendations based on your bookmarks and preferences. What would you like to explore today?",
+  };
 
   const toUiMessages = (history = []) =>
     history.map((m, idx) => ({
@@ -80,7 +85,7 @@ export default function AgentPage() {
 
   // Load previous conversation history on mount
   const { data: historyData, loading: historyLoading, refetch: refetchHistory } = useQuery(MY_AI_HISTORY, {
-    fetchPolicy: 'network-only',
+    fetchPolicy: 'cache-and-network',
   });
 
   const [messages, setMessages] = useState(null); // null = not yet initialised
@@ -89,14 +94,9 @@ export default function AgentPage() {
   // Initialise messages once history loads
   useEffect(() => {
     if (historyLoading || messages !== null) return;
-    const greeting = {
-      id: 'greeting',
-      role: 'agent',
-      text: "Hi, I'm Nova. I can help you find games you might like, understand community trends, and get recommendations based on your bookmarks and preferences. What would you like to explore today?",
-    };
     const history = historyData?.myAIHistory ?? [];
     const restored = toUiMessages(history);
-    setMessages(restored.length ? restored : [greeting]);
+    setMessages(restored.length ? restored : [greetingMessage]);
   }, [historyLoading, historyData, messages]);
 
   const [askAI, { loading: asking }] = useMutation(ASK_AI);
@@ -152,7 +152,8 @@ export default function AgentPage() {
   const handleClear = async () => {
     sessionVersionRef.current += 1;
     await clearHistory();
-    window.location.reload();
+    setInput('');
+    setMessages([greetingMessage]);
   };
 
   const isLoading = messages === null || historyLoading;
