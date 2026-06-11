@@ -223,6 +223,20 @@ describe('CommunityPage — interactions', () => {
     });
   });
 
+  test('shows author rating as initial avg when no community ratings exist', async () => {
+    const mocks = [
+      { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
+      pagedPostsMock(makePosts()),
+    ];
+
+    renderWithProviders(<CommunityPage />, { mocks });
+
+    await waitFor(() => {
+      expect(screen.getByText('Hollow Knight')).toBeInTheDocument();
+      expect(screen.getByText('Avg Rating: 9/10 ⭐')).toBeInTheDocument();
+    });
+  });
+
   test('confirming delete fires DELETE_POST mutation', async () => {
     let deleteCalled = false;
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true);

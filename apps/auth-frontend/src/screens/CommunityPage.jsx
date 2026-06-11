@@ -105,6 +105,7 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
           )}
           {!isIdea && (
             <PostRatingSummary
+              authorRating={post.authorRating}
               communityRating={post.communityRating}
               ratingCount={post.ratingCount}
               interactive
@@ -424,6 +425,7 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
         )}
         {!isIdea && (
           <PostRatingSummary
+            authorRating={post.authorRating}
             communityRating={post.communityRating}
             ratingCount={post.ratingCount}
             myCommunityRating={post.myCommunityRating}
