@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { useQuery } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
+import PostRatingSummary from '../components/PostRatingSummary';
 import { PAGED_POSTS } from '../gql/gamePosts';
 import './Trends.css';
 
@@ -75,10 +76,13 @@ export default function LeaderboardPage() {
       .map((p) => ({
         ...p,
         trendScore:
-          (p.rating || 0) +
+          ((p.communityRating != null && p.ratingCount)
+            ? p.communityRating * (p.ratingCount / (p.ratingCount + 4)) * 2
+            : 0) +
           (p.likesCount || 0) +
           (p.commentsCount || 0) * 2 +
-          (p.bookmarksCount || 0) * 2,
+          (p.bookmarksCount || 0) * 2 +
+          (p.ratingCount || 0) * 1.5,
       }))
       .sort((a, b) => b.trendScore - a.trendScore),
     [rankPagePosts]);
@@ -157,9 +161,14 @@ export default function LeaderboardPage() {
                               <p className="trends-game-row__title">{post.title}</p>
                               <p className="trends-game-row__meta">
                                 {post.genre && <span className="badge">{post.genre}</span>}
-                                {post.rating && <span className="trends-game-row__rating">&#11088; {post.rating}/10</span>}
                                 <span className="trends-game-row__score">Score: {post.trendScore}</span>
                               </p>
+                              <PostRatingSummary
+                                authorRating={post.authorRating}
+                                communityRating={post.communityRating}
+                                ratingCount={post.ratingCount}
+                                compact
+                              />
                             </div>
                             <div className="trends-game-row__stats">
                               <span className="trends-stat">&#9825; {post.likesCount || 0}</span>

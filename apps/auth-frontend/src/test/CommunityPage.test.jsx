@@ -15,7 +15,7 @@ const makePosts = (overrides = []) => [
   {
     __typename: 'GamePost',
     id: 'p1', title: 'Elden Ring', genre: 'RPG', platform: 'PC', developer: 'FromSoftware',
-    releaseYear: 2022, gameType: 'Singleplayer', rating: 10, coverImageUrl: null, gameLink: null,
+    releaseYear: 2022, gameType: 'Singleplayer', rating: 10, authorRating: 10, communityRating: 8.6, ratingCount: 12, myCommunityRating: null, coverImageUrl: null, gameLink: null,
     tags: ['RPG', 'Souls'], review: 'A masterpiece of exploration and combat.',
     featured: false, postedBy: { __typename: 'User', id: 'u1', username: 'alice' },
     likesCount: 5, commentsCount: 2, bookmarksCount: 1, isLikedByMe: false, isBookmarkedByMe: false,
@@ -26,7 +26,7 @@ const makePosts = (overrides = []) => [
   {
     __typename: 'GamePost',
     id: 'p2', title: 'Hollow Knight', genre: 'Indie', platform: 'PC', developer: 'Team Cherry',
-    releaseYear: 2017, gameType: 'Singleplayer', rating: 9, coverImageUrl: null, gameLink: null,
+    releaseYear: 2017, gameType: 'Singleplayer', rating: 9, authorRating: 9, communityRating: null, ratingCount: 0, myCommunityRating: null, coverImageUrl: null, gameLink: null,
     tags: ['Indie', 'Metroidvania'], review: 'A challenging and beautiful metroidvania.',
     featured: true, postedBy: { __typename: 'User', id: 'u2', username: 'bob' },
     likesCount: 3, commentsCount: 0, bookmarksCount: 2, isLikedByMe: false, isBookmarkedByMe: true,

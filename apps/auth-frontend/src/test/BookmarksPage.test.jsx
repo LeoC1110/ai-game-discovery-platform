@@ -8,7 +8,7 @@ import { makePost } from './mockData';
 
 const bookmarkedPost = makePost({
   id: 'p1', title: 'Celeste', genre: 'Platformer', platform: 'PC', developer: 'Maddy Makes Games',
-  releaseYear: 2018, rating: 9, tags: ['Indie', 'Platformer'],
+  releaseYear: 2018, rating: 9, authorRating: 9, communityRating: 8.4, ratingCount: 5, tags: ['Indie', 'Platformer'],
   review: 'A beautiful game about overcoming anxiety.',
   postedBy: { id: 'u2', username: 'carol' },
   likesCount: 8, commentsCount: 3, bookmarksCount: 5,

@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { useMutation, useQuery } from '@apollo/client';
 import { useLocation } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
+import PostRatingSummary from '../components/PostRatingSummary';
 import { ASK_AI, CLEAR_AI_HISTORY, MY_AI_HISTORY } from '../gql/askAI';
 
 const SUGGESTIONS = [
@@ -22,10 +23,15 @@ function RecommendedCard({ post }) {
       <p className="agent-recommended-card__title">
         {post.title}
       </p>
-      {post.rating != null && (
-        <p className="agent-recommended-card__rating">
-          ⭐ {post.rating}/10
-        </p>
+      {(post.authorRating != null || post.communityRating != null || post.rating != null) && (
+        <div className="agent-recommended-card__rating">
+          <PostRatingSummary
+            authorRating={post.authorRating}
+            communityRating={post.communityRating ?? post.rating}
+            ratingCount={post.ratingCount}
+            compact
+          />
+        </div>
       )}
       {post.tags?.length > 0 && (
         <p className="agent-recommended-card__tags">

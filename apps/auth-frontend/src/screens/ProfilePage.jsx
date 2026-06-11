@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, gql } from '@apollo/client';
 import DashboardNav from '../components/DashboardNav';
+import PostRatingSummary from '../components/PostRatingSummary';
 import { MY_POSTS, BOOKMARKED_POSTS, DELETE_POST } from '../gql/gamePosts';
 import { CHANGE_PASSWORD } from '../gql/changePassword';
 
@@ -13,16 +14,6 @@ const ME_QUERY = gql`
 
 const TABS = ['My Posts', 'Bookmarks', 'Change Password'];
 
-function StarRating({ value }) {
-  if (!value) return <span style={{ color: '#666', fontSize: 13 }}>No rating</span>;
-  return (
-    <span style={{ color: '#ffd60a', fontWeight: 700, fontSize: 13 }}>
-      {'★'.repeat(Math.round(value / 2))}{'☆'.repeat(5 - Math.round(value / 2))}
-      <span style={{ color: '#aaa', marginLeft: 4 }}> {value}/10</span>
-    </span>
-  );
-}
-
 function PostRow({ post, isOwner, onDelete, deleting }) {
   const isIdea = post.postType === 'IDEA';
   return (
@@ -32,7 +23,15 @@ function PostRow({ post, isOwner, onDelete, deleting }) {
           <h3 className="community-card__title" style={{ fontSize: 16 }}>
             {isIdea ? 'Share Your Idea' : post.title}
           </h3>
-          {!isIdea && <StarRating value={post.rating} />}
+          {!isIdea && (
+            <PostRatingSummary
+              authorRating={post.authorRating}
+              communityRating={post.communityRating}
+              ratingCount={post.ratingCount}
+              align="end"
+              compact
+            />
+          )}
         </div>
         <div className="community-card__meta">
           <span className="badge badge--dim">{isIdea ? 'IDEA' : 'GAME'}</span>

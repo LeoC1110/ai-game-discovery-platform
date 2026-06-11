@@ -9,7 +9,7 @@ const fakePosts = [
   {
     __typename: 'GamePost',
     id: 'p1', title: 'Elden Ring', genre: 'RPG', platform: 'PC',
-    tags: ['RPG'], rating: 10, review: 'Top game.',
+    tags: ['RPG'], rating: 10, authorRating: 10, communityRating: 9.3, ratingCount: 18, myCommunityRating: null, review: 'Top game.',
     postedBy: { __typename: 'User', id: 'u1', username: 'alice' },
     likesCount: 20, commentsCount: 8, bookmarksCount: 5,
     isLikedByMe: false, isBookmarkedByMe: false, featured: false,
@@ -19,7 +19,7 @@ const fakePosts = [
   {
     __typename: 'GamePost',
     id: 'p2', title: 'Celeste', genre: 'Indie', platform: 'PC',
-    tags: ['Indie'], rating: 9, review: 'Beautiful platformer.',
+    tags: ['Indie'], rating: 9, authorRating: 9, communityRating: 8.8, ratingCount: 7, myCommunityRating: null, review: 'Beautiful platformer.',
     postedBy: { __typename: 'User', id: 'u2', username: 'bob' },
     likesCount: 5, commentsCount: 2, bookmarksCount: 3,
     isLikedByMe: false, isBookmarkedByMe: false, featured: false,
@@ -29,7 +29,7 @@ const fakePosts = [
   {
     __typename: 'GamePost',
     id: 'p3', title: 'Hollow Knight', genre: 'Indie', platform: 'PC',
-    tags: ['Metroidvania'], rating: 8, review: 'Challenging and beautiful.',
+    tags: ['Metroidvania'], rating: 8, authorRating: 8, communityRating: 8.9, ratingCount: 13, myCommunityRating: null, review: 'Challenging and beautiful.',
     postedBy: { __typename: 'User', id: 'u1', username: 'alice' }, // alice has 2 posts
     likesCount: 12, commentsCount: 15, bookmarksCount: 4,
     isLikedByMe: false, isBookmarkedByMe: false, featured: false,

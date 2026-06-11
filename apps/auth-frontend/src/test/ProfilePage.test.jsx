@@ -20,7 +20,7 @@ const meData = {
 const myPost = {
   __typename: 'GamePost',
   id: 'p1', title: 'Elden Ring', genre: 'RPG', platform: 'PC',
-  developer: null, releaseYear: 2022, gameType: 'Singleplayer', rating: 10,
+  developer: null, releaseYear: 2022, gameType: 'Singleplayer', rating: 10, authorRating: 10, communityRating: 9.1, ratingCount: 8, myCommunityRating: null,
   coverImageUrl: null, gameLink: null, tags: ['RPG'],
   review: 'A masterpiece.', featured: false,
   postedBy: { __typename: 'User', id: 'u1', username: 'alice' },

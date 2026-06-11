@@ -3,19 +3,10 @@ import React, { useState } from 'react';
 import { useQuery, useMutation } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
+import PostRatingSummary from '../components/PostRatingSummary';
 import { PAGED_BOOKMARKS, TOGGLE_BOOKMARK } from '../gql/gamePosts';
 
 const PAGE_SIZE = 8;
-
-function StarRating({ value }) {
-  if (!value) return <span style={{ color: '#6e6e73', fontSize: 13 }}>No rating</span>;
-  return (
-    <span style={{ color: '#c87000', fontWeight: 700, fontSize: 14 }}>
-      {'★'.repeat(Math.round(value / 2))}{'☆'.repeat(5 - Math.round(value / 2))}
-      <span style={{ color: '#6e6e73', marginLeft: 4, fontSize: 13 }}>{value}/10</span>
-    </span>
-  );
-}
 
 export default function BookmarksPage() {
   const navigate = useNavigate();
@@ -82,7 +73,13 @@ export default function BookmarksPage() {
               <div className="community-card__body">
                 <div className="community-card__top">
                   <h3 className="community-card__title">{post.title}</h3>
-                  <StarRating value={post.rating} />
+                  <PostRatingSummary
+                    authorRating={post.authorRating}
+                    communityRating={post.communityRating}
+                    ratingCount={post.ratingCount}
+                    align="end"
+                    compact
+                  />
                 </div>
                 <div className="community-card__meta">
                   {post.genre && <span className="badge">{post.genre}</span>}

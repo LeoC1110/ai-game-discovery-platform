@@ -101,6 +101,8 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
     prompt +=
       `\nCommunity and leaderboard response rules:\n` +
       `- Focus on current platform/community activity, not personal preference by default.\n` +
+      `- Treat Author Rating as the post author's personal score only, not the full community opinion.\n` +
+      `- For trend, popularity, or community-opinion questions, prefer Community Rating, Rating Count, likes, bookmarks, and comments over Author Rating.\n` +
       `- Prefer community-centric wording such as: "Based on current community activity...", "These games are trending on the platform...", "Top-rated community post.", "High engagement from likes, comments, or bookmarks."\n` +
       `- Avoid personalized phrases like "Matches your interest", "Fits your preference", or "Based on your taste" unless the user explicitly asks for personalized recommendations.\n` +
       `- Keep summary prose consistent with recommendation cards: if the prose names specific games, include those same games in the RECOMMENDATIONS block; otherwise keep prose at category/theme level only.\n`;

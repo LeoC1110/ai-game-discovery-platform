@@ -1,63 +1,115 @@
 // packages/auth-service/ai/platformTools.js
 // Data-fetching functions keyed to router intents.
 // Reuses the existing GamePost Mongoose model — no new DB dependencies.
+import mongoose from 'mongoose';
 import GamePost from '../models/GamePost.js';
+import { attachCommunityRatingData, calculateTrendScore } from '../services/communityRatingService.js';
 import { INTENTS } from './routerAgent.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
 // ── Shared post formatter (mirrors the one in aiAgentService.js) ─────────────
 function formatPost(p) {
+  const communityRatingLine = p.communityRating != null
+    ? `Community Rating: ${p.communityRating.toFixed(1)}/10 · ${p.ratingCount} ${p.ratingCount === 1 ? 'rating' : 'ratings'}`
+    : 'Community Rating: Not rated yet';
+
   return (
     `• "${p.title}"` +
     (p.genre ? ` [${p.genre}]` : '') +
-    (p.rating != null ? ` — ${p.rating}/10` : '') +
+    (p.authorRating != null ? ` — Author Rating: ${p.authorRating}/10` : '') +
+    ` — ${communityRatingLine}` +
     (p.tags?.length ? ` tags: ${p.tags.slice(0, 4).join(', ')}` : '') +
-    (p.likedBy?.length ? ` ♥${p.likedBy.length}` : '')
+    (p.likedBy?.length ? ` ♥${p.likedBy.length}` : '') +
+    (p.comments?.length ? ` 💬${p.comments.length}` : '') +
+    (p.bookmarkedBy?.length ? ` 🔖${p.bookmarkedBy.length}` : '')
   );
+}
+
+async function loadPlatformPosts({ filter = {}, sort = { createdAt: -1 }, limit = 10, userId } = {}) {
+  const posts = await GamePost.find(filter)
+    .sort(sort)
+    .limit(limit)
+    .select('title genre platform rating tags likedBy comments bookmarkedBy postType')
+    .lean();
+  return attachCommunityRatingData(posts, userId);
 }
 
 /** Fetch the current user's bookmarked games. */
 export async function getMyBookmarks(userId) {
-  const posts = await GamePost.find({ bookmarkedBy: userId })
-    .limit(10)
-    .select('title genre platform rating tags likedBy')
-    .lean();
-  if (!posts.length) return 'No bookmarked games found.';
-  return `Bookmarked games (${posts.length}):\n` + posts.map(formatPost).join('\n');
+  if (!mongoose.isValidObjectId(userId)) return 'No bookmarked games found.';
+  const ratedPosts = await loadPlatformPosts({ filter: { bookmarkedBy: userId }, limit: 10, userId });
+  if (!ratedPosts.length) return 'No bookmarked games found.';
+  return `Bookmarked games (${ratedPosts.length}):\n` + ratedPosts.map(formatPost).join('\n');
 }
 
 /** Fetch the most recent community posts. */
 export async function getCommunityPosts(limit = 10) {
-  const posts = await GamePost.find()
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .select('title genre platform rating tags likedBy')
-    .lean();
-  if (!posts.length) return 'No community posts found.';
-  return `Recent community posts (${posts.length}):\n` + posts.map(formatPost).join('\n');
+  const ratedPosts = await loadPlatformPosts({ sort: { createdAt: -1 }, limit });
+  if (!ratedPosts.length) return 'No community posts found.';
+  return `Recent community posts (${ratedPosts.length}):\n` + ratedPosts.map(formatPost).join('\n');
 }
 
 /** Fetch games sorted by rating (highest first). */
 export async function getTopRatedGames(limit = 10) {
-  const posts = await GamePost.find({ rating: { $ne: null } })
-    .sort({ rating: -1 })
-    .limit(limit)
-    .select('title genre platform rating tags likedBy')
-    .lean();
-  if (!posts.length) return 'No rated games found.';
-  return `Top-rated games (${posts.length}):\n` + posts.map(formatPost).join('\n');
+  const ratedPosts = await loadPlatformPosts({ filter: { postType: 'GAME' }, limit: limit * 3 });
+  const topPosts = ratedPosts
+    .filter((post) => post.communityRating != null || post.authorRating != null)
+    .sort((a, b) =>
+      (b.communityRating ?? -1) - (a.communityRating ?? -1) ||
+      (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
+      (b.authorRating ?? 0) - (a.authorRating ?? 0),
+    )
+    .slice(0, limit);
+  if (!topPosts.length) return 'No rated games found.';
+  return `Top-rated games (${topPosts.length}):\n` + topPosts.map(formatPost).join('\n');
+}
+
+/** Fetch games sorted by community trend score. */
+export async function getTrendingPosts(limit = 10) {
+  const posts = await loadPlatformPosts({ filter: { postType: 'GAME' }, limit: limit * 4 });
+  posts.sort((a, b) =>
+    calculateTrendScore({
+      communityRating: b.communityRating,
+      ratingCount: b.ratingCount,
+      likesCount: b.likedBy?.length ?? 0,
+      commentsCount: b.comments?.length ?? 0,
+      bookmarksCount: b.bookmarkedBy?.length ?? 0,
+    }) -
+    calculateTrendScore({
+      communityRating: a.communityRating,
+      ratingCount: a.ratingCount,
+      likesCount: a.likedBy?.length ?? 0,
+      commentsCount: a.comments?.length ?? 0,
+      bookmarksCount: a.bookmarkedBy?.length ?? 0,
+    }),
+  );
+  const topPosts = posts.slice(0, limit);
+  if (!topPosts.length) return 'No posts found.';
+  return `Trending community posts (${topPosts.length}):\n` + topPosts.map(formatPost).join('\n');
 }
 
 /** Fetch games sorted by likes (most-liked first). */
 export async function getMostLikedPosts(limit = 10) {
   // Over-fetch then sort in JS (MongoDB can't sort by array length without aggregation)
-  const posts = await GamePost.find()
-    .limit(limit * 3)
-    .select('title genre platform rating tags likedBy')
-    .lean();
-  posts.sort((a, b) => (b.likedBy?.length ?? 0) - (a.likedBy?.length ?? 0));
-  const top = posts.slice(0, limit);
+  const ratedPosts = await loadPlatformPosts({ limit: limit * 3 });
+  ratedPosts.sort((a, b) =>
+    calculateTrendScore({
+      communityRating: b.communityRating,
+      ratingCount: b.ratingCount,
+      likesCount: b.likedBy?.length ?? 0,
+      commentsCount: b.comments?.length ?? 0,
+      bookmarksCount: b.bookmarkedBy?.length ?? 0,
+    }) -
+    calculateTrendScore({
+      communityRating: a.communityRating,
+      ratingCount: a.ratingCount,
+      likesCount: a.likedBy?.length ?? 0,
+      commentsCount: a.comments?.length ?? 0,
+      bookmarksCount: a.bookmarkedBy?.length ?? 0,
+    }),
+  );
+  const top = ratedPosts.slice(0, limit);
   if (!top.length) return 'No posts found.';
   return `Most-liked posts (${top.length}):\n` + top.map(formatPost).join('\n');
 }
@@ -161,7 +213,7 @@ export async function fetchDataForIntent(intent, userId, userMessage = '') {
         return await getMyBookmarks(userId);
 
       case INTENTS.COMMUNITY_SUMMARY:
-        return await getMostLikedPosts();
+        return await getTrendingPosts();
 
       case INTENTS.LEADERBOARD_QUERY:
         return await getTopRatedGames();

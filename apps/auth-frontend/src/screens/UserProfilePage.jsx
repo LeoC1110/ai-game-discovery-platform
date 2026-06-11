@@ -3,20 +3,11 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@apollo/client';
 import DashboardNav from '../components/DashboardNav';
+import PostRatingSummary from '../components/PostRatingSummary';
 import { PUBLIC_USER_PROFILE } from '../gql/users';
 import './Users.css';
 
 const TABS = ['Posts', 'Bookmarks'];
-
-function StarRating({ value }) {
-  if (!value) return <span className="users-profile__no-rating">No rating</span>;
-  return (
-    <span className="users-profile__stars">
-      {'★'.repeat(Math.round(value / 2))}{'☆'.repeat(5 - Math.round(value / 2))}
-      <span className="users-profile__stars-num"> {value}/10</span>
-    </span>
-  );
-}
 
 function PostCard({ post }) {
   const isIdea = post.postType === 'IDEA';
@@ -27,7 +18,15 @@ function PostCard({ post }) {
           <h3 className="community-card__title" style={{ fontSize: 15 }}>
             {isIdea ? <em>Idea Post</em> : post.title}
           </h3>
-          {!isIdea && <StarRating value={post.rating} />}
+          {!isIdea && (
+            <PostRatingSummary
+              authorRating={post.authorRating}
+              communityRating={post.communityRating}
+              ratingCount={post.ratingCount}
+              align="end"
+              compact
+            />
+          )}
         </div>
         <div className="community-card__meta">
           <span className="badge badge--dim">{isIdea ? 'IDEA' : 'GAME'}</span>

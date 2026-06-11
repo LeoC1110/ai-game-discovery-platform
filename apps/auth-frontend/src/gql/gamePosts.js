@@ -11,6 +11,10 @@ export const POST_FRAGMENT = gql`
     releaseYear
     gameType
     rating
+    authorRating
+    communityRating
+    ratingCount
+    myCommunityRating
     coverImageUrl
     gameLink
     tags
@@ -126,6 +130,19 @@ export const ADD_COMMENT = gql`
     addComment(postId: $postId, text: $text) {
       id commentsCount
       comments { id author { id username } text createdAt likedBy likeCount }
+    }
+  }
+`;
+
+export const RATE_POST = gql`
+  mutation RatePost($postId: ID!, $score: Int!) {
+    ratePost(postId: $postId, score: $score) {
+      id
+      rating
+      authorRating
+      communityRating
+      ratingCount
+      myCommunityRating
     }
   }
 `;

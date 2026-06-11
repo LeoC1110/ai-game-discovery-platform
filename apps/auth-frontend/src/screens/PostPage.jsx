@@ -218,7 +218,7 @@ export default function PostPage() {
 
               <div className="post-form__row">
                 <label>
-                  Rating (1-10)
+                  Author Rating (1-10)
                   <input className="input" name="rating" type="number" min="1" max="10" value={form.rating} onChange={handleChange} />
                 </label>
                 <label>

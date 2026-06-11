@@ -169,6 +169,10 @@ export const typeDefs = /* GraphQL */ `
     releaseYear: Int
     gameType: String
     rating: Int
+    authorRating: Int
+    communityRating: Float
+    ratingCount: Int!
+    myCommunityRating: Int
     coverImageUrl: String
     gameLink: String
     tags: [String!]!
@@ -242,6 +246,9 @@ export const typeDefs = /* GraphQL */ `
     id: ID
     title: String
     rating: Float
+    authorRating: Float
+    communityRating: Float
+    ratingCount: Int
     tags: [String]
     likesCount: Int
     commentsCount: Int
@@ -340,6 +347,7 @@ export const typeDefs = /* GraphQL */ `
     createPost(input: CreatePostInput!): GamePost!
     deletePost(id: ID!): Boolean!
     editPost(id: ID!, input: EditPostInput!): GamePost!
+    ratePost(postId: ID!, score: Int!): GamePost!
     likePost(id: ID!): GamePost!
     addComment(postId: ID!, text: String!): GamePost!
     toggleBookmark(postId: ID!): GamePost!

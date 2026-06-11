@@ -8,6 +8,9 @@ export const ASK_AI = gql`
         id
         title
         rating
+        authorRating
+        communityRating
+        ratingCount
         tags
         likesCount
         commentsCount

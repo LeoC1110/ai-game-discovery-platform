@@ -14,7 +14,7 @@ const playerMeResult = { data: { me: { __typename: 'User', id: '2', role: 'Playe
 const createdPost = {
   __typename: 'GamePost',
   id: 'p1', title: 'Elden Ring', genre: 'RPG', platform: 'PC', developer: 'FromSoftware',
-  releaseYear: 2022, gameType: 'Singleplayer', rating: 10, coverImageUrl: null, gameLink: null,
+  releaseYear: 2022, gameType: 'Singleplayer', rating: 10, authorRating: 10, communityRating: null, ratingCount: 0, myCommunityRating: null, coverImageUrl: null, gameLink: null,
   tags: ['RPG', 'Souls'], review: 'Amazing game', featured: false,
   postedBy: { __typename: 'User', id: '1', username: 'testuser' },
   likesCount: 0, commentsCount: 0, bookmarksCount: 0, isLikedByMe: false, isBookmarkedByMe: false,
@@ -27,6 +27,7 @@ describe('PostPage', () => {
     renderWithProviders(<PostPage />, { mocks });
     expect(screen.getByText('Post a Game')).toBeInTheDocument();
     expect(screen.getAllByText(/game title/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/author rating/i)).toBeInTheDocument();
     expect(screen.getAllByText(/review/i).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /publish post/i })).toBeInTheDocument();
   });

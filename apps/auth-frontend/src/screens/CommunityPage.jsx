@@ -3,10 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, gql } from '@apollo/client';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
+import PostRatingSummary from '../components/PostRatingSummary';
 import {
   PAGED_POSTS,
   LIKE_POST,
   ADD_COMMENT,
+  RATE_POST,
   TOGGLE_BOOKMARK,
   DELETE_POST,
   EDIT_POST,
@@ -33,16 +35,6 @@ const PLATFORM_OPTIONS = [
   'PC', 'PlayStation', 'Xbox', 'Nintendo Switch', 'iOS', 'Android',
   'Web Browser', 'Steam Deck', 'Other',
 ];
-
-function StarRating({ value }) {
-  if (!value) return <span className="star-rating star-rating--empty">No rating</span>;
-  return (
-    <span className="star-rating">
-      {'★'.repeat(Math.round(value / 2))}{'☆'.repeat(5 - Math.round(value / 2))}
-      <span className="star-rating__value">{value}/10</span>
-    </span>
-  );
-}
 
 function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, onEdit, onFeature }) {
   const isOwner = currentUser?.id === post.postedBy?.id;
@@ -78,7 +70,15 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
               )}
             </h3>
           )}
-          {!isIdea && <StarRating value={post.rating} />}
+          {!isIdea && (
+            <PostRatingSummary
+              authorRating={post.authorRating}
+              communityRating={post.communityRating}
+              ratingCount={post.ratingCount}
+              align="end"
+              compact
+            />
+          )}
         </div>
         {!isIdea && (
           <div className="community-card__meta">
@@ -254,7 +254,7 @@ function EditModal({ post, onClose, onSaved }) {
                   )}
                 </label>
                 <label className="community-form-label">
-                  Rating (1-10)
+                  Author Rating (1-10)
                   <input className="input" name="rating" type="number" min="1" max="10" value={form.rating} onChange={handle} />
                 </label>
               </div>
@@ -282,6 +282,8 @@ function EditModal({ post, onClose, onSaved }) {
 
 function PostModal({ post, currentUser, onClose, onUpdate }) {
   const [commentText, setCommentText] = useState('');
+  const [ratingValue, setRatingValue] = useState(post.myCommunityRating ? String(post.myCommunityRating) : '');
+  const [ratingError, setRatingError] = useState(null);
   const isAdmin = currentUser?.role === 'Admin';
   const isIdea = post.postType === 'IDEA';
 
@@ -306,9 +308,27 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
     onCompleted: ({ toggleCommentLike: updated }) => onUpdate(updated),
   });
 
+  const [ratePost, { loading: savingRating }] = useMutation(RATE_POST, {
+    onCompleted: ({ ratePost: updated }) => {
+      setRatingError(null);
+      setRatingValue(updated?.myCommunityRating != null ? String(updated.myCommunityRating) : '');
+      onUpdate(updated);
+    },
+    onError: (err) => setRatingError(err.message),
+  });
+
   const handleDeleteComment = (commentId) => {
     if (!window.confirm('Delete this comment?')) return;
     deleteComment({ variables: { postId: post.id, commentId } });
+  };
+
+  const handleRatePost = () => {
+    const numericScore = Number(ratingValue);
+    if (!Number.isInteger(numericScore) || numericScore < 1 || numericScore > 10) {
+      setRatingError('Community rating must be an integer from 1 to 10.');
+      return;
+    }
+    ratePost({ variables: { postId: post.id, score: numericScore } });
   };
 
 
@@ -323,7 +343,15 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
         {!isIdea && post.coverImageUrl && (
           <img src={post.coverImageUrl} alt={post.title} className="community-modal__cover" onError={(e) => { e.target.style.display = 'none'; }} />
         )}
-        {!isIdea && <StarRating value={post.rating} />}
+        {!isIdea && (
+          <PostRatingSummary
+            authorRating={post.authorRating}
+            communityRating={post.communityRating}
+            ratingCount={post.ratingCount}
+            myCommunityRating={post.myCommunityRating}
+            showMyRating
+          />
+        )}
         {!isIdea && (
           <div className="community-modal__meta">
             {post.genre && <span className="badge">{post.genre}</span>}
@@ -347,6 +375,35 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
           by {post.postedBy?.username} · {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : ''}
           · ♥ {post.likesCount} · 💬 {post.commentsCount}
         </p>
+
+        {!isIdea && (
+          <div className="card" style={{ padding: 16, marginBottom: 18, background: 'rgba(255,255,255,0.03)' }}>
+            <p style={{ margin: '0 0 10px', fontWeight: 600 }}>Your Community Rating</p>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                className="input"
+                type="number"
+                min="1"
+                max="10"
+                step="1"
+                value={ratingValue}
+                onChange={(e) => setRatingValue(e.target.value)}
+                placeholder="1-10"
+                style={{ width: 120 }}
+              />
+              <button
+                type="button"
+                className={`btn-primary ${savingRating ? 'is-loading' : ''}`}
+                disabled={savingRating}
+                aria-busy={savingRating}
+                onClick={handleRatePost}
+              >
+                {savingRating ? 'Saving…' : post.myCommunityRating != null ? 'Update Rating' : 'Rate Post'}
+              </button>
+            </div>
+            {ratingError && <p className="msg-error msg-error--spaced">{ratingError}</p>}
+          </div>
+        )}
 
         <h4 className="community-modal__comments-title">Comments ({post.commentsCount})</h4>
         <div className="community-comments-list">

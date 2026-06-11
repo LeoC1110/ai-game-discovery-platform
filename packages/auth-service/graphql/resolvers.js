@@ -5,10 +5,18 @@ import User from '../models/User.js';
 import EmailVerification from '../models/EmailVerification.js';
 import Game from '../models/Game.js';
 import GamePost from '../models/GamePost.js';
+import CommunityRating from '../models/CommunityRating.js';
 import Player from '../models/Player.js';
 import Tournament from '../models/Tournament.js';
 import TournamentResult from '../models/TournamentResult.js';
 import { askAIAgent, clearAIHistory, getAIHistory, geminiHealthTest } from '../services/aiAgentService.js';
+import {
+  attachCommunityRatingData,
+  attachCommunityRatingDataToPost,
+  calculateTrendScore,
+  getCommunityRatingSnapshot,
+  getWeightedCommunityRating,
+} from '../services/communityRatingService.js';
 import { loadStoredPreferences, upsertUserPreferences, clearUserPreferences } from '../services/userMemoryService.js';
 import { sendResetPasswordCodeEmail } from '../services/emailService.js';
 import { checkRateLimit, getClientIp } from '../middleware/rateLimit.js';
@@ -126,10 +134,12 @@ const buildPostFilter = ({ search, genre, platform, tag, postType } = {}) => {
 };
 
 const buildPostSort = (sort = 'newest') => {
-  if (sort === 'rating') return { rating: -1, createdAt: -1 };
+  if (sort === 'rating') return { communityRatingSort: -1, ratingCountSort: -1, rating: -1, createdAt: -1 };
   if (sort === 'likes') return { likesCountSort: -1, createdAt: -1 };
   if (sort === 'comments') return { commentsCountSort: -1, createdAt: -1 };
-  if (sort === 'engagement') return { engagementScoreSort: -1, createdAt: -1 };
+  if (sort === 'engagement') {
+    return { engagementScoreSort: -1, communityRatingSort: -1, ratingCountSort: -1, createdAt: -1 };
+  }
   return { createdAt: -1 };
 };
 
@@ -143,29 +153,68 @@ const populatePostQuery = (query) =>
     .populate('likedBy', '_id')
     .populate('bookmarkedBy', '_id');
 
-const fetchPostsPage = async ({ filter, sort, skip, cap }) => {
-  if (sort === 'likes' || sort === 'comments' || sort === 'engagement') {
-    const ids = await GamePost.aggregate([
-      { $match: filter },
-      {
-        $addFields: {
-          likesCountSort: { $size: { $ifNull: ['$likedBy', []] } },
-          commentsCountSort: { $size: { $ifNull: ['$comments', []] } },
-          bookmarksCountSort: { $size: { $ifNull: ['$bookmarkedBy', []] } },
-        },
+const buildAggregateCommunitySortStages = () => ([
+  {
+    $lookup: {
+      from: CommunityRating.collection.name,
+      localField: '_id',
+      foreignField: 'postId',
+      as: 'communityRatings',
+    },
+  },
+  {
+    $addFields: {
+      likesCountSort: { $size: { $ifNull: ['$likedBy', []] } },
+      commentsCountSort: { $size: { $ifNull: ['$comments', []] } },
+      bookmarksCountSort: { $size: { $ifNull: ['$bookmarkedBy', []] } },
+      ratingCountSort: { $size: { $ifNull: ['$communityRatings', []] } },
+      communityRatingAverage: { $avg: '$communityRatings.score' },
+    },
+  },
+  {
+    $addFields: {
+      communityRatingSort: {
+        $ifNull: ['$communityRatingAverage', 0],
       },
-      {
-        $addFields: {
-          engagementScoreSort: {
-            $add: [
-              { $ifNull: ['$rating', 0] },
-              '$likesCountSort',
-              { $multiply: ['$commentsCountSort', 2] },
-              { $multiply: ['$bookmarksCountSort', 2] },
+      weightedCommunityRatingSort: {
+        $cond: [
+          { $gt: ['$ratingCountSort', 0] },
+          {
+            $multiply: [
+              { $ifNull: ['$communityRatingAverage', 0] },
+              {
+                $divide: [
+                  '$ratingCountSort',
+                  { $add: ['$ratingCountSort', 4] },
+                ],
+              },
             ],
           },
-        },
+          0,
+        ],
       },
+    },
+  },
+  {
+    $addFields: {
+      engagementScoreSort: {
+        $add: [
+          { $multiply: ['$weightedCommunityRatingSort', 2] },
+          '$likesCountSort',
+          { $multiply: ['$commentsCountSort', 2] },
+          { $multiply: ['$bookmarksCountSort', 2] },
+          { $multiply: ['$ratingCountSort', 1.5] },
+        ],
+      },
+    },
+  },
+]);
+
+const fetchPostsPage = async ({ filter, sort, skip, cap, currentUserId }) => {
+  if (sort === 'rating' || sort === 'likes' || sort === 'comments' || sort === 'engagement') {
+    const ids = await GamePost.aggregate([
+      { $match: filter },
+      ...buildAggregateCommunitySortStages(),
       { $sort: buildPostSort(sort) },
       { $skip: skip },
       { $limit: cap },
@@ -175,12 +224,14 @@ const fetchPostsPage = async ({ filter, sort, skip, cap }) => {
     if (!ids.length) return [];
     const orderedIds = ids.map((entry) => toObjectIdString(entry._id));
     const posts = await populatePostQuery(GamePost.find({ _id: { $in: orderedIds } }));
-    const map = new Map(posts.map((post) => [toObjectIdString(post._id), post]));
+    const ratedPosts = await attachCommunityRatingData(posts, currentUserId);
+    const map = new Map(ratedPosts.map((post) => [toObjectIdString(post._id), post]));
     return orderedIds.map((id) => map.get(id)).filter(Boolean);
   }
 
   const query = GamePost.find(filter).sort(buildPostSort(sort)).skip(skip).limit(cap);
-  return populatePostQuery(query);
+  const posts = await populatePostQuery(query);
+  return attachCommunityRatingData(posts, currentUserId);
 };
 
 const ensurePlayerForUser = async (userId) => {
@@ -568,7 +619,7 @@ export const resolvers = {
       requireUser(user);
       const { cap, skip } = buildPagination({ limit, offset });
       const filter = buildPostFilter({ search, genre, platform, tag, postType });
-      const posts = await fetchPostsPage({ filter, sort, skip, cap });
+      const posts = await fetchPostsPage({ filter, sort, skip, cap, currentUserId: user._id });
       return posts;
     },
     pagedPosts: async (_parent, {
@@ -585,13 +636,13 @@ export const resolvers = {
       const { cap, skip } = buildPagination({ limit, offset });
       const filter = buildPostFilter({ search, genre, platform, tag, postType });
       const totalCount = await GamePost.countDocuments(filter);
-      const posts = await fetchPostsPage({ filter, sort, skip, cap });
+      const posts = await fetchPostsPage({ filter, sort, skip, cap, currentUserId: user._id });
       return { posts, totalCount };
     },
     myPosts: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
       const { cap, skip } = buildPagination({ limit, offset });
-      return GamePost.find({ postedBy: current._id })
+      const posts = await GamePost.find({ postedBy: current._id })
         .populate('postedBy')
         .populate({ path: 'comments.author' })
         .populate('likedBy', '_id')
@@ -599,11 +650,12 @@ export const resolvers = {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(cap);
+      return attachCommunityRatingData(posts, current._id);
     },
     bookmarkedPosts: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
       const { cap, skip } = buildPagination({ limit, offset });
-      return GamePost.find({ bookmarkedBy: current._id })
+      const posts = await GamePost.find({ bookmarkedBy: current._id })
         .populate('postedBy')
         .populate({ path: 'comments.author' })
         .populate('likedBy', '_id')
@@ -611,6 +663,7 @@ export const resolvers = {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(cap);
+      return attachCommunityRatingData(posts, current._id);
     },
     pagedBookmarks: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
@@ -625,15 +678,16 @@ export const resolvers = {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(cap);
-      return { posts, totalCount };
+      return { posts: await attachCommunityRatingData(posts, current._id), totalCount };
     },
     getPost: async (_parent, { id }, { user }) => {
       requireUser(user);
-      return GamePost.findById(id)
+      const post = await GamePost.findById(id)
         .populate('postedBy')
         .populate({ path: 'comments.author' })
         .populate('likedBy', '_id')
         .populate('bookmarkedBy', '_id');
+      return attachCommunityRatingDataToPost(post, user._id);
     },
 
     // ── User search & public profiles ────────────────────────────────────────
@@ -715,10 +769,15 @@ export const resolvers = {
         GamePost.find({ bookmarkedBy: id }).populate(populateOpts).sort({ createdAt: -1 }),
       ]);
 
-      const postCount = userPosts.length;
-      const bookmarkCount = bookmarkedByUser.length;
-      const likesReceived = userPosts.reduce((acc, p) => acc + (p.likedBy?.length || 0), 0);
-      const commentCount = userPosts.reduce((acc, p) => acc + (p.comments?.length || 0), 0);
+      const [ratedUserPosts, ratedBookmarks] = await Promise.all([
+        attachCommunityRatingData(userPosts, user._id),
+        attachCommunityRatingData(bookmarkedByUser, user._id),
+      ]);
+
+      const postCount = ratedUserPosts.length;
+      const bookmarkCount = ratedBookmarks.length;
+      const likesReceived = ratedUserPosts.reduce((acc, p) => acc + (p.likedBy?.length || 0), 0);
+      const commentCount = ratedUserPosts.reduce((acc, p) => acc + (p.comments?.length || 0), 0);
 
       return {
         id: u._id.toString(),
@@ -727,8 +786,8 @@ export const resolvers = {
         bookmarkCount,
         likesReceived,
         commentCount,
-        posts: userPosts,
-        bookmarkedPosts: bookmarkedByUser,
+        posts: ratedUserPosts,
+        bookmarkedPosts: ratedBookmarks,
       };
     },
     myRecentResults: async (_parent, { limit, offset } = {}, { user }) => {
@@ -1223,7 +1282,10 @@ export const resolvers = {
         comments: [],
       });
       await post.populate('postedBy');
-      return post;
+      await post.populate({ path: 'comments.author' });
+      await post.populate('likedBy', '_id');
+      await post.populate('bookmarkedBy', '_id');
+      return attachCommunityRatingDataToPost(post, current._id);
     },
     deletePost: async (_parent, { id }, { user }) => {
       const current = requireUser(user);
@@ -1233,6 +1295,7 @@ export const resolvers = {
         throw new GraphQLError('Not authorized', { extensions: { code: 'FORBIDDEN' } });
       }
       await GamePost.findByIdAndDelete(id);
+      await CommunityRating.deleteMany({ postId: id });
       return true;
     },
     editPost: async (_parent, { id, input }, { user }) => {
@@ -1271,7 +1334,34 @@ export const resolvers = {
       await post.populate({ path: 'comments.author' });
       await post.populate('likedBy', '_id');
       await post.populate('bookmarkedBy', '_id');
-      return post;
+      return attachCommunityRatingDataToPost(post, current._id);
+    },
+    ratePost: async (_parent, { postId, score }, { user }) => {
+      const current = requireUser(user);
+      const normalizedScore = Number(score);
+      if (!Number.isInteger(normalizedScore) || normalizedScore < 1 || normalizedScore > 10) {
+        throw new GraphQLError('Community rating score must be an integer from 1 to 10', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      const post = await GamePost.findById(postId);
+      if (!post || post.postType !== 'GAME') {
+        throw new GraphQLError('Game post not found', { extensions: { code: 'NOT_FOUND' } });
+      }
+
+      await CommunityRating.findOneAndUpdate(
+        { postId: post._id, userId: current._id },
+        { $set: { score: normalizedScore } },
+        { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true },
+      );
+
+      const populatedPost = await GamePost.findById(postId)
+        .populate('postedBy')
+        .populate({ path: 'comments.author' })
+        .populate('likedBy', '_id')
+        .populate('bookmarkedBy', '_id');
+      return attachCommunityRatingDataToPost(populatedPost, current._id);
     },
     likePost: async (_parent, { id }, { user }) => {
       const current = requireUser(user);
@@ -1288,7 +1378,7 @@ export const resolvers = {
       await post.populate({ path: 'comments.author' });
       await post.populate('likedBy', '_id');
       await post.populate('bookmarkedBy', '_id');
-      return post;
+      return attachCommunityRatingDataToPost(post, current._id);
     },
     addComment: async (_parent, { postId, text }, { user }) => {
       const current = requireUser(user);
@@ -1299,7 +1389,7 @@ export const resolvers = {
         { new: true },
       ).populate('postedBy').populate({ path: 'comments.author' }).populate('likedBy', '_id').populate('bookmarkedBy', '_id');
       if (!post) throw new GraphQLError('Post not found', { extensions: { code: 'NOT_FOUND' } });
-      return post;
+      return attachCommunityRatingDataToPost(post, current._id);
     },
     toggleBookmark: async (_parent, { postId }, { user }) => {
       const current = requireUser(user);
@@ -1316,7 +1406,7 @@ export const resolvers = {
       await post.populate({ path: 'comments.author' });
       await post.populate('likedBy', '_id');
       await post.populate('bookmarkedBy', '_id');
-      return post;
+      return attachCommunityRatingDataToPost(post, current._id);
     },
     deleteComment: async (_parent, { postId, commentId }, { user }) => {
       const current = requireUser(user);
@@ -1336,7 +1426,7 @@ export const resolvers = {
       post.comments.pull(commentId);
       await post.save();
       await post.populate({ path: 'comments.author' });
-      return post;
+      return attachCommunityRatingDataToPost(post, current._id);
     },
     featurePost: async (_parent, { id, featured }, { user }) => {
       const current = requireUser(user);
@@ -1349,7 +1439,7 @@ export const resolvers = {
         { new: true },
       ).populate('postedBy').populate({ path: 'comments.author' }).populate('likedBy', '_id').populate('bookmarkedBy', '_id');
       if (!post) throw new GraphQLError('Post not found', { extensions: { code: 'NOT_FOUND' } });
-      return post;
+      return attachCommunityRatingDataToPost(post, current._id);
     },
     toggleCommentLike: async (_parent, { postId, commentId }, { user }) => {
       const current = requireUser(user);
@@ -1373,7 +1463,7 @@ export const resolvers = {
       }
       await post.save();
       await post.populate({ path: 'comments.author' });
-      return post;
+      return attachCommunityRatingDataToPost(post, current._id);
     },
     recordTournamentResult: async (_parent, { input }, { user }) => {
       const current = requireUser(user);
@@ -1449,6 +1539,24 @@ export const resolvers = {
   GamePost: {
     id: (parent) => parent.id || parent._id?.toString(),
     postType: (parent) => parent.postType || 'GAME',
+    rating: (parent) => parent.rating ?? parent.authorRating ?? null,
+    authorRating: (parent) => parent.authorRating ?? parent.rating ?? null,
+    communityRating: async (parent, _args, { user }) => {
+      if (parent.communityRating !== undefined) return parent.communityRating;
+      const snapshot = await getCommunityRatingSnapshot(parent._id || parent.id, user?._id);
+      return snapshot.communityRating;
+    },
+    ratingCount: async (parent, _args, { user }) => {
+      if (parent.ratingCount !== undefined) return parent.ratingCount;
+      const snapshot = await getCommunityRatingSnapshot(parent._id || parent.id, user?._id);
+      return snapshot.ratingCount;
+    },
+    myCommunityRating: async (parent, _args, { user }) => {
+      if (!user) return null;
+      if (parent.myCommunityRating !== undefined) return parent.myCommunityRating;
+      const snapshot = await getCommunityRatingSnapshot(parent._id || parent.id, user._id);
+      return snapshot.myCommunityRating;
+    },
     postedBy: async (parent) => {
       if (parent.postedBy?.username) return safeUser(parent.postedBy);
       const populated = await GamePost.findById(parent._id).populate('postedBy');

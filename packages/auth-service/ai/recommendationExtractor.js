@@ -5,6 +5,7 @@
 // Reuses the same logic as the legacy aiAgentService.js extractRecommendedPosts —
 // extracted here so the pipeline can call it as a dedicated step.
 import GamePost from '../models/GamePost.js';
+import { attachCommunityRatingData } from '../services/communityRatingService.js';
 
 const RECO_BLOCK_RE = /<!--RECOMMENDATIONS:(\[.*?\])-->/s;
 
@@ -16,6 +17,7 @@ const RECO_BLOCK_RE = /<!--RECOMMENDATIONS:(\[.*?\])-->/s;
  *   cleanAnswer: string,
  *   recommendations: Array<{
  *     id: string|null, title: string, rating: number|null,
+ *     authorRating: number|null, communityRating: number|null, ratingCount: number,
  *     tags: string[], likesCount: number, commentsCount: number,
  *     reason: string|null, confidence: number|null, matchedTags: string[]
  *   }>
@@ -42,7 +44,8 @@ export async function extractRecommendedPosts(aiText) {
   // Enrich each entry with real DB data
   try {
     const posts = await GamePost.find().lean();
-    const postMap = new Map(posts.map((p) => [p.title.toLowerCase(), p]));
+    const ratedPosts = await attachCommunityRatingData(posts);
+    const postMap = new Map(ratedPosts.map((p) => [p.title.toLowerCase(), p]));
 
     const recommendations = parsed
       .slice(0, 5)
@@ -51,7 +54,10 @@ export async function extractRecommendedPosts(aiText) {
         return {
           id: dbPost ? dbPost._id.toString() : null,
           title: item.title ?? null,
-          rating: dbPost?.rating ?? null,
+          rating: dbPost?.communityRating ?? dbPost?.authorRating ?? null,
+          authorRating: dbPost?.authorRating ?? null,
+          communityRating: dbPost?.communityRating ?? null,
+          ratingCount: dbPost?.ratingCount ?? 0,
           tags: dbPost?.tags ?? [],
           likesCount: dbPost?.likedBy?.length ?? 0,
           commentsCount: dbPost?.comments?.length ?? 0,
