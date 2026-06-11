@@ -9,6 +9,8 @@ import { attachCommunityRatingData } from '../services/communityRatingService.js
 
 const RECO_BLOCK_RE = /<!--RECOMMENDATIONS:(\[.*?\])-->/s;
 
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
  * Parse and enrich the RECOMMENDATIONS block embedded in AI text.
  *
@@ -43,7 +45,19 @@ export async function extractRecommendedPosts(aiText) {
 
   // Enrich each entry with real DB data
   try {
-    const posts = await GamePost.find().lean();
+    const candidateTitles = parsed
+      .slice(0, 5)
+      .map((item) => String(item?.title ?? '').trim())
+      .filter(Boolean);
+
+    if (!candidateTitles.length) {
+      return { cleanAnswer, recommendations: [] };
+    }
+
+    const titleRegexes = candidateTitles.map((title) => new RegExp(`^${escapeRegex(title)}$`, 'i'));
+    const posts = await GamePost.find({ title: { $in: titleRegexes } })
+      .select('title rating tags likedBy comments bookmarkedBy')
+      .lean();
     const ratedPosts = await attachCommunityRatingData(posts);
     const postMap = new Map(ratedPosts.map((p) => [p.title.toLowerCase(), p]));
 

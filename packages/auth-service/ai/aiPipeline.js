@@ -121,13 +121,50 @@ export async function runPipeline({ userId, username, message }) {
   saveExplicitPreferences(userId, message).catch(() => {});
   const topicContext = extractTopicContext(historyRecords, message);
 
-  // Build conversation context: stored summary (if any) + recent history
-  let conversationContext = buildConversationContext(historyRecords);
-  if (userMemory.conversationSummary) {
-    conversationContext = `${userMemory.conversationSummary}\n\n${conversationContext}`;
+  // Phrases in past AI responses that should never be forwarded as context — they
+  // cause Nova to echo apologies or hallucinate external suggestions on the next turn.
+  const POISONED_PHRASE_RE =
+    /I apologize|sorry for the confusion|let'?s refocus|oversight|Also consider \(not on this platform\)/i;
+
+  // Sanitise history: remove AI turns that contain poisoned phrases so they cannot
+  // bleed into the next prompt.
+  const cleanHistory = historyRecords.filter(
+    (m) => !(m.role === 'assistant' && POISONED_PHRASE_RE.test(m.content)),
+  );
+
+  // ── Step 2: Router Agent ──────────────────────────────────────────────────
+  // Classify once and reuse for both context gating and downstream steps.
+  if (!isProduction) {
+    console.time('[pipeline] step2 routerAgent');
   }
-  if (userMemory.trackedTopics.length) {
-    conversationContext = `[Recent topics: ${userMemory.trackedTopics.join(', ')}]\n${conversationContext}`;
+  const { intent, confidence } = classifyIntent(message);
+  debugLog(`[pipeline] intent="${intent}" confidence="${confidence}"`);
+  if (!isProduction) {
+    console.timeEnd('[pipeline] step2 routerAgent');
+  }
+
+  const isCommunityOrLeaderboard =
+    intent === 'community_summary' || intent === 'leaderboard_query';
+
+  // Build conversation context: stored summary (if any) + recent history.
+  // For community / leaderboard intents we deliberately drop the full history
+  // so old apology wording from prior turns cannot pollute the new answer.
+  let conversationContext;
+  if (isCommunityOrLeaderboard) {
+    // Only keep the very last user message (for immediate follow-up detection),
+    // never the rolling summary or older turns.
+    const lastUserTurn = cleanHistory.filter((m) => m.role === 'user').slice(-1);
+    conversationContext = lastUserTurn.length
+      ? `User (previous): ${lastUserTurn[0].content}`
+      : '';
+  } else {
+    conversationContext = buildConversationContext(cleanHistory);
+    if (userMemory.conversationSummary) {
+      conversationContext = `${userMemory.conversationSummary}\n\n${conversationContext}`;
+    }
+    if (userMemory.trackedTopics.length) {
+      conversationContext = `[Recent topics: ${userMemory.trackedTopics.join(', ')}]\n${conversationContext}`;
+    }
   }
 
   const newTurnCount = userTurnCount + 1;
@@ -136,16 +173,6 @@ export async function runPipeline({ userId, username, message }) {
   );
   if (!isProduction) {
     console.timeEnd('[pipeline] step1 conversationManager');
-  }
-
-  // ── Step 2: Router Agent ──────────────────────────────────────────────────
-  if (!isProduction) {
-    console.time('[pipeline] step2 routerAgent');
-  }
-  const { intent, confidence } = classifyIntent(message);
-  debugLog(`[pipeline] intent="${intent}" confidence="${confidence}"`);
-  if (!isProduction) {
-    console.timeEnd('[pipeline] step2 routerAgent');
   }
 
   // ── Step 3: Platform Tools ────────────────────────────────────────────────

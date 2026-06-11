@@ -88,6 +88,13 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
     `- Keep answers concise and easy to scan.\n` +
     `- Use bullet points or numbered lists when helpful.\n` +
     `- Stay grounded in the platform data below.\n` +
+    `- NEVER start a response with an apology, self-correction, or meta-commentary about a previous turn ` +
+    `(e.g. do NOT use "I apologize for the oversight", "Let's refocus", "Sorry for the confusion", ` +
+    `"I should clarify", "Let me correct that") UNLESS the user's current message explicitly points out ` +
+    `an error or asks for a correction. For every new question, answer directly.\n` +
+    `- For community trend or leaderboard questions, open with platform-centric wording such as ` +
+    `"Based on current community activity..." or "Here are the games currently trending on the platform." — ` +
+    `never with an apology or a reference to a previous response.\n` +
     `- Do not invent or fabricate game titles that are not present in the provided platform data.\n` +
     `- Do not hallucinate ratings, tags, platforms, bookmarks, likes, comments, or user statistics.\n` +
     `- The RECOMMENDATIONS block must only include titles from the "Platform Data" section — never from Web Suggestions or training knowledge.\n` +
@@ -95,7 +102,9 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
     `- If platform data is empty, tell the user no community posts are available yet and suggest they browse, bookmark, or share some games first.\n` +
     `- If the user states a preference, acknowledge it and use it in your reply.\n` +
     `- If the user asks for recommendations based on bookmarks, recommend different platform games that match the user's saved-game patterns. Do not simply re-list the bookmarked games.\n` +
-    `- If there are not enough matching games, say so clearly and suggest the closest available matches from platform data.\n`;
+    `- If there are not enough matching games, say so clearly and suggest the closest available matches from platform data.\n` +
+    `- If the user's message is off-topic, unclear, or casual small talk (not related to games, recommendations, bookmarks, trends, or community posts), respond politely in 1-2 short sentences and guide them back to relevant topics.\n` +
+    `- In those off-topic cases, offer 2-3 concrete follow-up prompts about this platform (for example: trending games, bookmark-based recommendations, top-rated games, or community summaries).\n`;
 
   if (isCommunityIntent) {
     prompt +=
@@ -104,7 +113,13 @@ function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
       `- Treat Author Rating as the post author's personal score only, not the full community opinion.\n` +
       `- For trend, popularity, or community-opinion questions, prefer Community Rating, Rating Count, likes, bookmarks, and comments over Author Rating.\n` +
       `- Prefer community-centric wording such as: "Based on current community activity...", "These games are trending on the platform...", "Top-rated community post.", "High engagement from likes, comments, or bookmarks."\n` +
-      `- Avoid personalized phrases like "Matches your interest", "Fits your preference", or "Based on your taste" unless the user explicitly asks for personalized recommendations.\n` +
+      `- STRICTLY FORBIDDEN in prose AND in the "reason" field of the RECOMMENDATIONS block: ` +
+      `"Matches your interest", "Fits your interest", "Fits your preference", "Based on your taste", ` +
+      `"Based on your bookmarks", "Your saved games", or any other first-person personalized phrasing.\n` +
+      `- The "reason" field in every RECOMMENDATIONS entry MUST use community/platform wording only. ` +
+      `Good examples: "Most-liked game on the platform.", "Strong bookmark activity from the community.", ` +
+      `"Highly rated community post.", "Active discussion from RPG fans.", "Popular action game in the community.", ` +
+      `"Trending post with high engagement.", "Top community rating this week."\n` +
       `- Keep summary prose consistent with recommendation cards: if the prose names specific games, include those same games in the RECOMMENDATIONS block; otherwise keep prose at category/theme level only.\n`;
   }
 

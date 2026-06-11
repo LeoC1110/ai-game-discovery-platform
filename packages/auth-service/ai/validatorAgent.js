@@ -9,6 +9,12 @@
 import { evaluateAIResponse } from '../services/aiEvaluationService.js';
 import GamePost from '../models/GamePost.js';
 
+const KNOWN_TITLES_TTL_MS = parseInt(process.env.AI_KNOWN_TITLES_TTL_MS ?? '60000', 10);
+let _knownTitlesCache = {
+  value: null,
+  expiresAt: 0,
+};
+
 // ── Layer 1: Structural validation ───────────────────────────────────────────
 
 /**
@@ -34,10 +40,21 @@ export function validate(response) {
  * @returns {Promise<string[]>}
  */
 export async function loadKnownTitles() {
+  const now = Date.now();
+  if (_knownTitlesCache.value && now < _knownTitlesCache.expiresAt) {
+    return _knownTitlesCache.value;
+  }
+
   try {
     const posts = await GamePost.find().select('title').lean();
-    return posts.map((p) => p.title);
+    const titles = posts.map((p) => p.title);
+    _knownTitlesCache = {
+      value: titles,
+      expiresAt: now + KNOWN_TITLES_TTL_MS,
+    };
+    return titles;
   } catch {
+    if (_knownTitlesCache.value) return _knownTitlesCache.value;
     return [];
   }
 }

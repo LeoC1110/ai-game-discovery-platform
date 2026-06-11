@@ -79,6 +79,17 @@ describe('PostPage', () => {
     expect(titleInput.value).toBe('');
   });
 
+  test('shows error when rating is missing', async () => {
+    const mocks = [{ request: { query: ME_QUERY }, result: playerMeResult }];
+    const { container } = renderWithProviders(<PostPage />, { mocks });
+    fireEvent.change(container.querySelector('input[name="title"]'), { target: { value: 'Some Game' } });
+    fireEvent.change(container.querySelector('textarea[name="review"]'), { target: { value: 'Great game' } });
+    fireEvent.submit(container.querySelector('form.post-form'));
+    await waitFor(() => {
+      expect(screen.getByText(/author rating.*required/i)).toBeInTheDocument();
+    });
+  });
+
   test('calls CREATE_POST mutation on valid submit', async () => {
     let mutationCalled = false;
     const createMock = {
@@ -89,7 +100,7 @@ describe('PostPage', () => {
             title: 'Elden Ring',
             review: 'Amazing game',
             genre: undefined, platform: undefined, developer: undefined,
-            releaseYear: undefined, gameType: undefined, rating: undefined,
+            releaseYear: undefined, gameType: undefined, rating: 9,
             coverImageUrl: undefined, gameLink: undefined,
             tags: undefined, featured: undefined,
           },
@@ -106,6 +117,7 @@ describe('PostPage', () => {
 
     fireEvent.change(container.querySelector('input[name="title"]'), { target: { value: 'Elden Ring' } });
     fireEvent.change(container.querySelector('textarea[name="review"]'), { target: { value: 'Amazing game' } });
+    fireEvent.change(container.querySelector('input[name="rating"]'), { target: { value: '9' } });
     fireEvent.submit(container.querySelector('form.post-form'));
 
     await waitFor(() => {

@@ -4,6 +4,7 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage } from '@langchain/core/messages';
 import ConversationHistory from '../models/ConversationHistory.js';
+import UserMemory from '../models/UserMemory.js';
 import { TIMEOUT_RESPONSE } from '../prompts/fallbackResponses.js';
 import { runPipeline } from '../ai/aiPipeline.js';
 
@@ -131,7 +132,15 @@ export async function askAIAgent({ userId, username, message }) {
 // ── Clear a user's history ─────────────────────────────────────────────────────
 export async function clearAIHistory(userId) {
   try {
-    await ConversationHistory.findOneAndUpdate({ userId }, { $set: { messages: [] } });
+    // Clear both conversation messages AND the rolling memory summary/topics so
+    // page-navigation after Clear History truly starts fresh with no stale context.
+    await Promise.all([
+      ConversationHistory.findOneAndUpdate({ userId }, { $set: { messages: [] } }),
+      UserMemory.findOneAndUpdate(
+        { userId },
+        { $set: { conversationSummary: '', trackedTopics: [] } },
+      ),
+    ]);
     return true;
   } catch {
     return false;

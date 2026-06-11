@@ -1246,6 +1246,15 @@ export const resolvers = {
         throw new GraphQLError('Title is required', { extensions: { code: 'BAD_USER_INPUT' } });
       }
 
+      if (postType === 'GAME') {
+        const ratingNum = Number(input.rating);
+        if (!input.rating || !Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 10) {
+          throw new GraphQLError('Author Rating (1–10) is required for game posts', {
+            extensions: { code: 'BAD_USER_INPUT' },
+          });
+        }
+      }
+
       if (postType === 'IDEA') {
         const ideaText = input.review.trim();
         if (!ideaText) {

@@ -86,11 +86,17 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
         </div>
         <div className="community-card__top">
           {isIdea ? (
-            <h3 className="community-card__title community-card__title--idea">
+            <h3
+              className="community-card__title community-card__title--idea"
+              style={isOwner ? { color: '#e03535' } : undefined}
+            >
               Share Your Idea
             </h3>
           ) : (
-            <h3 className="community-card__title">
+            <h3
+              className="community-card__title"
+              style={isOwner ? { color: '#e03535' } : undefined}
+            >
               {post.title}
               {post.featured && (
                 <span className="badge badge--featured community-card__featured">⭐ Featured</span>

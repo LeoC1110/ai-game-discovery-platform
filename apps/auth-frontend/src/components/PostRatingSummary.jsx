@@ -1,8 +1,11 @@
 import React from 'react';
 
-function formatCommunityRating(communityRating, ratingCount) {
-  if (communityRating == null || !ratingCount) return 'Not rated yet';
-  return `${communityRating.toFixed(1)}/10`;
+function formatAvgRating(authorRating, communityRating, ratingCount) {
+  // Community rating is the primary score; author rating is only a fallback
+  // when no community ratings exist yet.
+  if (communityRating != null && ratingCount > 0) return `${communityRating.toFixed(1)}/10`;
+  if (authorRating != null) return `${authorRating}/10`;
+  return '–';
 }
 
 export default function PostRatingSummary({
@@ -25,7 +28,9 @@ export default function PostRatingSummary({
     lineHeight: compact ? 1.35 : 1.45,
   };
 
-  const communityLabel = `Community Rating: ${formatCommunityRating(communityRating, ratingCount)} ⭐`;
+  const avgRatingText = formatAvgRating(authorRating, communityRating, ratingCount);
+  const hasNoCommunityRatings = communityRating == null || ratingCount === 0;
+  const communityLabel = `Avg Rating: ${avgRatingText} ⭐`;
 
   return (
     <div
@@ -57,13 +62,14 @@ export default function PostRatingSummary({
           disabled={disabled}
           title={disabled ? 'You cannot rate this post' : 'Rate this game'}
         >
-          <strong style={{ color: '#f5f5f7', fontWeight: 600 }}>{communityLabel}</strong>
-          {ratingCount > 0 && <span style={{ marginLeft: 6, fontWeight: 400 }}>({ratingCount})</span>}
+          <strong style={{ color: '#111111', fontWeight: 600 }}>{communityLabel}</strong>
+          {!disabled && hasNoCommunityRatings && (
+            <span style={{ marginLeft: 6, color: '#007aff', fontWeight: 500, fontSize: 'inherit' }}>(Rate)</span>
+          )}
         </button>
       ) : (
         <p style={lineStyle}>
-          <strong style={{ color: '#f5f5f7', fontWeight: 600 }}>{communityLabel}</strong>
-          {ratingCount > 0 && <span style={{ marginLeft: 6 }}>({ratingCount})</span>}
+          <strong style={{ color: '#111111', fontWeight: 600 }}>{communityLabel}</strong>
         </p>
       )}
       {showMyRating && myCommunityRating != null && (

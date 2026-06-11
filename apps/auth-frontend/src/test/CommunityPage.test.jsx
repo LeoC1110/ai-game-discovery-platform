@@ -219,8 +219,7 @@ describe('CommunityPage — interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Community Rating: 7.0/10 ⭐')).toBeInTheDocument();
-      expect(screen.getByText('(1)')).toBeInTheDocument();
+      expect(screen.getByText('Avg Rating: 8.0/10 ⭐')).toBeInTheDocument();
     });
   });
 

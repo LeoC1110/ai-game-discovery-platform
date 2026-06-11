@@ -199,7 +199,7 @@ export const typeDefs = /* GraphQL */ `
     developer: String
     releaseYear: Int
     gameType: String
-    rating: Int
+    rating: Int!
     coverImageUrl: String
     gameLink: String
     tags: [String!]

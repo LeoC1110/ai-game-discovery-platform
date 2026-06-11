@@ -95,6 +95,10 @@ export default function PostPage() {
       setMessage({ type: 'error', text: 'Review / recommendation is required.' });
       return;
     }
+    if (!form.rating || Number(form.rating) < 1 || Number(form.rating) > 10) {
+      setMessage({ type: 'error', text: 'Author Rating (1–10) is required.' });
+      return;
+    }
     const tags = form.tags
       .split(',')
       .map((t) => t.trim())
@@ -146,7 +150,7 @@ export default function PostPage() {
           <div className="post-card">
             <header className="post-card__header">
               <h2>Game Details</h2>
-              <p>Add the basic information for your recommendation. Game Title and Review are required.</p>
+              <p>Add the basic information for your recommendation. Game Title, Review, and Author Rating are required.</p>
             </header>
 
             {message && (
@@ -218,8 +222,8 @@ export default function PostPage() {
 
               <div className="post-form__row">
                 <label>
-                  Author Rating (1-10)
-                  <input className="input" name="rating" type="number" min="1" max="10" value={form.rating} onChange={handleChange} />
+                  Author Rating (1-10) *
+                  <input className="input" name="rating" type="number" min="1" max="10" value={form.rating} onChange={handleChange} required />
                 </label>
                 <label>
                   Cover Image

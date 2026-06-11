@@ -38,6 +38,14 @@ Ask Nova for game recommendations, community insights, bookmark-based suggestion
 
 Includes sign in, account creation, protected pages, password reset with email verification code, and logged-in password change from My Profile.
 
+## Recent Updates (June 2026)
+
+* Community rating UX was simplified on post cards with a single Avg Rating display and inline rating interaction for non-authors.
+* Author rating is now required when creating game posts, while community rating remains the primary score signal for trends and recommendations.
+* Rating permissions and behavior were tightened: post authors cannot rate their own posts, and users can update their single rating per post.
+* Nova chat reliability was improved to reduce transient message inconsistencies and preserve recommendation cards after history sync.
+* AI pipeline efficiency was improved with lighter recommendation enrichment queries and short-lived caching for known-title validation.
+
 ## Nova AI Assistant
 
 Nova is a platform-aware AI assistant that uses user activity, bookmarks, community posts, and platform data to support game discovery.

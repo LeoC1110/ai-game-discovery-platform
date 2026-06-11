@@ -8,12 +8,12 @@ import PostRatingSummary from '../components/PostRatingSummary';
 import { ASK_AI, CLEAR_AI_HISTORY, MY_AI_HISTORY } from '../gql/askAI';
 
 const SUGGESTIONS = [
-  'Show trending games in the community.',
-  'Recommend games based on my bookmarks.',
-  'Find high-rated RPG games from the community.',
-  'Summarize popular community posts.',
-  'Analyze my game taste based on my bookmarks and suggest something new.',
-  'Find players with similar game tastes and see what they like.',
+  'Show the top trending games in the community right now.',
+  'Recommend games for me based on my bookmarks.',
+  'Find high-rated RPG games with strong community engagement.',
+  'Summarize the most popular community posts this week.',
+  'Analyze my game taste from bookmarks and suggest something new.',
+  'Suggest 3 community games I might like, and explain each briefly.',
 ];
 
 // ── Small recommendation card ──────────────────────────────────────────────────
@@ -55,9 +55,31 @@ function RecommendedCard({ post }) {
 export default function AgentPage() {
   const bottomRef = useRef(null);
   const location = useLocation();
+  const sessionVersionRef = useRef(0);
+
+  const toUiMessages = (history = []) =>
+    history.map((m, idx) => ({
+      id: m.createdAt || `${m.role}-${idx}`,
+      role: m.role === 'user' ? 'user' : 'agent',
+      text: m.content,
+    }));
+
+  const hydrateHistoryWithRecommendations = (history = [], previousMessages = []) => {
+    const recommendationMap = new Map(
+      (previousMessages || [])
+        .filter((m) => m.role === 'agent' && m.text && m.recommendedPosts?.length)
+        .map((m) => [m.text, m.recommendedPosts]),
+    );
+
+    return toUiMessages(history).map((m) => {
+      if (m.role !== 'agent') return m;
+      const recos = recommendationMap.get(m.text);
+      return recos ? { ...m, recommendedPosts: recos } : m;
+    });
+  };
 
   // Load previous conversation history on mount
-  const { data: historyData, loading: historyLoading } = useQuery(MY_AI_HISTORY, {
+  const { data: historyData, loading: historyLoading, refetch: refetchHistory } = useQuery(MY_AI_HISTORY, {
     fetchPolicy: 'network-only',
   });
 
@@ -66,18 +88,16 @@ export default function AgentPage() {
 
   // Initialise messages once history loads
   useEffect(() => {
-    if (historyLoading) return;
+    if (historyLoading || messages !== null) return;
     const greeting = {
+      id: 'greeting',
       role: 'agent',
       text: "Hi, I'm Nova. I can help you find games you might like, understand community trends, and get recommendations based on your bookmarks and preferences. What would you like to explore today?",
     };
     const history = historyData?.myAIHistory ?? [];
-    const restored = history.map((m) => ({
-      role: m.role === 'user' ? 'user' : 'agent',
-      text: m.content,
-    }));
+    const restored = toUiMessages(history);
     setMessages(restored.length ? restored : [greeting]);
-  }, [historyLoading, historyData]);
+  }, [historyLoading, historyData, messages]);
 
   const [askAI, { loading: asking }] = useMutation(ASK_AI);
   const [clearHistory] = useMutation(CLEAR_AI_HISTORY);
@@ -89,35 +109,50 @@ export default function AgentPage() {
   const sendMessage = async (text) => {
     const userText = (text ?? input).trim();
     if (!userText || asking) return;
+    const activeSessionVersion = sessionVersionRef.current;
     setInput('');
-    setMessages((prev) => [...(prev ?? []), { role: 'user', text: userText }]);
+    setMessages((prev) => [
+      ...(prev ?? []),
+      { id: `user-${Date.now()}`, role: 'user', text: userText },
+    ]);
 
     try {
       const { data } = await askAI({ variables: { message: userText } });
+      if (activeSessionVersion !== sessionVersionRef.current) return;
       const { answer, recommendedPosts } = data.askAI;
       setMessages((prev) => [
         ...(prev ?? []),
-        { role: 'agent', text: answer, recommendedPosts: recommendedPosts ?? [] },
+        {
+          id: `agent-${Date.now()}`,
+          role: 'agent',
+          text: answer,
+          recommendedPosts: recommendedPosts ?? [],
+        },
       ]);
+
+      // Sync with canonical server history to avoid transient UI drift.
+      const refreshed = await refetchHistory();
+      if (activeSessionVersion !== sessionVersionRef.current) return;
+      const latestHistory = refreshed?.data?.myAIHistory ?? [];
+      if (latestHistory.length) {
+        setMessages((prev) => hydrateHistoryWithRecommendations(latestHistory, prev));
+      }
     } catch (err) {
+      if (activeSessionVersion !== sessionVersionRef.current) return;
       const errMsg =
         err?.graphQLErrors?.[0]?.message ??
         'Something went wrong. Please check that GOOGLE_API_KEY is configured on the server.';
       setMessages((prev) => [
         ...(prev ?? []),
-        { role: 'agent', text: `⚠️ ${errMsg}`, isError: true },
+        { id: `error-${Date.now()}`, role: 'agent', text: `⚠️ ${errMsg}`, isError: true },
       ]);
     }
   };
 
   const handleClear = async () => {
+    sessionVersionRef.current += 1;
     await clearHistory();
-    setMessages([
-      {
-        role: 'agent',
-        text: 'Conversation history cleared. How can I help you today?',
-      },
-    ]);
+    window.location.reload();
   };
 
   const isLoading = messages === null || historyLoading;
@@ -162,7 +197,7 @@ export default function AgentPage() {
             ) : (
               messages.map((msg, i) => (
                 <div
-                  key={i}
+                  key={msg.id || i}
                   className={`agent-message agent-message--${msg.role} ${msg.isError ? 'agent-message--error' : ''}`}
                 >
                   <span className="agent-message__label">
