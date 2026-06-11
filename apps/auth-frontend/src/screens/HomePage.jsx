@@ -17,9 +17,14 @@ const ME_QUERY = gql`
 
 const sections = [
   {
+    to: '/share',
+    title: 'Share',
+    description: 'Share a quick thought, question, or idea with the community.',
+  },
+  {
     to: '/post',
     title: 'Post',
-    description: 'Create a game recommendation or share a quick idea with the community.',
+    description: 'Create a game recommendation and share it with the community.',
   },
   {
     to: '/community',
@@ -30,11 +35,6 @@ const sections = [
     to: '/bookmarks',
     title: 'Bookmarks',
     description: 'View and manage your saved game recommendations.',
-  },
-  {
-    to: '/profile',
-    title: 'Profile',
-    description: 'Review your posts, likes, bookmarks, and account settings.',
   },
   {
     to: '/agent',
