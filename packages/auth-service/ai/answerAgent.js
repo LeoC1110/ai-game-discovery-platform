@@ -55,19 +55,20 @@ const INTENT_ROLE_MAP = {
 
 
 // ── Prompt constants ─────────────────────────────────────────────────────────
-const LOW_RATING_THRESHOLD = 6.0; // low-rated
-const HIGH_RATING_THRESHOLD = 8.0; // positively rated / above average
-const POSITIVE_RATING_THRESHOLD = LOW_RATING_THRESHOLD; // high-rated
+const LOW_RATING_THRESHOLD = 6.0; // low-rated: <= 6.0
+const POSITIVE_RATING_THRESHOLD = LOW_RATING_THRESHOLD; // positively rated / above average: > 6.0
+const HIGH_RATING_THRESHOLD = 8.0; // high-rated: >= 8.0
 
 // RECOMMENDATIONS block format instruction — must match the regex in recommendationExtractor.js
 const RECO_FORMAT_RULE =
   `\nWhen your response includes specific game recommendations, you MUST append a ` +
-  `machine-readable block at the very end in this exact format, with no extra tex"reason":"One concise sentence explaining why this game is relevant"t after it:\n` +
-  `<!--RECOMMENDATIONS:[{"title":"Exact Game Title",,"confidence":0.95,"matchedTags":["tag1","tag2"]}]-->\n` +
+  `machine-readable block at the very end in this exact format, with no extra text after it:\n` +
+  `<!--RECOMMENDATIONS:[{"title":"Exact Game Title","reason":"One concise sentence explaining why this game is relevant","confidence":0.95,"matchedTags":["tag1","tag2"]}]-->\n` +
   `Rules for the block:\n` +
   `- Use only titles from the Platform Data section — never from Web Suggestions or training knowledge.\n` +
+  `- reason must be one concise sentence explaining why the game is relevant to the user's request or the current platform context.\n` +
   `- confidence is a float between 0.0 and 1.0.\n` +
-  `- matchedTags are tags from the game that match the user's request, bookmarks, or preferences.\n` +
+  `- matchedTags are tags from the game that match the user's request, bookmarks, preferences, or community context.\n` +
   `- If no specific games are being recommended, omit the block entirely.`;
 
 // ── Intent helpers ───────────────────────────────────────────────────────────
