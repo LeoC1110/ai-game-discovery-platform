@@ -51,6 +51,8 @@ const INTENT_ROLE_MAP = {
     'find low-rated games in the community and explain why they are considered low-rated',
   [INTENTS.GENERAL_CHAT]:
     'have a helpful, friendly conversation about games, recommendations, and the platform',
+  [INTENTS.PLATFORM_INVENTORY_QUERY]:
+    'list games currently available on the platform using platform data only', 
 };
 
 
@@ -122,6 +124,7 @@ function buildBehaviorRulesPrompt() {
     `- Do not hallucinate ratings, tags, platforms, bookmarks, likes, comments, or user statistics.\n` +
     `- The RECOMMENDATIONS block must only include titles from the "Platform Data" section — never from Web Suggestions or training knowledge.\n` +
     `- If "Web Suggestions" are present, you may mention at most 1 title from them in your prose, clearly labelled as "Also consider (not on this platform): <title>". Never put Web Suggestions in the RECOMMENDATIONS block.\n` +
+    `- For all-games, list, show, find, or platform inventory queries, do not mention Web Suggestions at all.\n` +
     `- If there are not enough matching games, say so clearly and suggest the closest available matches from platform data.\n` +
     `- NEVER start a response with an apology, self-correction, or meta-commentary about a previous turn ` +
     `(e.g. do NOT use "I apologize for the oversight", "Let's refocus", "Sorry for the confusion", ` +
