@@ -5,6 +5,71 @@ New features and updates should be added under the relevant version or date sect
 
 ---
 
+## [2026-06-12] — Deterministic AI Pipeline Refactor, Platform Data Stabilization, and Migration Utilities
+
+### `auth-service` — Planner-First AI Pipeline Refactor
+
+Refactored the Nova backend AI flow into a clearer planner-first orchestration model with stronger compatibility guarantees.
+
+- `routerAgent.js` now returns structured plan metadata (mode, confidence, execution flags) for downstream orchestration
+- `answerAgent.js` was upgraded to plan-aware prompt composition while preserving existing public signatures
+- `validatorAgent.js` was rewritten as a deterministic rule-based validation layer (no default LLM/DB side effects)
+- `aiPipeline.js` now delegates by plan, conditionally loads data, performs one-pass reflection when required, and returns richer metadata in responses
+
+### `platformTools.js` — Deterministic MongoDB Data Retrieval Layer
+
+Stabilized platform data retrieval so query behavior is predictable and prompt formatting is consistent.
+
+- Added fixed limits, strict field projection, and deterministic ordering paths for inventory, top-rated, low-rated, and trending views
+- Added schema-safe normalization helpers and compact title-first formatter output for parser-friendly prompts
+- Added `buildPlatformDataForPlan(...)` and retained backward compatibility through intent-based adapters
+- Removed dependency on web-search path for this core retrieval layer to keep behavior deterministic in the pipeline
+
+### `conversationManager.js` — Scalable History Handling
+
+Improved history read/write behavior for long-running users.
+
+- `loadHistory` now uses DB-side slicing (projection with `$slice`) instead of loading full message arrays
+- `saveExchange` now applies bounded message retention via `$push.$slice` to prevent unbounded document growth
+
+### `recommendationExtractor.js` — Faster, Safer Recommendation Parsing
+
+Improved extraction and enrichment reliability for recommendation cards.
+
+- Replaced broad regex extraction with marker-based block parsing (`indexOf` boundaries)
+- Added case-insensitive title de-duplication before and after enrichment
+- Switched to exact-match lookup path using normalized title keys instead of regex-heavy DB matching
+- Added `bookmarksCount` to recommendation payload for frontend consistency
+
+### `GamePost` Model — Normalized Title Support
+
+Introduced normalized title support to improve matching reliability and index utilization.
+
+- Added `titleNormalized` field
+- Added `pre('validate')` normalization from `title`
+- Added indexes for `title` and `titleNormalized`
+
+### Tests and Diagnostics
+
+Expanded isolated and pipeline-level test coverage under `packages/auth-service/ai/__tests__/`.
+
+- Added dedicated tests for `conversationManager`, `recommendationExtractor`, and `platformTools`
+- Kept and validated router/answer/validator/pipeline suites plus mock-mode smoke tests
+- AI-layer regression suites passed after refactor (no failures in the updated batches)
+
+### Migration Utility
+
+Added a one-time migration utility for backfilling normalized titles in existing records.
+
+- New script: `packages/auth-service/scripts/backfillTitleNormalized.js`
+- Supports dry-run by default and write mode with `--apply`
+- Supports both `MONGO_URI` and `MONGODB_URI` environment variable names
+- Added npm scripts:
+  - `backfill:title-normalized`
+  - `backfill:title-normalized:apply`
+
+---
+
 ## [2026-06-11] — Nova Streaming UX, SSE Pipeline, and AI Smoke Tests
 
 ### `AgentPage.jsx` — Visible Progress and Streaming Response UI
