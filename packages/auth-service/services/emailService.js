@@ -38,19 +38,19 @@ const withTimeout = (promise, ms, label) =>
     ),
   ]);
 
-export const sendResetPasswordCodeEmail = async ({ to, code }) => {
+const sendVerificationCodeEmail = async ({ to, code, subjectPrefix, textPrefix, logLabel }) => {
   const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER;
   const appName = process.env.EMAIL_APP_NAME || 'Discovery Platform';
 
   const mailOptions = {
     from: sender,
     to,
-    subject: `${appName} verification code`,
-    text: `Your verify code: ${code}\n\n-- Discovery Platform`,
+    subject: `${appName} ${subjectPrefix}`,
+    text: `${textPrefix}: ${code}\n\n-- Discovery Platform`,
   };
 
   if (!isProduction) {
-    console.log('[Email] Attempting to send reset code email');
+    console.log(`[Email] Attempting to send ${logLabel} email`);
   }
   try {
     await withTimeout(
@@ -59,10 +59,28 @@ export const sendResetPasswordCodeEmail = async ({ to, code }) => {
       'sendMail',
     );
     if (!isProduction) {
-      console.log('[Email] Reset code email sent successfully');
+      console.log(`[Email] ${logLabel} email sent successfully`);
     }
   } catch (err) {
-    console.error('[Email] Failed to send reset code email:', err?.message || 'unknown error');
+    console.error(`[Email] Failed to send ${logLabel} email:`, err?.message || 'unknown error');
     throw err;
   }
 };
+
+export const sendResetPasswordCodeEmail = async ({ to, code }) =>
+  sendVerificationCodeEmail({
+    to,
+    code,
+    subjectPrefix: 'password reset verification code',
+    textPrefix: 'Your password reset verification code',
+    logLabel: 'reset code',
+  });
+
+export const sendEmailVerificationCodeEmail = async ({ to, code }) =>
+  sendVerificationCodeEmail({
+    to,
+    code,
+    subjectPrefix: 'email verification code',
+    textPrefix: 'Your email verification code',
+    logLabel: 'email verification code',
+  });

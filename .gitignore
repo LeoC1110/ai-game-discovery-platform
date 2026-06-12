@@ -8,9 +8,25 @@ dist/
 .env.*.local
 .env.production
 .env.development
+.env.*
+.envrc
 packages/*/.env
+packages/*/.env.*
 apps/*/.env
+apps/*/.env.*
 shared/*/.env
+shared/*/.env.*
+!/.env.example
+!packages/*/.env.example
+!apps/*/.env.example
+!shared/*/.env.example
+
+# Key/certificate files — local only
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
 
 # Logs
 *.log

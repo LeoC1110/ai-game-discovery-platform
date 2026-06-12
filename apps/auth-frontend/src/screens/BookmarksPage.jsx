@@ -95,7 +95,18 @@ export default function BookmarksPage() {
                 </p>
                 <div className="community-card__footer">
                   <span className="community-card__author">
-                    by <strong>{post.postedBy?.username || 'Unknown'}</strong>
+                    by{' '}
+                    <button
+                      type="button"
+                      className="community-card__author-link"
+                      onClick={() => {
+                        if (!post.postedBy?.id) return;
+                        navigate(`/users/${post.postedBy.id}`, { state: { from: 'bookmarks' } });
+                      }}
+                      disabled={!post.postedBy?.id}
+                    >
+                      <strong>{post.postedBy?.username || 'Unknown'}</strong>
+                    </button>
                   </span>
                   <span>♥ {post.likesCount} · 💬 {post.commentsCount}</span>
                 </div>
@@ -103,7 +114,7 @@ export default function BookmarksPage() {
                   <button
                     className="btn-ghost"
                     style={{ fontSize: 13, height: 32 }}
-                    onClick={() => navigate('/community')}
+                    onClick={() => navigate('/community', { state: { focusPost: post } })}
                   >
                     View in Community
                   </button>

@@ -7,7 +7,7 @@ export const LOGIN = gql`
       ok
       message
       token
-      user { id username email }
+      user { id username email emailVerified emailVerifiedAt }
     }
   }
 `;

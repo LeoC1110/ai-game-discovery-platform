@@ -10,6 +10,9 @@ export const SEARCH_USERS = gql`
       bookmarkCount
       likesReceived
       commentCount
+      followerCount
+      followingCount
+      isFollowedByMe
     }
   }
 `;
@@ -24,8 +27,30 @@ export const PUBLIC_USER_PROFILE = gql`
       bookmarkCount
       likesReceived
       commentCount
+      followerCount
+      followingCount
+      isFollowedByMe
       posts { ...PostFields }
       bookmarkedPosts { ...PostFields }
     }
   }
+`;
+
+export const TOGGLE_FOLLOW_USER = gql`
+  mutation ToggleFollowUser($userId: ID!) {
+    toggleFollowUser(userId: $userId) {
+      id
+      username
+      postCount
+      bookmarkCount
+      likesReceived
+      commentCount
+      followerCount
+      followingCount
+      isFollowedByMe
+      posts { ...PostFields }
+      bookmarkedPosts { ...PostFields }
+    }
+  }
+  ${POST_FRAGMENT}
 `;

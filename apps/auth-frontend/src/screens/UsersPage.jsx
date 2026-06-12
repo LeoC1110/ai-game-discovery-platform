@@ -1,12 +1,14 @@
 // src/screens/UsersPage.jsx — Search and discover platform users
-import React, { useState } from 'react';
-import { useLazyQuery } from '@apollo/client';
+import React, { useEffect, useState } from 'react';
+import { useLazyQuery, useMutation, useQuery, gql } from '@apollo/client';
 import { useNavigate } from 'react-router-dom';
 import DashboardNav from '../components/DashboardNav';
-import { SEARCH_USERS } from '../gql/users';
+import { SEARCH_USERS, TOGGLE_FOLLOW_USER } from '../gql/users';
 import './Users.css';
 
-function UserCard({ user }) {
+const ME_QUERY = gql`query MeUsersPage { me { id } }`;
+
+function UserCard({ user, isOwnProfile, onToggleFollow, followLoading }) {
   const navigate = useNavigate();
   return (
     <div className="users-card">
@@ -15,20 +17,27 @@ function UserCard({ user }) {
         <p className="users-card__id">ID: {user.id}</p>
       </div>
       <p className="users-card__stats">
-        {user.postCount} post{user.postCount !== 1 ? 's' : ''}
-        {' · '}
-        ♥ {user.likesReceived} like{user.likesReceived !== 1 ? 's' : ''}
-        {' · '}
-        💬 {user.commentCount} comment{user.commentCount !== 1 ? 's' : ''}
-        {' · '}
-        🔖 {user.bookmarkCount} bookmark{user.bookmarkCount !== 1 ? 's' : ''}
+        Followers: {user.followerCount}
       </p>
-      <button
-        className="btn-primary users-card__btn"
-        onClick={() => navigate(`/users/${user.id}`)}
-      >
-        View Profile
-      </button>
+      <div className="users-card__actions">
+        {!isOwnProfile && (
+          <button
+            type="button"
+            className={`btn-primary users-card__btn users-follow-btn${followLoading ? ' is-loading' : ''}`}
+            disabled={followLoading}
+            aria-busy={followLoading}
+            onClick={() => onToggleFollow(user)}
+          >
+            {followLoading ? 'Saving…' : user.isFollowedByMe ? 'Unfollow' : 'Follow'}
+          </button>
+        )}
+        <button
+          className="btn-primary users-card__btn"
+          onClick={() => navigate(`/users/${user.id}`)}
+        >
+          View Profile
+        </button>
+      </div>
     </div>
   );
 }
@@ -36,10 +45,18 @@ function UserCard({ user }) {
 export default function UsersPage() {
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState(false);
+  const [results, setResults] = useState([]);
+  const [pendingFollowUserId, setPendingFollowUserId] = useState(null);
 
+  const { data: meData } = useQuery(ME_QUERY, { fetchPolicy: 'cache-first' });
   const [runSearch, { data, loading, error }] = useLazyQuery(SEARCH_USERS, {
     fetchPolicy: 'cache-and-network',
   });
+  const [toggleFollowUser] = useMutation(TOGGLE_FOLLOW_USER);
+
+  useEffect(() => {
+    setResults(data?.searchUsers ?? []);
+  }, [data]);
 
   const handleSearch = (e) => {
     e?.preventDefault();
@@ -48,8 +65,6 @@ export default function UsersPage() {
     setSearched(true);
     runSearch({ variables: { query: q } });
   };
-
-  const results = data?.searchUsers ?? [];
 
   return (
     <div className="app-root">
@@ -93,7 +108,35 @@ export default function UsersPage() {
         {results.length > 0 && (
           <div className="users-results">
             {results.map((u) => (
-              <UserCard key={u.id} user={u} />
+              <UserCard
+                key={u.id}
+                user={u}
+                isOwnProfile={meData?.me?.id === u.id}
+                followLoading={pendingFollowUserId === u.id}
+                onToggleFollow={async (targetUser) => {
+                  setPendingFollowUserId(targetUser.id);
+                  try {
+                    const { data: mutationData } = await toggleFollowUser({
+                      variables: { userId: targetUser.id },
+                    });
+                    const nextProfile = mutationData?.toggleFollowUser;
+                    if (nextProfile) {
+                      setResults((prev) => prev.map((entry) => (
+                        entry.id === targetUser.id
+                          ? {
+                              ...entry,
+                              followerCount: nextProfile.followerCount,
+                              followingCount: nextProfile.followingCount,
+                              isFollowedByMe: nextProfile.isFollowedByMe,
+                            }
+                          : entry
+                      )));
+                    }
+                  } finally {
+                    setPendingFollowUserId(null);
+                  }
+                }}
+              />
             ))}
           </div>
         )}

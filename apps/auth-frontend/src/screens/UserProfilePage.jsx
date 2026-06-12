@@ -1,13 +1,14 @@
 // src/screens/UserProfilePage.jsx — Public user profile view
-import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@apollo/client';
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useQuery, gql } from '@apollo/client';
 import DashboardNav from '../components/DashboardNav';
 import PostRatingSummary from '../components/PostRatingSummary';
 import { PUBLIC_USER_PROFILE } from '../gql/users';
 import './Users.css';
 
 const TABS = ['Posts', 'Bookmarks'];
+const ME_QUERY = gql`query MeUserProfile { me { id } }`;
 
 function PostCard({ post }) {
   const isIdea = post.postType === 'IDEA';
@@ -55,14 +56,32 @@ function PostCard({ post }) {
 export default function UserProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('Posts');
 
+  const source = location.state?.from;
+  const backTarget = source === 'community'
+    ? '/community'
+    : source === 'bookmarks'
+      ? '/bookmarks'
+      : '/users';
+  const backLabel = source === 'community'
+    ? '← Back to Community'
+    : source === 'bookmarks'
+      ? '← Back to Bookmarks'
+      : '← Back to Users';
+
+  const { data: meData } = useQuery(ME_QUERY, { fetchPolicy: 'cache-first' });
   const { data, loading, error } = useQuery(PUBLIC_USER_PROFILE, {
     variables: { id },
     fetchPolicy: 'cache-and-network',
   });
+  const [profile, setProfile] = useState(null);
+  useEffect(() => {
+    setProfile(data?.publicUserProfile ?? null);
+  }, [data]);
 
-  const profile = data?.publicUserProfile;
+  const isOwnProfile = profile?.id && meData?.me?.id === profile.id;
 
   const tabContent = {
     Posts: profile?.posts ?? [],
@@ -78,9 +97,9 @@ export default function UserProfilePage() {
 
         <button
           className="btn-ghost users-back-btn"
-          onClick={() => navigate('/users')}
+          onClick={() => navigate(backTarget)}
         >
-          ← Back to Users
+          {backLabel}
         </button>
 
         {loading && <p className="users-status">Loading profile…</p>}
@@ -111,6 +130,14 @@ export default function UserProfilePage() {
                 <div className="users-profile-stat">
                   <span className="users-profile-stat__num">{profile.bookmarkCount}</span>
                   <span className="users-profile-stat__label">Bookmarks</span>
+                </div>
+                <div className="users-profile-stat">
+                  <span className="users-profile-stat__num">{profile.followerCount}</span>
+                  <span className="users-profile-stat__label">Followers</span>
+                </div>
+                <div className="users-profile-stat">
+                  <span className="users-profile-stat__num">{profile.followingCount}</span>
+                  <span className="users-profile-stat__label">Following</span>
                 </div>
               </div>
             </div>

@@ -6,6 +6,8 @@ export const typeDefs = /* GraphQL */ `
     username: String!
     email: String!
     role: String!
+    emailVerified: Boolean!
+    emailVerifiedAt: String
     createdAt: String
     updatedAt: String
   }
@@ -16,17 +18,6 @@ export const typeDefs = /* GraphQL */ `
     message: String
     token: String
     user: User
-  }
-
-  """密码重置流程返回值"""
-  type PasswordResetPayload {
-    ok: Boolean!
-    message: String!
-    """
-    DEMO ONLY — the plain-text reset token.
-    In production this field is omitted and the token is delivered by email.
-    """
-    resetToken: String
   }
 
   input RegisterInput {
@@ -51,6 +42,7 @@ export const typeDefs = /* GraphQL */ `
   type Game {
     id: ID!
     title: String!
+    titleNormalized: String
     genre: String
     platform: String
     releaseYear: Int
@@ -162,6 +154,7 @@ export const typeDefs = /* GraphQL */ `
   type GamePost {
     id: ID!
     postType: PostType!
+    game: Game
     title: String!
     genre: String
     platform: String
@@ -193,6 +186,7 @@ export const typeDefs = /* GraphQL */ `
 
   input CreatePostInput {
     postType: PostType
+    gameId: ID
     title: String
     genre: String
     platform: String
@@ -289,6 +283,9 @@ export const typeDefs = /* GraphQL */ `
     bookmarkCount: Int!
     likesReceived: Int!
     commentCount: Int!
+    followerCount: Int!
+    followingCount: Int!
+    isFollowedByMe: Boolean!
     """Only populated by publicUserProfile, not searchUsers"""
     posts: [GamePost!]
     """Only populated by publicUserProfile, not searchUsers"""
@@ -307,6 +304,7 @@ export const typeDefs = /* GraphQL */ `
     myAIHistory: [AIHistoryMessage!]!
     myGames(limit: Int, offset: Int): [Game!]!
     getAllGames(search: String, sourceType: GameSourceType, platform: String, tag: String, limit: Int, offset: Int): [Game!]!
+    searchGames(query: String!, limit: Int): [Game!]!
     players(limit: Int, offset: Int): [Player!]!
     tournaments(limit: Int, offset: Int): [Tournament!]!
     myRecentTournaments(limit: Int): [Tournament!]!
@@ -354,9 +352,12 @@ export const typeDefs = /* GraphQL */ `
     deleteComment(postId: ID!, commentId: ID!): GamePost!
     toggleCommentLike(postId: ID!, commentId: ID!): GamePost!
     featurePost(id: ID!, featured: Boolean!): GamePost!
+    toggleFollowUser(userId: ID!): PublicUserProfile!
     updatePreference(input: UpdatePreferenceInput!): UserPreference!
     clearPreferences: Boolean!
     changePassword(identifier: String!, oldPassword: String!, newPassword: String!): AuthPayload!
+    sendEmailVerificationCode(email: String!): SendCodePayload!
+    verifyEmailCode(email: String!, code: String!): Boolean!
     sendPasswordResetCode(email: String!): SendCodePayload!
     resetPasswordWithCode(
       email: String!
@@ -364,7 +365,5 @@ export const typeDefs = /* GraphQL */ `
       newPassword: String!
       confirmPassword: String!
     ): Boolean!
-    requestPasswordReset(email: String!): PasswordResetPayload!
-    resetPassword(token: String!, newPassword: String!): AuthPayload!
   }
 `;

@@ -14,6 +14,7 @@ const CommentSchema = new Schema(
 const GamePostSchema = new Schema(
   {
     postType: { type: String, enum: ['GAME', 'IDEA'], default: 'GAME', index: true },
+    game: { type: Schema.Types.ObjectId, ref: 'Game', index: true },
     title: { type: String, required: true, trim: true },
     titleNormalized: { type: String, trim: true, lowercase: true },
     genre: { type: String, trim: true },
@@ -54,6 +55,7 @@ GamePostSchema.index({ title: 1 });
 GamePostSchema.index({ titleNormalized: 1 });
 GamePostSchema.index({ createdAt: -1 });
 GamePostSchema.index({ postType: 1, createdAt: -1 });
+GamePostSchema.index({ game: 1, createdAt: -1 });
 GamePostSchema.index({ postedBy: 1, createdAt: -1 });
 GamePostSchema.index({ featured: 1, createdAt: -1 });
 GamePostSchema.index({ genre: 1, platform: 1, createdAt: -1 });

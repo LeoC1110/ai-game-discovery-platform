@@ -8,6 +8,7 @@
 
 import mongoose from 'mongoose';
 import GamePost from '../models/GamePost.js';
+import Game from '../models/Game.js';
 import { attachCommunityRatingData, calculateTrendScore } from '../services/communityRatingService.js';
 import { INTENTS } from './routerAgent.js';
 
@@ -21,6 +22,7 @@ export const LOW_RATING_MAX_SCORE = 6.0;
 export const DEFAULT_LOW_RATING_MIN_COUNT = Math.max(1, parseInt(process.env.LOW_RATING_MIN_COUNT ?? '2', 10));
 
 const SAFE_POST_FIELDS = [
+  'game',
   'title',
   'genre',
   'platform',
@@ -37,6 +39,18 @@ const SAFE_POST_FIELDS = [
   'updatedAt',
 ].join(' ');
 
+const SAFE_GAME_FIELDS = [
+  'title',
+  'titleNormalized',
+  'genre',
+  'platform',
+  'developer',
+  'releaseYear',
+  'tags',
+  'updatedAt',
+  'createdAt',
+].join(' ');
+
 function logDebug(tag, details) {
   if (!isProduction) {
     console.log(`[platformTools] ${tag}`, details);
@@ -49,7 +63,11 @@ function clampLimit(limit, fallback = DEFAULT_PLATFORM_LIMIT) {
 }
 
 export function getGameTitle(post) {
-  return post?.gameTitle || post?.title || post?.name || 'Untitled Game';
+  return post?.game?.title || post?.gameTitle || post?.title || post?.name || 'Untitled Game';
+}
+
+function getFieldFromPostOrGame(post, fieldName, fallback = 'N/A') {
+  return post?.[fieldName] || post?.game?.[fieldName] || fallback;
 }
 
 export function getCommunityRating(post) {
@@ -117,8 +135,8 @@ function compareTrending(a, b) {
 
 export function formatPostForPrompt(post, index) {
   const title = getGameTitle(post);
-  const genre = post?.genre || 'N/A';
-  const platform = post?.platform || 'N/A';
+  const genre = getFieldFromPostOrGame(post, 'genre');
+  const platform = getFieldFromPostOrGame(post, 'platform');
   const communityRating = getCommunityRating(post);
   const ratingCount = getCount(post, 'ratingCount', 'ratings');
   const likes = getCount(post, 'likesCount', 'likedBy');
@@ -170,9 +188,54 @@ async function loadPlatformPosts({
     .sort(sort)
     .limit(normalizedLimit)
     .select(SAFE_POST_FIELDS)
+    .populate({ path: 'game', select: SAFE_GAME_FIELDS })
     .lean();
 
   return attachCommunityRatingData(posts, userId);
+}
+
+async function loadCanonicalGames({
+  filter = {},
+  sort = { titleNormalized: 1, title: 1, _id: 1 },
+  limit = INVENTORY_LIMIT,
+} = {}) {
+  const normalizedLimit = clampLimit(limit, INVENTORY_LIMIT);
+  const games = await Game.find(filter)
+    .sort(sort)
+    .limit(normalizedLimit)
+    .select(SAFE_GAME_FIELDS)
+    .lean();
+
+  // Keep shape compatible with existing formatter utilities.
+  return games.map((game) => ({
+    _id: game._id,
+    game,
+    title: game.title,
+    genre: game.genre,
+    platform: game.platform,
+    developer: game.developer,
+    releaseYear: game.releaseYear,
+    tags: Array.isArray(game.tags) ? game.tags : [],
+    communityRating: null,
+    ratingCount: 0,
+    likesCount: 0,
+    bookmarksCount: 0,
+    commentsCount: 0,
+  }));
+}
+
+async function loadLegacyInventoryPosts({ limit = INVENTORY_LIMIT } = {}) {
+  const normalizedLimit = clampLimit(limit, INVENTORY_LIMIT);
+  const posts = await GamePost.find({
+    postType: 'GAME',
+    game: { $in: [null, undefined] },
+  })
+    .sort({ createdAt: -1, _id: 1 })
+    .limit(Math.max(normalizedLimit * 8, 120))
+    .select(SAFE_POST_FIELDS)
+    .lean();
+
+  return posts;
 }
 
 function normalizeUserTagHints(userMessage = '') {
@@ -199,8 +262,20 @@ function selectRecommendationCandidates(posts, { userMessage = '' } = {}) {
     );
   };
 
-  return [...posts]
+  const ranked = [...posts]
     .sort((a, b) => score(b) - score(a) || compareTopRated(a, b));
+
+  // Deduplicate same canonical game appearing in multiple posts.
+  const seen = new Set();
+  const unique = [];
+  for (const post of ranked) {
+    const key = getGameTitle(post).toLowerCase().trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(post);
+  }
+
+  return unique;
 }
 
 export async function getMyBookmarks(userId, limit = DEFAULT_PLATFORM_LIMIT) {
@@ -234,13 +309,38 @@ export async function getRecentCommunityPosts(limit = DEFAULT_PLATFORM_LIMIT) {
 export const getCommunityPosts = getRecentCommunityPosts;
 
 export async function getPlatformInventory(limit = INVENTORY_LIMIT) {
-  const posts = await loadPlatformPosts({
-    filter: { postType: 'GAME' },
-    sort: { title: 1, _id: 1 },
+  const normalizedLimit = clampLimit(limit, INVENTORY_LIMIT);
+
+  const canonicalPosts = await loadCanonicalGames({
+    sort: { titleNormalized: 1, title: 1, _id: 1 },
     limit,
   });
 
-  const sorted = [...posts].sort(compareAlphaTitle).slice(0, clampLimit(limit, INVENTORY_LIMIT));
+  const legacyPosts = await loadLegacyInventoryPosts({ limit });
+
+  // Merge canonical + legacy titles so historical posts remain discoverable.
+  const merged = [];
+  const seen = new Set();
+
+  for (const post of canonicalPosts) {
+    const key = getGameTitle(post).toLowerCase().trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(post);
+    if (merged.length >= normalizedLimit) break;
+  }
+
+  if (merged.length < normalizedLimit) {
+    for (const post of legacyPosts) {
+      const key = getGameTitle(post).toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(post);
+      if (merged.length >= normalizedLimit) break;
+    }
+  }
+
+  const sorted = [...merged].sort(compareAlphaTitle).slice(0, normalizedLimit);
   return formatPostsForPrompt({ title: 'Platform Inventory', posts: sorted });
 }
 

@@ -93,6 +93,13 @@
   font-weight: 500;
 }
 
+.users-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 .users-card__btn {
   flex-shrink: 0;
   font-size: 13px;
@@ -121,6 +128,20 @@
   font-weight: 700;
   letter-spacing: -0.4px;
   color: var(--color-text);
+}
+
+.users-follow-btn {
+  min-width: 110px;
+  height: 38px;
+  padding: 0 18px;
+  background: #d93025;
+  border-color: #d93025;
+  box-shadow: none;
+}
+
+.users-follow-btn:hover {
+  background: #bb271d;
+  border-color: #bb271d;
 }
 
 .users-profile-card__id {
@@ -246,6 +267,12 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+  }
+
+  .users-card__actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .users-card__btn {

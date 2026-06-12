@@ -5,15 +5,24 @@ import { renderWithProviders } from './helpers';
 import RegisterPage from '../screens/RegisterPage';
 import { REGISTER_USER } from '../gql/register';
 
-const mockUser = { __typename: 'User', id: '2', username: 'newuser', email: 'new@example.com', role: 'Player' };
+const mockUser = {
+  __typename: 'User',
+  id: '2',
+  username: 'newuser',
+  email: 'new@example.com',
+  role: 'Player',
+  emailVerified: false,
+  emailVerifiedAt: null,
+};
 
 describe('RegisterPage', () => {
   test('renders all form fields and submit button', () => {
     renderWithProviders(<RegisterPage />, { mocks: [] });
-    expect(screen.getByText('Registration')).toBeInTheDocument();
+    expect(screen.getByText('Create Account')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Email')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/password/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Password (≥6)')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Confirm Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /register/i })).toBeInTheDocument();
   });
 
@@ -27,7 +36,7 @@ describe('RegisterPage', () => {
     renderWithProviders(<RegisterPage />, { mocks: [] });
     fireEvent.submit(screen.getByRole('button', { name: /register/i }).closest('form'));
     await waitFor(() => {
-      expect(screen.getByText(/please enter username, email, and password/i)).toBeInTheDocument();
+      expect(screen.getByText(/please enter username, email, password, and confirm password/i)).toBeInTheDocument();
     });
   });
 
@@ -35,7 +44,8 @@ describe('RegisterPage', () => {
     renderWithProviders(<RegisterPage />, { mocks: [] });
     fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'u' } });
     fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'u@x.com' } });
-    fireEvent.change(screen.getByPlaceholderText(/password/i), { target: { value: '123' } });
+    fireEvent.change(screen.getByPlaceholderText('Password (≥6)'), { target: { value: '123' } });
+    fireEvent.change(screen.getByPlaceholderText('Confirm Password'), { target: { value: '123' } });
     fireEvent.submit(screen.getByRole('button', { name: /register/i }).closest('form'));
     await waitFor(() => {
       expect(screen.getByText(/at least 6 characters/i)).toBeInTheDocument();
@@ -48,13 +58,23 @@ describe('RegisterPage', () => {
         query: REGISTER_USER,
         variables: { input: { username: 'newuser', email: 'new@example.com', password: 'password123' } },
       },
-      result: { data: { register: { ok: true, token: 'new-token', user: mockUser, message: null } } },
+      result: {
+        data: {
+          register: {
+            ok: true,
+            token: 'new-token',
+            user: mockUser,
+            message: 'Registration successful',
+          },
+        },
+      },
     };
     renderWithProviders(<RegisterPage />, { mocks: [regMock, regMock] });
 
     fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'newuser' } });
     fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'new@example.com' } });
-    fireEvent.change(screen.getByPlaceholderText(/password/i), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('Password (≥6)'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('Confirm Password'), { target: { value: 'password123' } });
     fireEvent.submit(screen.getByRole('button', { name: /register/i }).closest('form'));
 
     await waitFor(() => {
@@ -74,7 +94,8 @@ describe('RegisterPage', () => {
 
     fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'dup' } });
     fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'dup@example.com' } });
-    fireEvent.change(screen.getByPlaceholderText(/password/i), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('Password (≥6)'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('Confirm Password'), { target: { value: 'password123' } });
     fireEvent.submit(screen.getByRole('button', { name: /register/i }).closest('form'));
 
     await waitFor(() => {

@@ -99,6 +99,50 @@ describe('CommunityPage — layout & post rendering', () => {
       expect(screen.getByText(/no posts found/i)).toBeInTheDocument();
     });
   });
+
+  test('renders focused post first when opened from bookmarks', async () => {
+    const focusedPost = makePosts()[1];
+    const mocks = [
+      { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
+      pagedPostsMock(makePosts()),
+    ];
+
+    renderWithProviders(<CommunityPage />, {
+      mocks,
+      route: { pathname: '/community', state: { focusPost: focusedPost } },
+      path: '/community',
+    });
+
+    await waitFor(() => {
+      const titles = screen.getAllByRole('heading', { level: 3 });
+      expect(titles[0]).toHaveTextContent('Hollow Knight');
+    });
+  });
+
+  test('searching clears bookmark focus and restores normal ordering', async () => {
+    const focusedPost = makePosts()[1];
+    const mocks = [
+      { request: { query: ME_QUERY }, result: { data: { me: playerMe } } },
+      pagedPostsMock(makePosts()),
+    ];
+
+    renderWithProviders(<CommunityPage />, {
+      mocks,
+      route: { pathname: '/community', state: { focusPost: focusedPost } },
+      path: '/community',
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { level: 3 })[0]).toHaveTextContent('Hollow Knight');
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/search posts or games/i), { target: { value: 'Elden' } });
+
+    await waitFor(() => {
+      const titles = screen.getAllByRole('heading', { level: 3 });
+      expect(titles[0]).toHaveTextContent('Elden Ring');
+    });
+  });
 });
 
 describe('CommunityPage — Player permissions', () => {

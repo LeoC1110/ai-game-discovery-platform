@@ -1,6 +1,9 @@
 import CommunityRating from '../models/CommunityRating.js';
+import GamePost from '../models/GamePost.js';
 
 const COMMUNITY_RATING_DAMPING = 4;
+
+const getRatingKey = (post) => post?.game?._id || post?.game?.id || post?.game || post?._id || post?.id;
 
 const roundToOneDecimal = (value) => {
   if (value == null || Number.isNaN(value)) return null;
@@ -35,36 +38,73 @@ export async function getCommunityRatingSnapshots(postIds, userId = null) {
     return { statsByPostId: new Map(), myRatingsByPostId: new Map() };
   }
 
-  const [stats, myRatings] = await Promise.all([
-    CommunityRating.aggregate([
-      { $match: { postId: { $in: normalizedIds } } },
-      {
-        $group: {
-          _id: '$postId',
-          communityRating: { $avg: '$score' },
-          ratingCount: { $sum: 1 },
-        },
-      },
-    ]),
-    userId
-      ? CommunityRating.find({ postId: { $in: normalizedIds }, userId })
-        .select('postId score')
-        .lean()
-      : Promise.resolve([]),
-  ]);
+  const normalizedKeySet = new Set(normalizedIds.map((id) => id.toString()));
+  const postLookup = await GamePost.find({
+    $or: [{ game: { $in: normalizedIds } }, { _id: { $in: normalizedIds } }],
+  })
+    .select('_id game')
+    .lean();
+
+  const canonicalKeyByPostId = new Map();
+  const linkedPostIds = new Set();
+  for (const post of postLookup) {
+    const postId = post._id.toString();
+    const gameId = post.game ? post.game.toString() : null;
+    canonicalKeyByPostId.set(postId, gameId || postId);
+    if (gameId) {
+      linkedPostIds.add(postId);
+      normalizedKeySet.add(gameId);
+    }
+  }
+
+  const ratingDocs = await CommunityRating.find({
+    $or: [
+      { gameId: { $in: [...normalizedKeySet] } },
+      { postId: { $in: [...linkedPostIds, ...normalizedIds.map((id) => id.toString())] } },
+    ],
+  })
+    .select('gameId postId score userId updatedAt createdAt')
+    .lean();
+
+  const dedupedRatings = new Map();
+  for (const doc of ratingDocs) {
+    const gameKey = doc.gameId ? doc.gameId.toString() : canonicalKeyByPostId.get(doc.postId.toString()) || doc.postId.toString();
+    const userKey = doc.userId?.toString();
+    if (!userKey) continue;
+    const compositeKey = `${gameKey}:${userKey}`;
+    const existing = dedupedRatings.get(compositeKey);
+    const existingTime = existing ? new Date(existing.updatedAt || existing.createdAt || 0).getTime() : 0;
+    const nextTime = new Date(doc.updatedAt || doc.createdAt || 0).getTime();
+    if (!existing || nextTime >= existingTime) {
+      dedupedRatings.set(compositeKey, { ...doc, gameKey });
+    }
+  }
+
+  const statsAccumulator = new Map();
+  const myRatings = [];
+  for (const doc of dedupedRatings.values()) {
+    const gameKey = doc.gameKey;
+    const current = statsAccumulator.get(gameKey) || { total: 0, count: 0 };
+    current.total += doc.score;
+    current.count += 1;
+    statsAccumulator.set(gameKey, current);
+    if (userId && doc.userId?.toString() === userId.toString()) {
+      myRatings.push({ key: gameKey, score: doc.score });
+    }
+  }
 
   const statsByPostId = new Map(
-    stats.map((entry) => [
-      entry._id.toString(),
+    [...statsAccumulator.entries()].map(([key, entry]) => [
+      key,
       {
-        communityRating: roundToOneDecimal(entry.communityRating),
-        ratingCount: entry.ratingCount || 0,
+        communityRating: roundToOneDecimal(entry.count ? entry.total / entry.count : null),
+        ratingCount: entry.count || 0,
       },
     ]),
   );
 
   const myRatingsByPostId = new Map(
-    myRatings.map((entry) => [entry.postId.toString(), entry.score]),
+    myRatings.map((entry) => [entry.key, entry.score]),
   );
 
   return { statsByPostId, myRatingsByPostId };
@@ -84,12 +124,12 @@ export async function attachCommunityRatingData(posts, userId = null) {
   const normalizedPosts = Array.isArray(posts) ? posts : [];
   if (!normalizedPosts.length) return [];
 
-  const ids = normalizedPosts.map((post) => post?._id || post?.id).filter(Boolean);
+  const ids = normalizedPosts.map((post) => getRatingKey(post)).filter(Boolean);
   const { statsByPostId, myRatingsByPostId } = await getCommunityRatingSnapshots(ids, userId);
 
   return normalizedPosts.map((post) => {
     const base = post?.toObject ? post.toObject() : { ...post };
-    const key = (base._id || base.id)?.toString?.() || String(base._id || base.id);
+    const key = getRatingKey(base)?.toString?.() || String(getRatingKey(base));
     const stats = statsByPostId.get(key) || { communityRating: null, ratingCount: 0 };
     return {
       ...base,
@@ -106,3 +146,7 @@ export async function attachCommunityRatingDataToPost(post, userId = null) {
   const [ratedPost] = await attachCommunityRatingData([post], userId);
   return ratedPost;
 }
+
+export const __test__ = {
+  getRatingKey,
+};

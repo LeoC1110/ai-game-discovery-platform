@@ -5,13 +5,20 @@ import bcrypt from 'bcryptjs';
 import { resolvers } from '../graphql/resolvers.js';
 import User from '../models/User.js';
 import EmailVerification from '../models/EmailVerification.js';
+import GamePost from '../models/GamePost.js';
 import Player from '../models/Player.js';
 
 const originalUserFindOne = User.findOne;
+const originalUserFindById = User.findById;
+const originalUserCreate = User.create;
+const originalUserCountDocuments = User.countDocuments;
 const originalEmailVerificationFindOne = EmailVerification.findOne;
 const originalEmailVerificationUpdateMany = EmailVerification.updateMany;
 const originalEmailVerificationCreate = EmailVerification.create;
+const originalGamePostFind = GamePost.find;
 const originalPlayerFindOneAndUpdate = Player.findOneAndUpdate;
+const originalNodeEnv = process.env.NODE_ENV;
+const originalRequireEmailVerificationOnLogin = process.env.REQUIRE_EMAIL_VERIFICATION_ON_LOGIN;
 
 const users = [];
 const verifications = [];
@@ -42,6 +49,8 @@ const matchFilter = (doc, filter = {}) => {
 };
 
 beforeEach(() => {
+  process.env.NODE_ENV = 'test';
+  delete process.env.REQUIRE_EMAIL_VERIFICATION_ON_LOGIN;
   users.length = 0;
   verifications.length = 0;
 
@@ -55,6 +64,26 @@ beforeEach(() => {
       return users.find((u) => u.username === usernameCond || u.email === emailCond) || null;
     }
     return null;
+  };
+
+  User.findById = async (id) => users.find((u) => u._id === id || u.id === id) || null;
+
+  User.countDocuments = async (query = {}) => {
+    if (query.followers !== undefined) {
+      return users.filter((u) => (u.followers || []).some((entry) => entry === query.followers || entry?._id === query.followers)).length;
+    }
+    return 0;
+  };
+
+  User.create = async (payload) => {
+    const doc = attachUserMethods({
+      _id: `u_${Math.random().toString(36).slice(2, 10)}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...payload,
+    });
+    users.push(doc);
+    return doc;
   };
 
   EmailVerification.findOne = async (filter = {}, _projection = null, options = {}) => {
@@ -91,14 +120,29 @@ beforeEach(() => {
     return doc;
   };
 
+  GamePost.find = () => ({
+    populate() { return this; },
+    sort: async () => [],
+  });
+
   Player.findOneAndUpdate = async () => ({ _id: '507f1f77bcf86cd799439011' });
 });
 
 afterEach(() => {
+  process.env.NODE_ENV = originalNodeEnv;
+  if (originalRequireEmailVerificationOnLogin === undefined) {
+    delete process.env.REQUIRE_EMAIL_VERIFICATION_ON_LOGIN;
+  } else {
+    process.env.REQUIRE_EMAIL_VERIFICATION_ON_LOGIN = originalRequireEmailVerificationOnLogin;
+  }
   User.findOne = originalUserFindOne;
+  User.findById = originalUserFindById;
+  User.create = originalUserCreate;
+  User.countDocuments = originalUserCountDocuments;
   EmailVerification.findOne = originalEmailVerificationFindOne;
   EmailVerification.updateMany = originalEmailVerificationUpdateMany;
   EmailVerification.create = originalEmailVerificationCreate;
+  GamePost.find = originalGamePostFind;
   Player.findOneAndUpdate = originalPlayerFindOneAndUpdate;
 });
 
@@ -333,5 +377,187 @@ describe('Password reset flow with email verification code', () => {
     );
     assert.equal(newLogin.ok, true);
     assert.ok(newLogin.token);
+  });
+});
+
+describe('Registration email verification flow', () => {
+  test('register creates unverified user and returns auth token', async () => {
+    const res = { cookie: () => {}, clearCookie: () => {} };
+
+    const result = await resolvers.Mutation.register(
+      null,
+      {
+        input: {
+          username: 'verify_user',
+          email: 'verify@example.com',
+          password: 'pass-123456',
+        },
+      },
+      { res },
+    );
+
+    assert.equal(result.ok, true);
+    assert.ok(result.token);
+    assert.match(result.message || '', /registration successful/i);
+
+    const created = users.find((u) => u.email === 'verify@example.com');
+    assert.ok(created);
+    assert.equal(created.emailVerified, false);
+
+    const verification = verifications.find(
+      (v) => v.email === 'verify@example.com' && v.purpose === 'VERIFY_EMAIL',
+    );
+    assert.ok(verification);
+    assert.equal(verification.used, false);
+  });
+
+  test('login still works when email is not verified', async () => {
+    const passwordHash = await bcrypt.hash('pass-123456', 10);
+    users.push(
+      attachUserMethods({
+        _id: '507f1f77bcf86cd799439101',
+        username: 'noverify',
+        email: 'noverify@example.com',
+        role: 'Player',
+        emailVerified: false,
+        passwordHash,
+      }),
+    );
+
+    const result = await resolvers.Mutation.login(
+      null,
+      { identifier: 'noverify@example.com', password: 'pass-123456' },
+      { res: { cookie: () => {}, clearCookie: () => {} } },
+    );
+
+    assert.equal(result.ok, true);
+    assert.ok(result.token);
+  });
+
+  test('login is blocked when REQUIRE_EMAIL_VERIFICATION_ON_LOGIN=true', async () => {
+    process.env.REQUIRE_EMAIL_VERIFICATION_ON_LOGIN = 'true';
+
+    const passwordHash = await bcrypt.hash('pass-123456', 10);
+    users.push(
+      attachUserMethods({
+        _id: '507f1f77bcf86cd799439103',
+        username: 'mustverify',
+        email: 'mustverify@example.com',
+        role: 'Player',
+        emailVerified: false,
+        passwordHash,
+      }),
+    );
+
+    const result = await resolvers.Mutation.login(
+      null,
+      { identifier: 'mustverify@example.com', password: 'pass-123456' },
+      { res: { cookie: () => {}, clearCookie: () => {} } },
+    );
+
+    assert.equal(result.ok, false);
+    assert.match(result.message || '', /email not verified/i);
+  });
+
+  test('verifyEmailCode marks user as verified', async () => {
+    const passwordHash = await bcrypt.hash('pass-123456', 10);
+    const user = attachUserMethods({
+      _id: '507f1f77bcf86cd799439102',
+      username: 'verifiable',
+      email: 'verifiable@example.com',
+      role: 'Player',
+      emailVerified: false,
+      passwordHash,
+    });
+    users.push(user);
+
+    const codeHash = await bcrypt.hash('112233', 10);
+    verifications.push(
+      attachVerificationMethods({
+        _id: 'v_verify_email',
+        email: 'verifiable@example.com',
+        codeHash,
+        purpose: 'VERIFY_EMAIL',
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        attempts: 0,
+        used: false,
+        createdAt: new Date(),
+      }),
+    );
+
+    const ok = await resolvers.Mutation.verifyEmailCode(
+      null,
+      { email: 'verifiable@example.com', code: '112233' },
+    );
+
+    assert.equal(ok, true);
+    assert.equal(user.emailVerified, true);
+    assert.ok(user.emailVerifiedAt);
+    assert.equal(verifications[0].used, true);
+  });
+
+  test('toggleFollowUser follows and returns updated follow state', async () => {
+    const current = attachUserMethods({
+      _id: '507f1f77bcf86cd799439110',
+      username: 'current',
+      email: 'current@example.com',
+      role: 'Player',
+      emailVerified: true,
+      followers: [],
+      passwordHash: 'hash',
+    });
+    const target = attachUserMethods({
+      _id: '507f1f77bcf86cd799439111',
+      username: 'target',
+      email: 'target@example.com',
+      role: 'Player',
+      emailVerified: true,
+      followers: [],
+      passwordHash: 'hash',
+    });
+    users.push(current, target);
+
+    const profile = await resolvers.Mutation.toggleFollowUser(
+      null,
+      { userId: target._id },
+      { user: current },
+    );
+
+    assert.equal(profile.id, target._id);
+    assert.equal(profile.isFollowedByMe, true);
+    assert.equal(profile.followerCount, 1);
+    assert.equal(target.followers.includes(current._id), true);
+  });
+
+  test('toggleFollowUser unfollows when already following', async () => {
+    const current = attachUserMethods({
+      _id: '507f1f77bcf86cd799439112',
+      username: 'current2',
+      email: 'current2@example.com',
+      role: 'Player',
+      emailVerified: true,
+      followers: [],
+      passwordHash: 'hash',
+    });
+    const target = attachUserMethods({
+      _id: '507f1f77bcf86cd799439113',
+      username: 'target2',
+      email: 'target2@example.com',
+      role: 'Player',
+      emailVerified: true,
+      followers: [current._id],
+      passwordHash: 'hash',
+    });
+    users.push(current, target);
+
+    const profile = await resolvers.Mutation.toggleFollowUser(
+      null,
+      { userId: target._id },
+      { user: current },
+    );
+
+    assert.equal(profile.isFollowedByMe, false);
+    assert.equal(profile.followerCount, 0);
+    assert.equal(target.followers.includes(current._id), false);
   });
 });

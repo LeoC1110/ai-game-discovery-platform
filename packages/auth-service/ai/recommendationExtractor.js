@@ -12,6 +12,10 @@ const RECO_BLOCK_START = '<!--RECOMMENDATIONS:';
 const RECO_BLOCK_END = '-->';
 const MAX_CANDIDATES = 5;
 
+function normalizeTitleKey(value = '') {
+  return String(value ?? '').trim().toLowerCase();
+}
+
 function dedupeTitles(parsed) {
   const seen = new Set();
   const titles = [];
@@ -53,15 +57,17 @@ export function extractRecommendationsPayload(aiText) {
 async function findPostsByTitles(candidateTitles) {
   if (!candidateTitles.length) return [];
 
-  const normalizedTitles = candidateTitles.map((title) => title.toLowerCase());
+  const normalizedTitles = candidateTitles.map((title) => normalizeTitleKey(title));
 
   return GamePost.find({
+    postType: 'GAME',
     $or: [
       { titleNormalized: { $in: normalizedTitles } },
       { title: { $in: candidateTitles } },
     ],
   })
-    .select('title titleNormalized rating tags likedBy comments bookmarkedBy')
+    .select('game title titleNormalized rating tags likedBy comments bookmarkedBy')
+    .populate({ path: 'game', select: 'title titleNormalized genre platform developer releaseYear' })
     .lean();
 }
 
@@ -102,9 +108,28 @@ export async function extractRecommendedPosts(aiText, deps = {}) {
     const posts = await findPosts(candidateTitles);
 
     const ratedPosts = await attachRatings(posts);
-    const postMap = new Map(
-      ratedPosts.map((p) => [String(p.titleNormalized || p.title || '').toLowerCase(), p]),
-    );
+    const postMap = new Map();
+    for (const post of ratedPosts) {
+      const keys = [
+        normalizeTitleKey(post?.game?.titleNormalized),
+        normalizeTitleKey(post?.game?.title),
+        normalizeTitleKey(post?.titleNormalized),
+        normalizeTitleKey(post?.title),
+      ].filter(Boolean);
+
+      for (const key of keys) {
+        if (!postMap.has(key)) {
+          postMap.set(key, post);
+          continue;
+        }
+        const existing = postMap.get(key);
+        const existingScore = Number(existing?.communityRating ?? existing?.authorRating ?? -1);
+        const nextScore = Number(post?.communityRating ?? post?.authorRating ?? -1);
+        if (nextScore > existingScore) {
+          postMap.set(key, post);
+        }
+      }
+    }
 
     const seenRecommendationTitles = new Set();
 
@@ -120,7 +145,7 @@ export async function extractRecommendedPosts(aiText, deps = {}) {
 
         return {
           id: dbPost ? dbPost._id.toString() : null,
-          title: dbPost ? dbPost.title : itemTitle,
+          title: dbPost?.game?.title || dbPost?.title || itemTitle,
           rating: dbPost?.communityRating ?? dbPost?.authorRating ?? null,
           authorRating: dbPost?.authorRating ?? null,
           communityRating: dbPost?.communityRating ?? null,

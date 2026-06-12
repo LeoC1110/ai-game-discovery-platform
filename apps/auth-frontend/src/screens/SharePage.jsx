@@ -100,7 +100,7 @@ export default function SharePage() {
                   onClick={handlePublish}
                   style={{ flex: 1 }}
                 >
-                  {loading ? 'Publishing…' : 'Publish Idea'}
+                  {loading ? 'Publishing…' : 'Publish'}
                 </button>
                 <button
                   type="button"

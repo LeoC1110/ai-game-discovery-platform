@@ -36,7 +36,7 @@ const PLATFORM_OPTIONS = [
   'Web Browser', 'Steam Deck', 'Other',
 ];
 
-function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, onEdit, onFeature, onRate }) {
+function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, onEdit, onFeature, onRate, onOpenAuthor }) {
   const isOwner = currentUser?.id === post.postedBy?.id;
   const isAdmin = currentUser?.role === 'Admin';
   const isIdea = post.postType === 'IDEA';
@@ -181,7 +181,15 @@ function PostCard({ post, currentUser, onLike, onBookmark, onExpand, onDelete, o
         </p>
         <div className="community-card__footer">
           <span className="community-card__author">
-            by <strong>{post.postedBy?.username || 'Unknown'}</strong>
+            by{' '}
+            <button
+              type="button"
+              className="community-card__author-link"
+              onClick={() => onOpenAuthor?.(post.postedBy)}
+              disabled={!post.postedBy?.id}
+            >
+              <strong>{post.postedBy?.username || 'Unknown'}</strong>
+            </button>
           </span>
           <span className="community-card__date">
             {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : ''}
@@ -360,6 +368,7 @@ function EditModal({ post, onClose, onSaved }) {
 }
 
 function PostModal({ post, currentUser, onClose, onUpdate }) {
+  const navigate = useNavigate();
   const [commentText, setCommentText] = useState('');
   const [ratingValue, setRatingValue] = useState(post.myCommunityRating ? String(post.myCommunityRating) : '');
   const [ratingError, setRatingError] = useState(null);
@@ -447,12 +456,24 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
         )}
         <p className="community-modal__review">{post.review}</p>
         {!isIdea && post.gameLink && (
-          <a href={post.gameLink} target="_blank" rel="noopener noreferrer" className="btn-ghost community-modal__link">
+          <a href={post.gameLink} target="_blank" rel="noopener noreferrer" className="community-modal__link">
             Game Link ↗
           </a>
         )}
         <p className="community-modal__stats">
-          by {post.postedBy?.username} · {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : ''}
+          by{' '}
+          <button
+            type="button"
+            className="community-card__author-link"
+            onClick={() => {
+              if (!post.postedBy?.id) return;
+              navigate(`/users/${post.postedBy.id}`, { state: { from: 'community' } });
+            }}
+            disabled={!post.postedBy?.id}
+          >
+            <strong>{post.postedBy?.username || 'Unknown'}</strong>
+          </button>
+          {' '}· {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : ''}
           · ♥ {post.likesCount} · 💬 {post.commentsCount}
         </p>
 
@@ -478,7 +499,7 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
                 aria-busy={savingRating}
                 onClick={handleRatePost}
               >
-                {savingRating ? 'Saving…' : post.myCommunityRating != null ? 'Update Rating' : 'Rate Post'}
+                {savingRating ? 'Saving…' : post.myCommunityRating != null ? 'Update' : 'Rate Post'}
               </button>
             </div>
             {ratingError && <p className="msg-error msg-error--spaced">{ratingError}</p>}
@@ -497,7 +518,17 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
           )}
           {post.comments?.map((c) => (
             <div key={c.id} className="community-comment">
-              <strong className="community-comment__author">{c.author?.username}</strong>
+              <button
+                type="button"
+                className="community-card__author-link"
+                onClick={() => {
+                  if (!c.author?.id) return;
+                  navigate(`/users/${c.author.id}`, { state: { from: 'community' } });
+                }}
+                disabled={!c.author?.id}
+              >
+                <strong className="community-comment__author">{c.author?.username || 'Unknown'}</strong>
+              </button>
               <span className="community-comment__time">{formatCommentDate(c.createdAt)}</span>
               {(isAdmin || currentUser?.id === c.author?.id) && (
                 <button
@@ -543,8 +574,10 @@ function PostModal({ post, currentUser, onClose, onUpdate }) {
 }
 
 export default function CommunityPage() {
+  const navigate = useNavigate();
   const location = useLocation();
   const [search, setSearch] = useState(location.state?.search ?? '');
+  const [focusPost, setFocusPost] = useState(location.state?.focusPost ?? null);
   const [filterGenre, setFilterGenre] = useState('');
   const [filterPlatform, setFilterPlatform] = useState('');
   const [sort, setSort] = useState('newest');
@@ -559,6 +592,10 @@ export default function CommunityPage() {
   const [totalCount, setTotalCount] = useState(0);
   const pageRef = React.useRef(0);
   pageRef.current = page;
+
+  const clearFocusPost = () => {
+    if (focusPost) setFocusPost(null);
+  };
 
   // Reset accumulation when filters change
   useEffect(() => {
@@ -596,6 +633,17 @@ export default function CommunityPage() {
 
   const hasMore = posts.length < totalCount;
   const displayedPosts = filterType ? posts.filter((p) => p.postType === filterType) : posts;
+  const prioritizedPosts = (() => {
+    if (!focusPost) return displayedPosts;
+    const seen = new Set();
+    const ordered = [focusPost, ...displayedPosts].filter((post) => {
+      const key = post?.id;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return ordered;
+  })();
 
   // ── Mutations — patch local state instead of full refetch ────────────────
   const patchPost = (updated) =>
@@ -656,7 +704,10 @@ export default function CommunityPage() {
                 key={val}
                 className={filterType === val ? 'btn-primary' : 'btn-ghost'}
                 style={{ height: 34, padding: '0 16px', fontSize: 13 }}
-                onClick={() => setFilterType(val)}
+                onClick={() => {
+                  clearFocusPost();
+                  setFilterType(val);
+                }}
               >
                 {label}
               </button>
@@ -667,24 +718,36 @@ export default function CommunityPage() {
               className="input community-filters__search"
               placeholder="Search posts or games…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                clearFocusPost();
+                setSearch(e.target.value);
+              }}
             />
             <input
               className="input community-filters__field"
               placeholder="Genre"
               value={filterGenre}
-              onChange={(e) => setFilterGenre(e.target.value)}
+              onChange={(e) => {
+                clearFocusPost();
+                setFilterGenre(e.target.value);
+              }}
             />
             <input
               className="input community-filters__field"
               placeholder="Platform"
               value={filterPlatform}
-              onChange={(e) => setFilterPlatform(e.target.value)}
+              onChange={(e) => {
+                clearFocusPost();
+                setFilterPlatform(e.target.value);
+              }}
             />
             <select
               className="input community-filters__select"
               value={sort}
-              onChange={(e) => setSort(e.target.value)}
+              onChange={(e) => {
+                clearFocusPost();
+                setSort(e.target.value);
+              }}
             >
               {SORT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -701,14 +764,14 @@ export default function CommunityPage() {
             <p>No posts found. Be the first to post a game recommendation!</p>
           </div>
         )}
-        {!loading && posts.length > 0 && displayedPosts.length === 0 && (
+        {!loading && posts.length > 0 && prioritizedPosts.length === 0 && (
           <div className="empty-state">
             <p>No {filterType === 'GAME' ? 'game posts' : 'idea posts'} found.</p>
           </div>
         )}
 
         <div className="community-grid">
-          {displayedPosts.map((post) => (
+          {prioritizedPosts.map((post) => (
             <PostCard
               key={post.id}
               post={post}
@@ -720,6 +783,10 @@ export default function CommunityPage() {
               onEdit={(p) => setEditingPost(p)}
               onFeature={handleFeature}
               onRate={handleRate}
+                  onOpenAuthor={(author) => {
+                    if (!author?.id) return;
+                    navigate(`/users/${author.id}`, { state: { from: 'community' } });
+                  }}
             />
           ))}
         </div>

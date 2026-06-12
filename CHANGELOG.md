@@ -7,6 +7,14 @@ New features and updates should be added under the relevant version or date sect
 
 ## [2026-06-12] — Deterministic AI Pipeline Refactor, Platform Data Stabilization, and Migration Utilities
 
+### `answerAgent.js` — Clean User-Facing Output Sanitization
+
+Hardened Nova's final answer output so apology-style or self-referential reflection language does not leak to users.
+
+- Added a final output sanitizer that strips leading apology / correction phrases before the answer is returned
+- Applied the same sanitizer to mock responses, streamed responses, and reflected answers for consistency
+- Kept the existing validation and reflection flow intact while making the visible tone more direct
+
 ### `auth-service` — Planner-First AI Pipeline Refactor
 
 Refactored the Nova backend AI flow into a clearer planner-first orchestration model with stronger compatibility guarantees.

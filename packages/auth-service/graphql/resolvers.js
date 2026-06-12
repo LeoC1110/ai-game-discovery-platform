@@ -19,7 +19,7 @@ import {
 } from '../services/communityRatingService.js';
 import { loadStoredPreferences, upsertUserPreferences, clearUserPreferences } from '../services/userMemoryService.js';
 import { invalidateTitlesCache } from '../ai/validatorAgent.js';
-import { sendResetPasswordCodeEmail } from '../services/emailService.js';
+import { sendResetPasswordCodeEmail, sendEmailVerificationCodeEmail } from '../services/emailService.js';
 import { checkRateLimit, getClientIp } from '../middleware/rateLimit.js';
 import {
   signAuthToken,
@@ -35,12 +35,19 @@ const safeUser = (doc) => {
     username: obj.username,
     email: obj.email,
     role: obj.role,
+    emailVerified: obj.emailVerified !== false,
+    emailVerifiedAt: obj.emailVerifiedAt ? obj.emailVerifiedAt.toISOString?.() || String(obj.emailVerifiedAt) : null,
     createdAt: obj.createdAt ? obj.createdAt.toISOString?.() || String(obj.createdAt) : null,
     updatedAt: obj.updatedAt ? obj.updatedAt.toISOString?.() || String(obj.updatedAt) : null,
   };
 };
 
 const normalizeName = (name = '') => name.trim();
+const normalizeTitleKey = (value = '') => value
+  .toString()
+  .trim()
+  .toLowerCase()
+  .replace(/\s+/g, ' ');
 
 const authSuccess = (user, res, message) => {
   const token = signAuthToken(user);
@@ -63,7 +70,11 @@ const TOURNAMENT_LAUNCH_TYPES = new Set(['Local', 'ExternalLink', 'Embeddable'])
 const POST_TYPES = new Set(['GAME', 'IDEA']);
 const IDEA_TEXT_REGEX = /^[\p{L}\p{N}\p{P}\p{S}\p{Z}\r\n\t]+$/u;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const VERIFY_EMAIL_PURPOSE = 'VERIFY_EMAIL';
 const RESET_PASSWORD_PURPOSE = 'RESET_PASSWORD';
+const EMAIL_VERIFY_CODE_TTL_MS = 10 * 60 * 1000;
+const EMAIL_VERIFY_CODE_COOLDOWN_MS = 60 * 1000;
+const EMAIL_VERIFY_CODE_MAX_ATTEMPTS = 5;
 const RESET_CODE_TTL_MS = 10 * 60 * 1000;
 const RESET_CODE_COOLDOWN_MS = 60 * 1000;
 const RESET_CODE_MAX_ATTEMPTS = 5;
@@ -74,6 +85,8 @@ const AI_MESSAGE_MAX_LENGTH = 1000;
 const LIMITS = {
   register: { limit: 5, windowMs: 10 * 60 * 1000 },
   login: { limit: 10, windowMs: 10 * 60 * 1000 },
+  sendEmailVerificationCode: { limit: 5, windowMs: 10 * 60 * 1000 },
+  verifyEmailCode: { limit: 10, windowMs: 10 * 60 * 1000 },
   sendPasswordResetCode: { limit: 5, windowMs: 10 * 60 * 1000 },
   resetPasswordWithCode: { limit: 10, windowMs: 10 * 60 * 1000 },
   askAI: { limit: 20, windowMs: 60 * 1000 },
@@ -91,6 +104,9 @@ const normalizeEmail = (email = '') => email.trim().toLowerCase();
 
 const isValidEmail = (email = '') => EMAIL_REGEX.test(email);
 
+const isEmailVerificationRequiredOnLogin = () =>
+  String(process.env.REQUIRE_EMAIL_VERIFICATION_ON_LOGIN || '').toLowerCase() === 'true';
+
 const requireRateLimit = ({ req, bucket, key, limit, windowMs, message }) => {
   const ip = getClientIp(req);
   const composedKey = key ? `${ip}:${key}` : ip;
@@ -106,6 +122,36 @@ const requireRateLimit = ({ req, bucket, key, limit, windowMs, message }) => {
 };
 
 const toObjectIdString = (value) => (value?._id || value)?.toString?.() || String(value);
+
+const buildPublicUserProfile = ({
+  profileUser,
+  currentUserId,
+  postCount,
+  bookmarkCount,
+  likesReceived,
+  commentCount,
+  followingCount = 0,
+  posts = null,
+  bookmarkedPosts = null,
+} = {}) => {
+  const followerIds = Array.isArray(profileUser?.followers) ? profileUser.followers : [];
+  const currentId = currentUserId ? toObjectIdString(currentUserId) : null;
+  return {
+    id: profileUser?._id?.toString?.() || profileUser?.id,
+    username: profileUser?.username,
+    postCount,
+    bookmarkCount,
+    likesReceived,
+    commentCount,
+    followerCount: followerIds.length,
+    followingCount,
+    isFollowedByMe: currentId
+      ? followerIds.some((entry) => toObjectIdString(entry) === currentId)
+      : false,
+    posts,
+    bookmarkedPosts,
+  };
+};
 
 const buildPagination = ({ limit = DEFAULT_PAGE_LIMIT, offset = 0 } = {}) => {
   const safeLimit = Number(limit);
@@ -149,10 +195,55 @@ const USER_SELECT = '_id username email role createdAt updatedAt';
 
 const populatePostQuery = (query) =>
   query
+    .populate({ path: 'game' })
     .populate({ path: 'postedBy', select: USER_SELECT })
     .populate({ path: 'comments.author', select: USER_SELECT })
     .populate('likedBy', '_id')
     .populate('bookmarkedBy', '_id');
+
+const findOrCreateCanonicalGame = async ({ currentUserId, input = {} } = {}) => {
+  if (input.gameId) {
+    const linked = await Game.findById(input.gameId);
+    if (!linked) {
+      throw new GraphQLError('Selected game not found', {
+        extensions: { code: 'NOT_FOUND' },
+      });
+    }
+    return linked;
+  }
+
+  const title = (input.title || '').trim();
+  const titleNormalized = normalizeTitleKey(title);
+  if (!titleNormalized) {
+    throw new GraphQLError('Game title is required', {
+      extensions: { code: 'BAD_USER_INPUT' },
+    });
+  }
+
+  const payload = {
+    user: currentUserId,
+    title,
+    titleNormalized,
+    genre: input.genre?.trim() || undefined,
+    platform: input.platform?.trim() || undefined,
+    developer: input.developer?.trim() || undefined,
+    releaseYear: input.releaseYear || undefined,
+    description: undefined,
+  };
+
+  const existing = await Game.findOne({ titleNormalized });
+  if (existing) return existing;
+
+  try {
+    return await Game.create(payload);
+  } catch (err) {
+    if (err?.code === 11000) {
+      const retry = await Game.findOne({ titleNormalized });
+      if (retry) return retry;
+    }
+    throw err;
+  }
+};
 
 const buildAggregateCommunitySortStages = () => ([
   {
@@ -534,6 +625,83 @@ export const resolvers = {
         .populate({ path: 'user', select: USER_SELECT });
       return games;
     },
+    searchGames: async (_parent, { query, limit = 8 }, { user }) => {
+      const current = requireUser(user);
+      const q = (query || '').trim();
+      if (!q) return [];
+      const cap = Math.min(Math.max(Number(limit) || 8, 1), 20);
+      const games = await Game.find({
+        $or: [
+          { title: { $regex: q, $options: 'i' } },
+          { titleNormalized: { $regex: normalizeTitleKey(q), $options: 'i' } },
+        ],
+      })
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .limit(cap)
+        .populate({ path: 'user', select: USER_SELECT });
+
+      if (games.length >= cap) return games;
+
+      // Backfill missing canonical games from legacy community posts so they are searchable/selectable.
+      const seenNormalized = new Set(
+        games.map((game) => game.titleNormalized || normalizeTitleKey(game.title || '')),
+      );
+
+      const remaining = cap - games.length;
+      const legacyPosts = await GamePost.find({
+        postType: 'GAME',
+        game: { $in: [null, undefined] },
+        $or: [
+          { title: { $regex: q, $options: 'i' } },
+          { titleNormalized: { $regex: normalizeTitleKey(q), $options: 'i' } },
+        ],
+      })
+        .sort({ createdAt: -1 })
+        .select('title titleNormalized genre platform developer releaseYear postedBy')
+        .limit(cap * 6);
+
+      const legacyCandidates = [];
+      for (const post of legacyPosts) {
+        const normalized = post.titleNormalized || normalizeTitleKey(post.title || '');
+        if (!normalized || seenNormalized.has(normalized)) continue;
+        seenNormalized.add(normalized);
+        legacyCandidates.push(post);
+        if (legacyCandidates.length >= remaining) break;
+      }
+
+      const backfilledGames = [];
+      for (const post of legacyCandidates) {
+        const normalized = post.titleNormalized || normalizeTitleKey(post.title || '');
+        if (!normalized) continue;
+
+        let canonical = await Game.findOne({ titleNormalized: normalized }).populate({ path: 'user', select: USER_SELECT });
+        if (!canonical) {
+          try {
+            canonical = await Game.create({
+              user: post.postedBy || current._id,
+              title: post.title?.trim() || normalized,
+              titleNormalized: normalized,
+              genre: post.genre?.trim() || undefined,
+              platform: post.platform?.trim() || undefined,
+              developer: post.developer?.trim() || undefined,
+              releaseYear: post.releaseYear || undefined,
+            });
+            await canonical.populate({ path: 'user', select: USER_SELECT });
+            invalidateTitlesCache();
+          } catch (err) {
+            if (err?.code === 11000) {
+              canonical = await Game.findOne({ titleNormalized: normalized }).populate({ path: 'user', select: USER_SELECT });
+            } else {
+              throw err;
+            }
+          }
+        }
+
+        if (canonical) backfilledGames.push(canonical);
+      }
+
+      return [...games, ...backfilledGames].slice(0, cap);
+    },
     players: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
       await ensurePlayerForUser(current._id);
@@ -708,13 +876,19 @@ export const resolvers = {
 
       // Batch: 2 queries total regardless of how many users matched, replacing the previous N*2 pattern.
       const userIds = users.map((u) => u._id);
-      const [allUserPosts, bookmarkAgg] = await Promise.all([
+      const [allUserPosts, bookmarkAgg, followingAgg] = await Promise.all([
         GamePost.find({ postedBy: { $in: userIds } }).select('postedBy likedBy comments').lean(),
         GamePost.aggregate([
           { $match: { bookmarkedBy: { $in: userIds } } },
           { $unwind: '$bookmarkedBy' },
           { $match: { bookmarkedBy: { $in: userIds } } },
           { $group: { _id: '$bookmarkedBy', count: { $sum: 1 } } },
+        ]),
+        User.aggregate([
+          { $match: { followers: { $in: userIds } } },
+          { $unwind: '$followers' },
+          { $match: { followers: { $in: userIds } } },
+          { $group: { _id: '$followers', count: { $sum: 1 } } },
         ]),
       ]);
 
@@ -728,6 +902,10 @@ export const resolvers = {
       for (const entry of bookmarkAgg) {
         bookmarkCountByUserId[String(entry._id)] = entry.count;
       }
+      const followingCountByUserId = {};
+      for (const entry of followingAgg) {
+        followingCountByUserId[String(entry._id)] = entry.count;
+      }
 
       return users.map((u) => {
         const uid = String(u._id);
@@ -736,16 +914,15 @@ export const resolvers = {
         const likesReceived = userPosts.reduce((acc, p) => acc + (p.likedBy?.length || 0), 0);
         const commentCount = userPosts.reduce((acc, p) => acc + (p.comments?.length || 0), 0);
         const bookmarkCount = bookmarkCountByUserId[uid] || 0;
-        return {
-          id: uid,
-          username: u.username,
+        return buildPublicUserProfile({
+          profileUser: u,
+          currentUserId: user._id,
           postCount,
           bookmarkCount,
           likesReceived,
           commentCount,
-          posts: null,
-          bookmarkedPosts: null,
-        };
+          followingCount: followingCountByUserId[uid] || 0,
+        });
       });
     },
 
@@ -765,9 +942,10 @@ export const resolvers = {
         { path: 'bookmarkedBy', select: '_id' },
       ];
 
-      const [userPosts, bookmarkedByUser] = await Promise.all([
+      const [userPosts, bookmarkedByUser, followingCount] = await Promise.all([
         GamePost.find({ postedBy: id }).populate(populateOpts).sort({ createdAt: -1 }),
         GamePost.find({ bookmarkedBy: id }).populate(populateOpts).sort({ createdAt: -1 }),
+        User.countDocuments({ followers: u._id }),
       ]);
 
       const [ratedUserPosts, ratedBookmarks] = await Promise.all([
@@ -780,16 +958,17 @@ export const resolvers = {
       const likesReceived = ratedUserPosts.reduce((acc, p) => acc + (p.likedBy?.length || 0), 0);
       const commentCount = ratedUserPosts.reduce((acc, p) => acc + (p.comments?.length || 0), 0);
 
-      return {
-        id: u._id.toString(),
-        username: u.username,
+      return buildPublicUserProfile({
+        profileUser: u,
+        currentUserId: user._id,
         postCount,
         bookmarkCount,
         likesReceived,
         commentCount,
+        followingCount,
         posts: ratedUserPosts,
         bookmarkedPosts: ratedBookmarks,
-      };
+      });
     },
     myRecentResults: async (_parent, { limit, offset } = {}, { user }) => {
       const current = requireUser(user);
@@ -822,7 +1001,7 @@ export const resolvers = {
   },
   Mutation: {
     register: async (_parent, { input }, { res, req } = {}) => {
-      const { username, email, password, role } = input;
+      const { username, email, password } = input;
       const usernameNorm = normalizeName(username);
       const emailNorm = normalizeEmail(email);
 
@@ -838,6 +1017,10 @@ export const resolvers = {
         return { ok: false, message: 'Missing required fields', token: null, user: null };
       }
 
+      if (!isValidEmail(emailNorm)) {
+        return { ok: false, message: 'Please provide a valid email address.', token: null, user: null };
+      }
+
       const existing = await User.findOne({
         $or: [{ username: usernameNorm }, { email: emailNorm }],
       });
@@ -851,9 +1034,17 @@ export const resolvers = {
         email: emailNorm,
         passwordHash,
         role: 'Player',
+        emailVerified: false,
+        emailVerifiedAt: undefined,
       });
 
       await ensurePlayerForUser(user._id);
+
+      try {
+        await resolvers.Mutation.sendEmailVerificationCode(_parent, { email: emailNorm }, { req });
+      } catch (err) {
+        console.error('[Auth] Registration email verification send failed:', err?.message || err);
+      }
 
       return authSuccess(user, res, 'Registration successful');
     },
@@ -883,6 +1074,15 @@ export const resolvers = {
       const passOk = await bcrypt.compare(password, user.passwordHash);
       if (!passOk) {
         return { ok: false, message: 'Invalid credentials', token: null, user: null };
+      }
+
+      if (user.emailVerified === false && isEmailVerificationRequiredOnLogin()) {
+        return {
+          ok: false,
+          message: 'Email not verified. Please verify your email before signing in.',
+          token: null,
+          user: null,
+        };
       }
 
       await ensurePlayerForUser(user._id);
@@ -978,6 +1178,182 @@ export const resolvers = {
       user.passwordHash = await bcrypt.hash(newPassword, 12);
       await user.save();
       return authSuccess(user, res, 'Password changed successfully.');
+    },
+    sendEmailVerificationCode: async (_parent, { email }, { req } = {}) => {
+      const normalizedEmail = normalizeEmail(email);
+
+      requireRateLimit({
+        req,
+        bucket: 'mutation-send-email-verification-code',
+        key: normalizedEmail || 'anonymous',
+        ...LIMITS.sendEmailVerificationCode,
+        message: 'Too many verification code requests. Please wait and try again.',
+      });
+
+      if (!isValidEmail(normalizedEmail)) {
+        throw new GraphQLError('Please provide a valid email address.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      const user = await User.findOne({ email: normalizedEmail });
+      if (!user || user.emailVerified === true) {
+        return { ok: true };
+      }
+
+      const latest = await EmailVerification.findOne(
+        { email: normalizedEmail, purpose: VERIFY_EMAIL_PURPOSE },
+        null,
+        { sort: { createdAt: -1 } },
+      );
+
+      if (latest?.createdAt) {
+        const elapsed = Date.now() - new Date(latest.createdAt).getTime();
+        if (elapsed < EMAIL_VERIFY_CODE_COOLDOWN_MS) {
+          return { ok: true };
+        }
+      }
+
+      const code = String(randomInt(100000, 1000000));
+      const codeHash = await bcrypt.hash(code, 12);
+
+      await EmailVerification.updateMany(
+        {
+          email: normalizedEmail,
+          purpose: VERIFY_EMAIL_PURPOSE,
+          used: false,
+        },
+        { $set: { used: true } },
+      );
+
+      const verification = await EmailVerification.create({
+        email: normalizedEmail,
+        codeHash,
+        purpose: VERIFY_EMAIL_PURPOSE,
+        expiresAt: new Date(Date.now() + EMAIL_VERIFY_CODE_TTL_MS),
+        attempts: 0,
+        used: false,
+      });
+
+      if (process.env.EMAIL_DEMO_MODE === 'true') {
+        return { ok: true, demoCode: code };
+      }
+
+      try {
+        await sendEmailVerificationCodeEmail({
+          to: normalizedEmail,
+          code,
+        });
+      } catch (err) {
+        if (process.env.NODE_ENV === 'test') {
+          return { ok: true };
+        }
+        verification.used = true;
+        await verification.save();
+        console.error('[Auth] Failed to send email verification code:', err?.message || err);
+        throw new GraphQLError('Unable to send verification email right now. Please try again later.', {
+          extensions: { code: 'INTERNAL_SERVER_ERROR' },
+        });
+      }
+
+      return { ok: true };
+    },
+    verifyEmailCode: async (_parent, { email, code }, { req } = {}) => {
+      const normalizedEmail = normalizeEmail(email);
+      const sanitizedCode = (code || '').trim();
+
+      requireRateLimit({
+        req,
+        bucket: 'mutation-verify-email-code',
+        key: normalizedEmail || 'anonymous',
+        ...LIMITS.verifyEmailCode,
+        message: 'Too many verification attempts. Please wait and try again.',
+      });
+
+      if (!isValidEmail(normalizedEmail)) {
+        throw new GraphQLError('Please provide a valid email address.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (!/^\d{6}$/.test(sanitizedCode)) {
+        throw new GraphQLError('Verification code must be a 6-digit number.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      const user = await User.findOne({ email: normalizedEmail });
+      if (!user) {
+        throw new GraphQLError('Invalid or expired verification code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (user.emailVerified === true) {
+        return true;
+      }
+
+      const verification = await EmailVerification.findOne(
+        {
+          email: normalizedEmail,
+          purpose: VERIFY_EMAIL_PURPOSE,
+          used: false,
+        },
+        null,
+        { sort: { createdAt: -1 } },
+      );
+
+      if (!verification) {
+        throw new GraphQLError('Invalid or expired verification code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (new Date(verification.expiresAt).getTime() <= Date.now()) {
+        verification.used = true;
+        await verification.save();
+        throw new GraphQLError('Verification code has expired. Please request a new code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      if (verification.attempts >= EMAIL_VERIFY_CODE_MAX_ATTEMPTS) {
+        verification.used = true;
+        await verification.save();
+        throw new GraphQLError('Too many incorrect attempts. Please request a new code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      const matched = await bcrypt.compare(sanitizedCode, verification.codeHash);
+      if (!matched) {
+        verification.attempts += 1;
+        if (verification.attempts >= EMAIL_VERIFY_CODE_MAX_ATTEMPTS) {
+          verification.used = true;
+        }
+        await verification.save();
+        throw new GraphQLError('Invalid verification code.', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      user.emailVerified = true;
+      user.emailVerifiedAt = new Date();
+      await user.save();
+
+      verification.used = true;
+      await verification.save();
+
+      await EmailVerification.updateMany(
+        {
+          email: normalizedEmail,
+          purpose: VERIFY_EMAIL_PURPOSE,
+          used: false,
+        },
+        { $set: { used: true } },
+      );
+
+      return true;
     },
     sendPasswordResetCode: async (_parent, { email }, { req } = {}) => {
       const normalizedEmail = normalizeEmail(email);
@@ -1179,8 +1555,19 @@ export const resolvers = {
     addGame: async (_parent, { input }, { user }) => {
       const current = requireUser(user);
       const payload = sanitizeGameInput(input);
-      const game = await Game.create({ ...payload, user: current._id });
-      return game;
+      const titleNormalized = normalizeTitleKey(payload.title);
+      const existing = await Game.findOne({ titleNormalized });
+      if (existing) return existing;
+      try {
+        const game = await Game.create({ ...payload, titleNormalized, user: current._id });
+        return game;
+      } catch (err) {
+        if (err?.code === 11000) {
+          const retry = await Game.findOne({ titleNormalized });
+          if (retry) return retry;
+        }
+        throw err;
+      }
     },
     removeGameFromUser: async (_parent, { gameId }, { user }) => {
       const current = requireUser(user);
@@ -1243,8 +1630,9 @@ export const resolvers = {
       const postType = POST_TYPES.has(input.postType) ? input.postType : 'GAME';
       if (!input.review?.trim()) throw new GraphQLError('Content is required', { extensions: { code: 'BAD_USER_INPUT' } });
 
-      if (postType === 'GAME' && !input.title?.trim()) {
-        throw new GraphQLError('Title is required', { extensions: { code: 'BAD_USER_INPUT' } });
+      let linkedGame = null;
+      if (postType === 'GAME') {
+        linkedGame = await findOrCreateCanonicalGame({ currentUserId: current._id, input });
       }
 
       if (postType === 'GAME') {
@@ -1274,11 +1662,12 @@ export const resolvers = {
       const isFeatured = input.featured === true && current.role === 'Admin';
       const post = await GamePost.create({
         postType,
-        title: postType === 'IDEA' ? 'Share Your Idea' : input.title.trim(),
-        genre: postType === 'IDEA' ? undefined : input.genre?.trim() || undefined,
-        platform: postType === 'IDEA' ? undefined : input.platform?.trim() || undefined,
-        developer: postType === 'IDEA' ? undefined : input.developer?.trim() || undefined,
-        releaseYear: postType === 'IDEA' ? undefined : input.releaseYear || undefined,
+        game: postType === 'IDEA' ? undefined : linkedGame?._id,
+        title: postType === 'IDEA' ? 'Share Your Idea' : (linkedGame?.title || input.title.trim()),
+        genre: postType === 'IDEA' ? undefined : (linkedGame?.genre || input.genre?.trim() || undefined),
+        platform: postType === 'IDEA' ? undefined : (linkedGame?.platform || input.platform?.trim() || undefined),
+        developer: postType === 'IDEA' ? undefined : (linkedGame?.developer || input.developer?.trim() || undefined),
+        releaseYear: postType === 'IDEA' ? undefined : (linkedGame?.releaseYear || input.releaseYear || undefined),
         gameType: postType === 'IDEA' ? undefined : input.gameType?.trim() || undefined,
         rating: postType === 'IDEA' ? undefined : input.rating || undefined,
         coverImageUrl: postType === 'IDEA' ? undefined : input.coverImageUrl?.trim() || undefined,
@@ -1291,6 +1680,7 @@ export const resolvers = {
         bookmarkedBy: [],
         comments: [],
       });
+      await post.populate('game');
       await post.populate('postedBy');
       await post.populate({ path: 'comments.author' });
       await post.populate('likedBy', '_id');
@@ -1306,7 +1696,9 @@ export const resolvers = {
         throw new GraphQLError('Not authorized', { extensions: { code: 'FORBIDDEN' } });
       }
       await GamePost.findByIdAndDelete(id);
-      await CommunityRating.deleteMany({ postId: id });
+      if (!post.game) {
+        await CommunityRating.deleteMany({ postId: id, gameId: { $exists: false } });
+      }
       invalidateTitlesCache();
       return true;
     },
@@ -1368,11 +1760,29 @@ export const resolvers = {
         });
       }
 
+      const ratingGameId = post.game || null;
+      const ratingFilter = ratingGameId
+        ? { gameId: ratingGameId, userId: current._id }
+        : { postId: post._id, userId: current._id };
+      const ratingUpdate = ratingGameId
+        ? { $set: { gameId: ratingGameId, postId: post._id, score: normalizedScore } }
+        : { $set: { postId: post._id, score: normalizedScore } };
+
       await CommunityRating.findOneAndUpdate(
-        { postId: post._id, userId: current._id },
-        { $set: { score: normalizedScore } },
+        ratingFilter,
+        ratingUpdate,
         { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true },
       );
+
+      if (ratingGameId) {
+        const linkedPosts = await GamePost.find({ game: ratingGameId }).select('_id').lean();
+        const linkedPostIds = linkedPosts.map((linkedPost) => linkedPost._id);
+        await CommunityRating.deleteMany({
+          userId: current._id,
+          postId: { $in: linkedPostIds },
+          gameId: { $exists: false },
+        });
+      }
 
       const populatedPost = await GamePost.findById(postId)
         .populate('postedBy')
@@ -1459,6 +1869,71 @@ export const resolvers = {
       if (!post) throw new GraphQLError('Post not found', { extensions: { code: 'NOT_FOUND' } });
       return attachCommunityRatingDataToPost(post, current._id);
     },
+    toggleFollowUser: async (_parent, { userId }, { user }) => {
+      const current = requireUser(user);
+      const targetId = userId?.toString?.() || String(userId || '');
+
+      if (!targetId) {
+        throw new GraphQLError('User ID is required', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+      if (targetId === current._id.toString()) {
+        throw new GraphQLError('You cannot follow yourself', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+
+      const target = await User.findById(targetId);
+      if (!target) {
+        throw new GraphQLError('User not found', { extensions: { code: 'NOT_FOUND' } });
+      }
+
+      const alreadyFollowing = (target.followers || []).some(
+        (entry) => toObjectIdString(entry) === current._id.toString(),
+      );
+
+      if (alreadyFollowing) {
+        target.followers = (target.followers || []).filter(
+          (entry) => toObjectIdString(entry) !== current._id.toString(),
+        );
+      } else {
+        target.followers = [...(target.followers || []), current._id];
+      }
+
+      await target.save();
+
+      const populateOpts = [
+        { path: 'postedBy' },
+        { path: 'comments.author' },
+        { path: 'likedBy', select: '_id' },
+        { path: 'bookmarkedBy', select: '_id' },
+      ];
+
+      const [userPosts, bookmarkedByUser, followingCount] = await Promise.all([
+        GamePost.find({ postedBy: targetId }).populate(populateOpts).sort({ createdAt: -1 }),
+        GamePost.find({ bookmarkedBy: targetId }).populate(populateOpts).sort({ createdAt: -1 }),
+        User.countDocuments({ followers: target._id }),
+      ]);
+
+      const [ratedUserPosts, ratedBookmarks] = await Promise.all([
+        attachCommunityRatingData(userPosts, current._id),
+        attachCommunityRatingData(bookmarkedByUser, current._id),
+      ]);
+
+      const postCount = ratedUserPosts.length;
+      const bookmarkCount = ratedBookmarks.length;
+      const likesReceived = ratedUserPosts.reduce((acc, p) => acc + (p.likedBy?.length || 0), 0);
+      const commentCount = ratedUserPosts.reduce((acc, p) => acc + (p.comments?.length || 0), 0);
+
+      return buildPublicUserProfile({
+        profileUser: target,
+        currentUserId: current._id,
+        postCount,
+        bookmarkCount,
+        likesReceived,
+        commentCount,
+        followingCount,
+        posts: ratedUserPosts,
+        bookmarkedPosts: ratedBookmarks,
+      });
+    },
     toggleCommentLike: async (_parent, { postId, commentId }, { user }) => {
       const current = requireUser(user);
       const post = await GamePost.findById(postId)
@@ -1497,27 +1972,10 @@ export const resolvers = {
       return result;
     },
 
-    // ── Password reset ──────────────────────────────────────────────────────
-    requestPasswordReset: async (_parent, { email }) => {
-      await resolvers.Mutation.sendPasswordResetCode(_parent, { email });
-      return {
-        ok: true,
-        message: 'If this email exists, a verification code has been sent.',
-        resetToken: null,
-      };
-    },
-
-    resetPassword: async () => {
-      return {
-        ok: false,
-        message: 'This endpoint is deprecated. Use resetPasswordWithCode instead.',
-        token: null,
-        user: null,
-      };
-    },
   },
   Game: {
     id: (parent) => parent.id || parent._id?.toString(),
+    titleNormalized: (parent) => parent.titleNormalized || normalizeTitleKey(parent.title || ''),
     createdAt: (parent) => parent.createdAt?.toISOString?.() || null,
     updatedAt: (parent) => parent.updatedAt?.toISOString?.() || null,
     tags: (parent) => Array.isArray(parent.tags) ? parent.tags : [],
@@ -1557,22 +2015,27 @@ export const resolvers = {
   GamePost: {
     id: (parent) => parent.id || parent._id?.toString(),
     postType: (parent) => parent.postType || 'GAME',
+    game: async (parent) => {
+      if (!parent.game) return null;
+      if (parent.game?.title) return parent.game;
+      return Game.findById(parent.game);
+    },
     rating: (parent) => parent.rating ?? parent.authorRating ?? null,
     authorRating: (parent) => parent.authorRating ?? parent.rating ?? null,
     communityRating: async (parent, _args, { user }) => {
       if (parent.communityRating !== undefined) return parent.communityRating;
-      const snapshot = await getCommunityRatingSnapshot(parent._id || parent.id, user?._id);
+      const snapshot = await getCommunityRatingSnapshot(parent.game?._id || parent.game?.id || parent.game || parent._id || parent.id, user?._id);
       return snapshot.communityRating;
     },
     ratingCount: async (parent, _args, { user }) => {
       if (parent.ratingCount !== undefined) return parent.ratingCount;
-      const snapshot = await getCommunityRatingSnapshot(parent._id || parent.id, user?._id);
+      const snapshot = await getCommunityRatingSnapshot(parent.game?._id || parent.game?.id || parent.game || parent._id || parent.id, user?._id);
       return snapshot.ratingCount;
     },
     myCommunityRating: async (parent, _args, { user }) => {
       if (!user) return null;
       if (parent.myCommunityRating !== undefined) return parent.myCommunityRating;
-      const snapshot = await getCommunityRatingSnapshot(parent._id || parent.id, user._id);
+      const snapshot = await getCommunityRatingSnapshot(parent.game?._id || parent.game?.id || parent.game || parent._id || parent.id, user._id);
       return snapshot.myCommunityRating;
     },
     postedBy: async (parent) => {

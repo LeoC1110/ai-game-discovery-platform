@@ -11,6 +11,20 @@ import { getMockAnswer, getMockReflection } from './mockAiService.js';
 
 const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS ?? '30000', 10);
 
+const LEADING_META_RE = /^(?:\s*\[(?:MOCK MODE|MOCK REFLECTION)\]\s*)*(?:\s*(?:I(?:'m| am)?\s+(?:sorry|apologize)|I apologize|I should clarify|Let me correct that|Let's refocus|Sorry(?: for the confusion)?|Apologies(?: for the confusion)?|In my previous response, I\s+(?:said|mentioned|suggested)|In response to my previous answer, I\s+(?:should|will))[^\n.!?]*(?:[.!?]+|\n+\s*))/i;
+
+function sanitizeUserFacingAnswer(answer) {
+  if (typeof answer !== 'string' || answer.length === 0) return answer;
+
+  let clean = answer.replace(/^\s*\[(?:MOCK MODE|MOCK REFLECTION)\]\s*/g, '');
+
+  while (LEADING_META_RE.test(clean)) {
+    clean = clean.replace(LEADING_META_RE, '');
+  }
+
+  return clean.trimStart();
+}
+
 // ── Gemini model singleton ────────────────────────────────────────────────────
 let _model = null;
 
@@ -434,7 +448,7 @@ export async function generateAnswerStream({
   if (process.env.AI_MOCK_MODE === 'true') {
     console.log('[answerAgent] MOCK MODE — Returning simulated iterable stream for intent:', effectiveIntent);
     const mockString = getMockAnswer({ intent: effectiveIntent });
-    return createMockStreamAdapter(mockString);
+    return createMockStreamAdapter(sanitizeUserFacingAnswer(mockString));
   }
 
   const model = getModel();
@@ -483,7 +497,7 @@ export async function generateAnswer({
 
   if (process.env.AI_MOCK_MODE === 'true') {
     console.log('[answerAgent] MOCK MODE — skipping Gemini, returning mock answer for intent:', effectiveIntent);
-    return getMockAnswer({ intent: effectiveIntent });
+    return sanitizeUserFacingAnswer(getMockAnswer({ intent: effectiveIntent }));
   }
 
   const model = getModel();
@@ -536,7 +550,7 @@ export async function generateReflection({
 
   if (process.env.AI_MOCK_MODE === 'true') {
     console.log('[answerAgent] MOCK MODE — skipping Gemini reflection, returning mock reflection');
-    return getMockReflection({ badAnswer });
+    return sanitizeUserFacingAnswer(getMockReflection({ badAnswer }));
   }
 
   const model = getModel();
@@ -566,9 +580,9 @@ export async function generateReflection({
 
   const response = await withTimeout(model.invoke(messages), AI_TIMEOUT_MS);
 
-  return typeof response.content === 'string'
+  return sanitizeUserFacingAnswer(typeof response.content === 'string'
     ? response.content
-    : response.content.map((c) => (typeof c === 'string' ? c : (c.text ?? ''))).join('');
+    : response.content.map((c) => (typeof c === 'string' ? c : (c.text ?? ''))).join(''));
 }
 
 // Test-only export for isolated unit testing of prompt-construction modules.
@@ -580,4 +594,5 @@ export const __test__ = {
   buildLowRatingRules,
   buildHighRatingRules,
   RECO_FORMAT_RULE,
+  sanitizeUserFacingAnswer,
 };

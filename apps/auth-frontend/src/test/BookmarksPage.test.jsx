@@ -1,10 +1,21 @@
 // src/test/BookmarksPage.test.jsx
 import React from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { vi } from 'vitest';
 import { renderWithProviders } from './helpers';
 import BookmarksPage from '../screens/BookmarksPage';
 import { PAGED_BOOKMARKS, TOGGLE_BOOKMARK } from '../gql/gamePosts';
 import { makePost } from './mockData';
+
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 const bookmarkedPost = makePost({
   id: 'p1', title: 'Celeste', genre: 'Platformer', platform: 'PC', developer: 'Maddy Makes Games',
@@ -17,6 +28,10 @@ const bookmarkedPost = makePost({
 });
 
 describe('BookmarksPage', () => {
+  beforeEach(() => {
+    mockNavigate.mockReset();
+  });
+
   test('renders heading and subtitle', () => {
     const mocks = [{ request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [], totalCount: 0 } } } }];
     renderWithProviders(<BookmarksPage />, { mocks });
@@ -78,5 +93,29 @@ describe('BookmarksPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Network error/i)).toBeInTheDocument();
     });
+  });
+
+  test('clicking author name navigates to user profile', async () => {
+    const mocks = [{ request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [bookmarkedPost], totalCount: 1 } } } }];
+    renderWithProviders(<BookmarksPage />, { mocks });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /carol/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /carol/i }));
+    expect(mockNavigate).toHaveBeenCalledWith('/users/u2', { state: { from: 'bookmarks' } });
+  });
+
+  test('clicking View in Community passes focused post state', async () => {
+    const mocks = [{ request: { query: PAGED_BOOKMARKS, variables: { limit: 8, offset: 0 } }, result: { data: { pagedBookmarks: { posts: [bookmarkedPost], totalCount: 1 } } } }];
+    renderWithProviders(<BookmarksPage />, { mocks });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /view in community/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /view in community/i }));
+    expect(mockNavigate).toHaveBeenCalledWith('/community', { state: { focusPost: bookmarkedPost } });
   });
 });

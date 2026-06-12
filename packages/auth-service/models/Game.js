@@ -4,10 +4,17 @@ const { Schema } = mongoose;
 
 const SOURCE_TYPES = ['LocalMeta', 'ExternalLink', 'Embeddable'];
 
+const normalizeTitle = (value = '') => value
+  .toString()
+  .trim()
+  .toLowerCase()
+  .replace(/\s+/g, ' ');
+
 const GameSchema = new Schema(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     title: { type: String, required: true, trim: true },
+    titleNormalized: { type: String, required: true, trim: true, lowercase: true },
     genre: { type: String, trim: true },
     platform: { type: String, trim: true },
     releaseYear: { type: Number, min: 0 },
@@ -35,7 +42,13 @@ const GameSchema = new Schema(
   { timestamps: true },
 );
 
+GameSchema.pre('validate', function syncNormalizedTitle(next) {
+  this.titleNormalized = normalizeTitle(this.title || '');
+  next();
+});
+
 GameSchema.index({ user: 1, title: 1 });
+GameSchema.index({ titleNormalized: 1 }, { unique: true });
 GameSchema.index({ tags: 1 });
 GameSchema.index({ createdAt: -1 });
 GameSchema.index({ sourceType: 1, createdAt: -1 });

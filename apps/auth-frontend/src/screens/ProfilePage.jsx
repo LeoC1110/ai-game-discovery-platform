@@ -5,6 +5,7 @@ import DashboardNav from '../components/DashboardNav';
 import PostRatingSummary from '../components/PostRatingSummary';
 import { MY_POSTS, BOOKMARKED_POSTS, DELETE_POST } from '../gql/gamePosts';
 import { CHANGE_PASSWORD } from '../gql/changePassword';
+import { PUBLIC_USER_PROFILE } from '../gql/users';
 
 const ME_QUERY = gql`
   query MeProfile {
@@ -85,6 +86,11 @@ export default function ProfilePage() {
   const { data: meData, loading: meLoading } = useQuery(ME_QUERY, { fetchPolicy: 'cache-and-network' });
   const { data: postsData, loading: postsLoading, refetch: refetchPosts } = useQuery(MY_POSTS, { fetchPolicy: 'cache-and-network' });
   const { data: bookmarkData, loading: bookmarksLoading } = useQuery(BOOKMARKED_POSTS, { fetchPolicy: 'cache-and-network' });
+  const { data: myProfileData } = useQuery(PUBLIC_USER_PROFILE, {
+    variables: { id: meData?.me?.id },
+    skip: !meData?.me?.id,
+    fetchPolicy: 'cache-and-network',
+  });
 
   const [deletePost, { loading: deleting }] = useMutation(DELETE_POST, {
     onCompleted: () => refetchPosts(),
@@ -141,6 +147,8 @@ export default function ProfilePage() {
   const me = meData?.me;
   const myPosts = postsData?.myPosts ?? [];
   const bookmarked = bookmarkData?.bookmarkedPosts ?? [];
+  const followerCount = myProfileData?.publicUserProfile?.followerCount ?? 0;
+  const followingCount = myProfileData?.publicUserProfile?.followingCount ?? 0;
   const myIdeaPosts = myPosts.filter((p) => p.postType === 'IDEA');
   const myGamePosts = myPosts.filter((p) => p.postType !== 'IDEA');
 
@@ -178,6 +186,8 @@ export default function ProfilePage() {
                 <span className="badge badge--dim">Posts: {myPosts.length}</span>
                 <span className="badge badge--dim">Ideas: {myIdeaPosts.length}</span>
                 <span className="badge badge--dim">Bookmarks: {bookmarked.length}</span>
+                <span className="badge badge--dim">Followers: {followerCount}</span>
+                <span className="badge badge--dim">Following: {followingCount}</span>
                 {me.createdAt && (
                   <span className="badge badge--dim">
                     Joined {new Date(me.createdAt).toLocaleDateString()}

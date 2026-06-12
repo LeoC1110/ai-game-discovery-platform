@@ -7,7 +7,7 @@ export const REGISTER_USER = gql`
       ok
       message
       token
-      user { id username email }
+      user { id username email emailVerified emailVerifiedAt }
     }
   }
 `;

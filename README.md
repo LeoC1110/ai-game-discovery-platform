@@ -46,6 +46,9 @@ Nova can help users:
 * Analyze bookmarked games and taste patterns
 * Generate structured recommendation cards for the UI
 
+Nova's user-visible replies are intentionally kept direct and clean.
+Even when a response is repaired by validation, the final output is stripped of apology-style or self-referential reflection language before it is shown to the user.
+
 ---
 
 ## AI Architecture
@@ -294,7 +297,8 @@ The platform includes:
 * Sign up
 * Sign in
 * Protected routes
-* Password reset with email verification code
+* Optional registration email verification with 6-digit code
+* Code-based password reset with email verification code
 * Logged-in password change from My Profile
 * User profile management
 
@@ -368,7 +372,7 @@ Added:
 The project includes automated frontend and backend tests covering:
 
 * Login and registration
-* Forgot password and password reset flow
+* Email verification and code-based password reset flow
 * Protected routes
 * UI behavior
 * GraphQL API logic
@@ -391,12 +395,15 @@ npm test --workspace @services/auth
 Implemented improvements include:
 
 * Password hashing with bcrypt
+* Optional registration email verification with 6-digit code
 * Password reset with email verification code
+* Optional login enforcement via REQUIRE_EMAIL_VERIFICATION_ON_LOGIN=true
 * Hashed verification codes
 * 10-minute code expiration
 * 60-second resend cooldown
 * Maximum 5 wrong verification attempts
-* Rate limiting for authentication, password reset, GraphQL, and AI requests
+* Legacy token-based password reset endpoints removed to reduce auth attack surface
+* Rate limiting for authentication, email verification, password reset, GraphQL, and AI requests
 * AI input validation with a 1000-character limit
 * Server-side API key usage
 * Sensitive production log cleanup

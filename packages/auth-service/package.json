@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nodemon --watch .env server.js",
-    "dev:mock": "cross-env AI_MOCK_MODE=true nodemon --watch .env server.js",
-    "dev:real": "cross-env AI_MOCK_MODE=false nodemon --watch .env server.js",
+    "dev": "nodemon --watch . --ext js,mjs,cjs,json,env server.js",
+    "dev:mock": "cross-env AI_MOCK_MODE=true nodemon --watch . --ext js,mjs,cjs,json,env server.js",
+    "dev:real": "cross-env AI_MOCK_MODE=false nodemon --watch . --ext js,mjs,cjs,json,env server.js",
     "start": "node server.js",
     "backfill:title-normalized": "node scripts/backfillTitleNormalized.js",
     "backfill:title-normalized:apply": "node scripts/backfillTitleNormalized.js --apply",
+    "backfill:community-ratings-to-game-id": "node scripts/backfillCommunityRatingsToGameId.js",
+    "backfill:community-ratings-to-game-id:apply": "node scripts/backfillCommunityRatingsToGameId.js --apply",
     "test": "cross-env NODE_ENV=test node --test ai/__tests__/mockMode.test.js ai/__tests__/pipeline.test.js ai/__tests__/routerAgent.test.js ai/__tests__/answerAgent.test.js ai/__tests__/validatorAgent.test.js ai/__tests__/aiPipeline.test.js __tests__/passwordReset.test.js"
   },
   "dependencies": {

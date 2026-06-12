@@ -13,8 +13,9 @@ const userSchema = new Schema(
     email:                { type: String, required: true, unique: true, index: true },
     passwordHash:         { type: String, required: true },
     role:                 { type: String, enum: ['Admin', 'Player'], default: 'Player' },
-    resetPasswordToken:   { type: String, default: undefined },
-    resetPasswordExpires: { type: Date,   default: undefined },
+    emailVerified:        { type: Boolean, default: true, index: true },
+    emailVerifiedAt:      { type: Date, default: undefined },
+    followers:            [{ type: Schema.Types.ObjectId, ref: 'User', default: [] }],
   },
   {
     timestamps: true,

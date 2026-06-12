@@ -4,6 +4,7 @@ export const POST_FRAGMENT = gql`
   fragment PostFields on GamePost {
     id
     postType
+    game { id title titleNormalized genre platform developer releaseYear }
     title
     genre
     platform

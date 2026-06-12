@@ -8,9 +8,9 @@ import RequireAuth from './screens/RequireAuth.jsx';
 // Each page is loaded on demand; the initial bundle only contains the shell.
 const LoginPage          = lazy(() => import('./screens/LoginPage.jsx'));
 const RegisterPage       = lazy(() => import('./screens/RegisterPage.jsx'));
+const VerifyEmailPage    = lazy(() => import('./screens/VerifyEmailPage.jsx'));
 const LogoutPage         = lazy(() => import('./screens/LogoutPage.jsx'));
 const ForgotPasswordPage = lazy(() => import('./screens/ForgotPasswordPage.jsx'));
-const ResetPasswordPage  = lazy(() => import('./screens/ResetPasswordPage.jsx'));
 const ChangePasswordPage = lazy(() => import('./screens/ChangePasswordPage.jsx'));
 const HomePage           = lazy(() => import('./screens/HomePage.jsx'));
 const PostPage           = lazy(() => import('./screens/PostPage.jsx'));
@@ -40,10 +40,9 @@ export default function App() {
           <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/change-password" element={<ChangePasswordPage />} />
-          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<RequireAuth />}>
             <Route path="/home" element={<HomePage />} />
             <Route path="/share" element={<SharePage />} />
