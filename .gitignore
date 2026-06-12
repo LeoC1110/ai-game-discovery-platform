@@ -31,6 +31,12 @@ shared/*/.env.*
 # Logs
 *.log
 npm-debug.log*
+**/*test-output.txt
+**/*follow-output.txt
+**/*follow-tests.txt
+**/*-test-output.txt
+**/*-follow-output.txt
+**/*-follow-tests.txt
 
 # OS
 .DS_Store
