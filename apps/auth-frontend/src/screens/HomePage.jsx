@@ -27,24 +27,24 @@ const sections = [
     description: 'Create a game recommendation and share it with the community.',
   },
   {
-    to: '/community',
-    title: 'Community',
-    description: 'Explore posts, comments, likes, and discussions from other users.',
-  },
-  {
-    to: '/bookmarks',
-    title: 'Bookmarks',
-    description: 'View and manage your saved game recommendations.',
-  },
-  {
     to: '/agent',
     title: 'Nova',
     description: 'Ask Nova for AI-powered game suggestions based on your preferences and community data.',
   },
   {
+    to: '/community',
+    title: 'Community',
+    description: 'Explore posts, comments, likes, and discussions from other users.',
+  },
+  {
     to: '/leaderboard',
     title: 'Community Trends',
     description: 'View popular game posts and active community discussions.',
+  },
+  {
+    to: '/bookmarks',
+    title: 'Bookmarks',
+    description: 'View and manage your saved game recommendations.',
   },
 ];
 

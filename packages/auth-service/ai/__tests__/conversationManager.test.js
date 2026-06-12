@@ -56,3 +56,30 @@ test('saveExchange caps stored message array with negative slice', async () => {
     ConversationHistory.findOneAndUpdate = originalFindOneAndUpdate;
   }
 });
+
+test('saveExchange strips RECOMMENDATIONS blocks before persisting', async () => {
+  const originalFindOneAndUpdate = ConversationHistory.findOneAndUpdate;
+
+  let capturedUpdate;
+
+  ConversationHistory.findOneAndUpdate = async (_filter, update) => {
+    capturedUpdate = update;
+    return null;
+  };
+
+  try {
+    await saveExchange(
+      'u3',
+      'demo',
+      'suggest a game',
+      'Here you go. <!--RECOMMENDATIONS:[{"title":"Portal 2"}]--> Enjoy!',
+    );
+
+    const assistantMessage = capturedUpdate.$push.messages.$each[1].content;
+    assert.equal(assistantMessage.includes('<!--RECOMMENDATIONS:'), false);
+    assert.match(assistantMessage, /Here you go\./);
+    assert.match(assistantMessage, /Enjoy!/);
+  } finally {
+    ConversationHistory.findOneAndUpdate = originalFindOneAndUpdate;
+  }
+});

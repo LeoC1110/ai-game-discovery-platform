@@ -5,6 +5,25 @@ import UserMemory from '../models/UserMemory.js';
 
 const MAX_HISTORY = parseInt(process.env.AI_MAX_HISTORY_MESSAGES ?? '3', 10);
 const MAX_STORED_MESSAGES = Math.max(MAX_HISTORY * 10, parseInt(process.env.AI_MAX_STORED_MESSAGES ?? '100', 10));
+const RECOMMENDATIONS_BLOCK_START = '<!--RECOMMENDATIONS:';
+const RECOMMENDATIONS_BLOCK_END = '-->';
+
+function stripRecommendationsBlock(text = '') {
+  if (typeof text !== 'string') return '';
+
+  let cleaned = text;
+  let start = cleaned.indexOf(RECOMMENDATIONS_BLOCK_START);
+
+  while (start !== -1) {
+    const end = cleaned.indexOf(RECOMMENDATIONS_BLOCK_END, start + RECOMMENDATIONS_BLOCK_START.length);
+    if (end === -1) break;
+
+    cleaned = `${cleaned.slice(0, start)}${cleaned.slice(end + RECOMMENDATIONS_BLOCK_END.length)}`;
+    start = cleaned.indexOf(RECOMMENDATIONS_BLOCK_START);
+  }
+
+  return cleaned.trimEnd();
+}
 
 /**
  * Load the last N messages for a user from the database.
@@ -34,6 +53,7 @@ export async function loadHistory(userId) {
 export async function saveExchange(userId, username, userMessage, aiResponse) {
   try {
     const now = new Date();
+    const cleanAIResponse = stripRecommendationsBlock(aiResponse);
     await ConversationHistory.findOneAndUpdate(
       { userId },
       {
@@ -42,7 +62,7 @@ export async function saveExchange(userId, username, userMessage, aiResponse) {
           messages: {
             $each: [
               { role: 'user', content: userMessage, createdAt: now },
-              { role: 'assistant', content: aiResponse, createdAt: now },
+              { role: 'assistant', content: cleanAIResponse, createdAt: now },
             ],
             $slice: -MAX_STORED_MESSAGES,
           },
@@ -167,4 +187,5 @@ export function buildSimpleSummary(historyRecords, lastUserMessage, lastAIRespon
 export const __test__ = {
   MAX_HISTORY,
   MAX_STORED_MESSAGES,
+  stripRecommendationsBlock,
 };

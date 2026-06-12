@@ -9,13 +9,38 @@ import { ASK_AI, CLEAR_AI_HISTORY, MY_AI_HISTORY } from '../gql/askAI';
 import { streamNovaResponse } from '../services/aiStreamClient';
 
 const SUGGESTIONS = [
-  'Show the top trending games in the community right now.',
-  'Find low-rated games in the community.',
-  'Recommend games for me based on my bookmarks.',
-  'Find high-rated RPG games with strong community engagement.',
-  'Summarize the most popular community posts this week.',
-  'Analyze my game taste from bookmarks and suggest something new.',
-  'Suggest 3 community games I might like, and explain each briefly.',
+  {
+    label: 'Show all games',
+    prompt: 'Show all games on the platform.',
+  },
+  {
+    label: 'Trending now',
+    prompt: 'Show the top trending games in the community right now.',
+  },
+  {
+    label: 'Top-rated games',
+    prompt: 'Find top-rated community games.',
+  },
+  {
+    label: 'Low-rated games',
+    prompt: 'Find low-rated games on the platform.',
+  },
+  {
+    label: 'Recommend games',
+    prompt: 'Recommend three games from the platform.',
+  },
+  {
+    label: 'Use my bookmarks',
+    prompt: 'Recommend games based on my bookmarks.',
+  },
+  {
+    label: 'Analyze my taste',
+    prompt: 'Analyze my bookmarked games and summarize my taste.',
+  },
+  {
+    label: 'Community summary',
+    prompt: 'Summarize current community activity.',
+  },
 ];
 
 const PROGRESS_STEPS = {
@@ -351,12 +376,12 @@ export default function AgentPage() {
             <div className="agent-suggestions__list">
               {SUGGESTIONS.map((s) => (
                 <button
-                  key={s}
+                  key={s.label}
                   className="btn-ghost agent-suggestion"
-                  onClick={() => sendMessage(s)}
+                  onClick={() => sendMessage(s.prompt)}
                   disabled={isThinking || isLoading}
                 >
-                  {s}
+                  {s.label}
                 </button>
               ))}
             </div>
