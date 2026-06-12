@@ -26,6 +26,8 @@ export function getModel() {
   _model = new ChatGoogleGenerativeAI({
     model: modelName,
     apiKey: key.trim(),
+    temperature: 0.1,
+    topP: 0.8,
     maxOutputTokens: 1024, // Expanded to 1024 to comfortably accommodate large trailing RECOMMENDATIONS machine blocks
     maxRetries: 0,
   });
@@ -43,6 +45,8 @@ const INTENT_ROLE_MAP = {
     "recommend games based on the user's bookmarks, preferences, and community activity",
   [INTENTS.BOOKMARK_ANALYSIS]:
     "analyze the user's bookmarked games and summarize their taste profile",
+  [INTENTS.MIXED_QUERY_RECOMMENDATION]:
+    'answer a platform-data query first, then provide grounded recommendations',
   [INTENTS.COMMUNITY_SUMMARY]:
     'summarize community trends, popular posts, active discussions, and trending tags',
   [INTENTS.LEADERBOARD_QUERY]:
@@ -57,9 +61,9 @@ const INTENT_ROLE_MAP = {
 
 
 // ── Prompt constants ─────────────────────────────────────────────────────────
-const LOW_RATING_THRESHOLD = 6.0; // low-rated: <= 6.0
-const POSITIVE_RATING_THRESHOLD = LOW_RATING_THRESHOLD; // positively rated / above average: > 6.0
-const HIGH_RATING_THRESHOLD = 8.0; // high-rated: >= 8.0
+const LOW_RATING_MAX = 6.0; // low-rated: <= 6.0
+const POSITIVE_RATING_MIN = 6.0; // positively rated / above average: > 6.0
+const HIGH_RATING_MIN = 8.0; // high-rated: >= 8.0
 
 // RECOMMENDATIONS block format instruction — must match the regex in recommendationExtractor.js
 const RECO_FORMAT_RULE =
@@ -72,6 +76,10 @@ const RECO_FORMAT_RULE =
   `- confidence is a float between 0.0 and 1.0.\n` +
   `- matchedTags are tags from the game that match the user's request, bookmarks, preferences, or community context.\n` +
   `- If no specific games are being recommended, omit the block entirely.`;
+
+function getEffectiveIntent(intent, plan) {
+  return plan?.intent ?? intent;
+}
 
 // ── Intent helpers ───────────────────────────────────────────────────────────
 
@@ -110,6 +118,24 @@ function buildCorePrompt(role) {
     `- Product-like, not overly robotic.\n` +
     `- Honest when data is limited or unavailable.\n` +
     `- Focused on helping the user decide what to play or explore next.\n`
+  );
+}
+
+function buildExecutionPlanPrompt(plan) {
+  if (!plan) return '';
+
+  return (
+    `--- Execution Plan ---\n` +
+    `Intent: ${plan.intent ?? 'N/A'}\n` +
+    `Mode: ${plan.mode ?? 'N/A'}\n` +
+    `Response Style: ${plan.responseStyle ?? 'N/A'}\n` +
+    `Execution Order: ${(plan.executionOrder ?? []).join(' -> ') || 'N/A'}\n` +
+    `Needs Recommendation: ${Boolean(plan.needsRecommendation)}\n` +
+    `Needs User Profile: ${Boolean(plan.needsUserProfile)}\n` +
+    `--- End Execution Plan ---\n` +
+    `Follow this execution plan. Do not change the user's intent. ` +
+    `If the plan says query mode, answer as a platform-data query. ` +
+    `If the plan says recommendation mode, generate grounded recommendations only from Platform Data.`
   );
 }
 
@@ -174,20 +200,20 @@ function buildCommunityTrendRules() {
 function buildLowRatingRules() {
   return (
     `Low rating rules:\n` +
-    `- Low rating definition: any game with Community Rating <= ${LOW_RATING_THRESHOLD.toFixed(1)}/10 is considered low-rated.\n` +
+    `- Low rating definition: any game with Community Rating <= ${LOW_RATING_MAX.toFixed(1)}/10 is considered low-rated.\n` +
     `- If Platform Data includes a "Low-rated games" section, summarize that section first before any high-rated or trending section.\n` +
     `- For low-rated, worst, lowest-rated, or poorly rated queries, rank results from lowest to highest Community Rating.\n` +
     `- Include rating count in prose when available.\n` +
-    `- If no games meet the <= ${LOW_RATING_THRESHOLD.toFixed(1)}/10 threshold, explicitly say no low-rated games are currently available in the platform data.\n`
+    `- If no games meet the <= ${LOW_RATING_MAX.toFixed(1)}/10 threshold, explicitly say no low-rated games are currently available in the platform data.\n`
   );
 }
 
 function buildHighRatingRules() {
   return (
     `High rating rules:\n` +
-    `- Positive rating definition: any game with Community Rating > ${POSITIVE_RATING_THRESHOLD.toFixed(1)}/10 is considered positively rated or above average.\n` +
-    `- High rating definition: any game with Community Rating >= ${HIGH_RATING_THRESHOLD.toFixed(1)}/10 is considered high-rated.\n` +
-    `- For high-rated, best, top-rated, or highest-rated queries, prioritize games with Community Rating >= ${HIGH_RATING_THRESHOLD.toFixed(1)}/10 and rank results from highest to lowest Community Rating.\n` +
+    `- Positive rating definition: any game with Community Rating > ${POSITIVE_RATING_MIN.toFixed(1)}/10 is considered positively rated or above average.\n` +
+    `- High rating definition: any game with Community Rating >= ${HIGH_RATING_MIN.toFixed(1)}/10 is considered high-rated.\n` +
+    `- For high-rated, best, top-rated, or highest-rated queries, prioritize games with Community Rating >= ${HIGH_RATING_MIN.toFixed(1)}/10 and rank results from highest to lowest Community Rating.\n` +
     `- For popular, trending, or leaderboard queries, rank by community signals such as Community Rating, Rating Count, likes, bookmarks, and comments. Prefer positively rated games when available.\n` +
     `- Prefer games with stronger Rating Count, likes, bookmarks, or comments when ratings are similar.\n` +
     `- Do not mention, list, summarize, or recommend low-rated games when the user asks for high-rated, best, top-rated, popular, or leaderboard results.\n`
@@ -201,6 +227,54 @@ function buildOffTopicRules() {
     `- Then guide the user back to relevant platform topics.\n` +
     `- Offer 2-3 concrete follow-up prompts about this platform, such as "Show trending games", "Recommend games based on my bookmarks", "Find top-rated community games", or "Summarize community activity".\n`
   );
+}
+
+function buildModeRulesPrompt(plan) {
+  if (!plan?.mode) return '';
+
+  if (plan.mode === 'query') {
+    return (
+      `Mode-specific rules: Query Mode\n` +
+      `- Answer as a factual platform-data query.\n` +
+      `- Use only Platform Data for titles, ratings, tags, likes, bookmarks, comments, and community statistics.\n` +
+      `- Do not provide personal recommendations unless the plan explicitly requires recommendation.\n` +
+      `- Do not add external games, famous examples, or titles from model training knowledge.\n` +
+      `- For platform inventory/list requests, list only titles present in Platform Data.\n` +
+      `- If Platform Data is not attached, say the data was not attached to this request; do not claim the database is empty.`
+    );
+  }
+
+  if (plan.mode === 'recommendation') {
+    return (
+      `Mode-specific rules: Recommendation Mode\n` +
+      `- Recommend only games present in Platform Data.\n` +
+      `- Use user profile, bookmarks, saved games, stated preferences, and current message preferences when available.\n` +
+      `- Explain why each recommendation matches the user or request.\n` +
+      `- If specific games are recommended, include a valid RECOMMENDATIONS block.\n` +
+      `- If user profile context is missing, rely on current message preferences and Platform Data only.`
+    );
+  }
+
+  if (plan.mode === 'mixed') {
+    return (
+      `Mode-specific rules: Mixed Mode\n` +
+      `- First answer the platform query using Platform Data.\n` +
+      `- Then provide recommendations if the plan requires recommendation.\n` +
+      `- Clearly separate platform facts from personalized suggestions.\n` +
+      `- Recommendation titles must still come only from Platform Data.`
+    );
+  }
+
+  if (plan.mode === 'general_chat') {
+    return (
+      `Mode-specific rules: General Chat Mode\n` +
+      `- Keep the response short and helpful.\n` +
+      `- Do not mention missing platform data unless the user asks for platform games, recommendations, trends, ratings, bookmarks, or community activity.\n` +
+      `- Guide the user toward useful Nova actions such as trending games, bookmark-based recommendations, low-rated games, or community summaries.`
+    );
+  }
+
+  return '';
 }
 
 function buildIntentRulesPrompt(intent) {
@@ -232,14 +306,20 @@ function buildIntentRulesPrompt(intent) {
   return buildPlatformDataQueryRules();
 }
 
-function buildUserMemoryPrompt(userMemoryContext) {
+function buildUserMemoryPrompt(userMemoryContext, plan = null) {
   if (!userMemoryContext) return '';
+
+  const personalizationGuard = plan?.needsUserProfile
+    ?
+      `Use the profile above to personalize because the execution plan requires user profile context.\n`
+    :
+      `Use the profile above to personalize your reply only when the user's intent is personalized recommendation or bookmark analysis.\n`;
 
   return (
     `--- User Preference Profile ---\n` +
     `${userMemoryContext}\n` +
     `--- End User Preference Profile ---\n` +
-    `Use the profile above to personalize your reply only when the user's intent is personalized recommendation or bookmark analysis. ` +
+    personalizationGuard +
     `Only recommend games present in the platform data.\n`
   );
 }
@@ -282,15 +362,23 @@ function buildRecommendationFormatPrompt() {
  * Nova may explain, summarize, and compare using platform data,
  * but should not invent games, ratings, bookmarks, or user activity.
  */
-function buildSystemPrompt(intent, platformData, userMemoryContext = '') {
-  const role = INTENT_ROLE_MAP[intent] ?? 'assist with game discovery questions';
+function buildSystemPrompt({
+  intent,
+  plan = null,
+  platformData,
+  userMemoryContext = '',
+}) {
+  const effectiveIntent = getEffectiveIntent(intent, plan);
+  const role = INTENT_ROLE_MAP[effectiveIntent] ?? 'assist with game discovery questions';
 
   return [
     buildCorePrompt(role),
+    buildExecutionPlanPrompt(plan),
     buildBehaviorRulesPrompt(),
-    buildIntentRulesPrompt(intent),
-    buildUserMemoryPrompt(userMemoryContext),
-    buildPlatformDataPrompt(platformData, intent),
+    buildIntentRulesPrompt(effectiveIntent),
+    buildModeRulesPrompt(plan),
+    buildUserMemoryPrompt(userMemoryContext, plan),
+    buildPlatformDataPrompt(platformData, effectiveIntent),
     buildRecommendationFormatPrompt(),
   ]
     .filter(Boolean)
@@ -326,6 +414,7 @@ function createMockStreamAdapter(answerText) {
  * @param {{
  * userMessage: string,
  * intent: string,
+ * plan?: object | null,
  * conversationContext: string,
  * platformData: string,
  * userMemoryContext?: string
@@ -335,18 +424,26 @@ function createMockStreamAdapter(answerText) {
 export async function generateAnswerStream({
   userMessage,
   intent,
+  plan = null,
   conversationContext,
   platformData,
   userMemoryContext = '',
 }) {
+  const effectiveIntent = getEffectiveIntent(intent, plan);
+
   if (process.env.AI_MOCK_MODE === 'true') {
-    console.log('[answerAgent] MOCK MODE — Returning simulated iterable stream for intent:', intent);
-    const mockString = getMockAnswer({ intent });
+    console.log('[answerAgent] MOCK MODE — Returning simulated iterable stream for intent:', effectiveIntent);
+    const mockString = getMockAnswer({ intent: effectiveIntent });
     return createMockStreamAdapter(mockString);
   }
 
   const model = getModel();
-  const messages = [new SystemMessage(buildSystemPrompt(intent, platformData, userMemoryContext))];
+  const messages = [new SystemMessage(buildSystemPrompt({
+    intent,
+    plan,
+    platformData,
+    userMemoryContext,
+  }))];
 
   if (conversationContext) {
     messages.push(new HumanMessage(`Previous conversation:\n${conversationContext}`));
@@ -367,6 +464,7 @@ export async function generateAnswerStream({
  * @param {{
  * userMessage: string,
  * intent: string,
+ * plan?: object | null,
  * conversationContext: string,
  * platformData: string,
  * userMemoryContext?: string
@@ -376,17 +474,25 @@ export async function generateAnswerStream({
 export async function generateAnswer({
   userMessage,
   intent,
+  plan = null,
   conversationContext,
   platformData,
   userMemoryContext = '',
 }) {
+  const effectiveIntent = getEffectiveIntent(intent, plan);
+
   if (process.env.AI_MOCK_MODE === 'true') {
-    console.log('[answerAgent] MOCK MODE — skipping Gemini, returning mock answer for intent:', intent);
-    return getMockAnswer({ intent });
+    console.log('[answerAgent] MOCK MODE — skipping Gemini, returning mock answer for intent:', effectiveIntent);
+    return getMockAnswer({ intent: effectiveIntent });
   }
 
   const model = getModel();
-  const messages = [new SystemMessage(buildSystemPrompt(intent, platformData, userMemoryContext))];
+  const messages = [new SystemMessage(buildSystemPrompt({
+    intent,
+    plan,
+    platformData,
+    userMemoryContext,
+  }))];
 
   if (conversationContext) {
     messages.push(new HumanMessage(`Previous conversation:\n${conversationContext}`));
@@ -411,6 +517,7 @@ export async function generateAnswer({
  * flags: string[],
  * userMessage: string,
  * intent: string,
+ * plan?: object | null,
  * platformData: string,
  * userMemoryContext?: string
  * }} params
@@ -421,9 +528,12 @@ export async function generateReflection({
   flags,
   userMessage,
   intent,
+  plan = null,
   platformData,
   userMemoryContext = '',
 }) {
+  const effectiveIntent = getEffectiveIntent(intent, plan);
+
   if (process.env.AI_MOCK_MODE === 'true') {
     console.log('[answerAgent] MOCK MODE — skipping Gemini reflection, returning mock reflection');
     return getMockReflection({ badAnswer });
@@ -433,7 +543,12 @@ export async function generateReflection({
   const flagList = flags.map((f) => `- ${f}`).join('\n');
 
   const messages = [
-    new SystemMessage(buildSystemPrompt(intent, platformData, userMemoryContext)),
+    new SystemMessage(buildSystemPrompt({
+      intent: effectiveIntent,
+      plan,
+      platformData,
+      userMemoryContext,
+    })),
     new HumanMessage(userMessage),
     new AIMessage(badAnswer),
     new HumanMessage(
@@ -455,3 +570,14 @@ export async function generateReflection({
     ? response.content
     : response.content.map((c) => (typeof c === 'string' ? c : (c.text ?? ''))).join('');
 }
+
+// Test-only export for isolated unit testing of prompt-construction modules.
+export const __test__ = {
+  buildSystemPrompt,
+  buildIntentRulesPrompt,
+  buildPlatformDataPrompt,
+  buildRecommendationFormatPrompt,
+  buildLowRatingRules,
+  buildHighRatingRules,
+  RECO_FORMAT_RULE,
+};

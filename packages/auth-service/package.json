@@ -8,7 +8,9 @@
     "dev:mock": "cross-env AI_MOCK_MODE=true nodemon --watch .env server.js",
     "dev:real": "cross-env AI_MOCK_MODE=false nodemon --watch .env server.js",
     "start": "node server.js",
-    "test": "cross-env NODE_ENV=test node --test ai/__tests__/mockMode.test.js ai/__tests__/pipeline.test.js __tests__/passwordReset.test.js"
+    "backfill:title-normalized": "node scripts/backfillTitleNormalized.js",
+    "backfill:title-normalized:apply": "node scripts/backfillTitleNormalized.js --apply",
+    "test": "cross-env NODE_ENV=test node --test ai/__tests__/mockMode.test.js ai/__tests__/pipeline.test.js ai/__tests__/routerAgent.test.js ai/__tests__/answerAgent.test.js ai/__tests__/validatorAgent.test.js ai/__tests__/aiPipeline.test.js __tests__/passwordReset.test.js"
   },
   "dependencies": {
     "@apollo/server": "^5.0.0",

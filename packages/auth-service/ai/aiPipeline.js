@@ -1,5 +1,5 @@
 // packages/auth-service/ai/aiPipeline.js
-// Main AI agent pipeline — connects all modular steps in sequence.
+// Orchestration / delegate layer for Nova's grounded AI pipeline.
 //
 // Pipeline flow:
 //
@@ -7,15 +7,15 @@
 //       ↓
 //   [Step 1] Conversation Manager  — load history, track turn count, load user memory
 //       ↓
-//   [Step 2] Router Agent          — classify intent (Deterministic rule or fast model)
+//   [Step 2] Router / Planner Agent — classify intent → structured plan
 //       ↓
-//   [Step 3] Platform Tools        — fetch DB data relevant to intent (Grounding layer)
+//   [Step 3] Platform Tools        — load platformData only when plan.needsDatabase
 //       ↓
-//   [Step 4] Answer Agent          — call Gemini with context (Layer 1 Generation)
+//   [Step 4] Answer Agent          — grounded Gemini call, supports plan + mock mode
 //       ↓
-//   [Step 5] Validator Agent       — semantic evaluation + optional reflection pass (Layer 2 Guardrail)
+//   [Step 5] Validator Agent       — rule-based output verification + one-shot reflection
 //       ↓
-//   [Step 6] Save + Return         — persist exchange, clean answer block, return to resolver
+//   [Step 6] Save + Return         — persist exchange, return structured result
 //
 import {
   loadHistory,
@@ -27,11 +27,17 @@ import {
   saveConversationSummary,
   buildSimpleSummary,
 } from './conversationManager.js';
-import { classifyIntent } from './routerAgent.js';
+import { classifyIntent, INTENTS } from './routerAgent.js';
 import { fetchDataForIntent } from './platformTools.js';
 import { generateAnswer, generateReflection, resetModel } from './answerAgent.js';
 import { extractRecommendedPosts } from './recommendationExtractor.js';
-import { validate, evaluateResponse, loadKnownTitles } from './validatorAgent.js';
+import {
+  validate,
+  evaluateResponse,
+  loadKnownTitles,
+  shouldValidateAnswer,
+  validateAnswer,
+} from './validatorAgent.js';
 import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE, QUOTA_EXCEEDED_RESPONSE } from '../prompts/fallbackResponses.js';
 import { buildUserMemoryContext, saveExplicitPreferences } from '../services/userMemoryService.js';
 
@@ -45,7 +51,6 @@ const debugWarn = (...args) => {
 };
 
 // ── Greeting fast-path ───────────────────────────────────────────────────────
-// Matches simple one-word greetings in English, Pinyin, or Chinese characters.
 const SIMPLE_GREETING_RE =
   /^\s*(hi|hello|hey|yo|sup|hiya|howdy|greetings|ping|test|你好|您好|nihao)[!?.,'"\s]*$/i;
 
@@ -53,17 +58,65 @@ function isSimpleGreeting(message) {
   return SIMPLE_GREETING_RE.test(message);
 }
 
+// ── Plan normalizer ──────────────────────────────────────────────────────────
+// Converts both old { intent, confidence } and new structured plan objects into
+// a consistent plan shape so the rest of the pipeline always gets the same fields.
+const FALLBACK_PLAN = {
+  intent:              INTENTS.GENERAL_CHAT,
+  mode:                'general_chat',
+  confidence:          'fallback',
+  needsDatabase:       false,
+  needsUserProfile:    false,
+  needsRecommendation: false,
+  needsValidation:     false,
+  dataSources:         [],
+  executionOrder:      ['short_guidance'],
+  responseStyle:       'general_guidance',
+};
+
+function normalizePlan(routerResult) {
+  return {
+    intent:              routerResult.intent      ?? INTENTS.GENERAL_CHAT,
+    mode:                routerResult.mode         ?? 'general_chat',
+    confidence:          routerResult.confidence   ?? 'default',
+    needsDatabase:       Boolean(routerResult.needsDatabase),
+    needsUserProfile:    Boolean(routerResult.needsUserProfile),
+    needsRecommendation: Boolean(routerResult.needsRecommendation),
+    needsValidation:     Boolean(routerResult.needsValidation),
+    dataSources:         routerResult.dataSources  ?? [],
+    executionOrder:      routerResult.executionOrder ?? [],
+    responseStyle:       routerResult.responseStyle ?? 'general_guidance',
+  };
+}
+
+// ── Platform data adapter ────────────────────────────────────────────────────
+// Thin wrapper so the pipeline loads DB data only when the plan requires it.
+async function buildPlatformDataForPlan({ plan, userId, userMessage }) {
+  if (!plan.needsDatabase) return '';
+  try {
+    return await fetchDataForIntent(plan.intent, userId, userMessage);
+  } catch (err) {
+    console.error('[pipeline] platform data retrieval failed:', err?.message);
+    return '';
+  }
+}
+
 /**
  * Run the full AI agent pipeline for a single user message.
- * Supports Layer 1 creation, Layer 2 validation defense, and self-healing reflection blocks.
  *
  * @param {{ userId: string, username: string, message: string }} params
  * @returns {Promise<{
- * answer: string,
- * intent: string,
- * userTurnCount: number,
- * recommendedPosts: Array,
- * evaluation: object
+ *   answer: string,
+ *   intent: string,
+ *   mode: string,
+ *   confidence: string,
+ *   userTurnCount: number,
+ *   recommendedPosts: Array,
+ *   recommendations: Array,
+ *   evaluation: object | null,
+ *   validation: object | null,
+ *   repaired: boolean,
+ *   plan: object
  * }>}
  */
 export async function runPipeline({ userId, username, message }) {
@@ -82,33 +135,35 @@ export async function runPipeline({ userId, username, message }) {
     if (!isProduction) {
       console.timeEnd('[pipeline] total');
     }
-    // Fire-and-forget logging initialization
     saveExchange(userId, username, message, GREETING_RESPONSE).catch(() => {});
     return {
-      answer: GREETING_RESPONSE,
-      intent: 'general_chat',
-      userTurnCount: 0,
+      answer:           GREETING_RESPONSE,
+      intent:           'general_chat',
+      mode:             'general_chat',
+      confidence:       'default',
+      userTurnCount:    0,
       recommendedPosts: [],
-      evaluation: null,
+      recommendations:  [],
+      evaluation:       null,
+      validation:       null,
+      repaired:         false,
+      plan:             { ...FALLBACK_PLAN, confidence: 'default' },
     };
   }
 
   // ── Step 1: Conversation Manager ─────────────────────────────────────────
-  if (!isProduction) {
-    console.time('[pipeline] step1 conversationManager');
-  }
-  const [historyRecords, userTurnCount, userMemory, userMemoryContext] = await Promise.all([
+  if (!isProduction) console.time('[pipeline] step1 conversationManager');
+
+  const [historyRecords, userTurnCount, userMemory, baseUserMemoryContext] = await Promise.all([
     loadHistory(userId),
     getUserTurnCount(userId),
     loadUserMemory(userId),
     buildUserMemoryContext(userId).catch(() => ''),
   ]);
 
-  // Async tracking profile mutations safely
   saveExplicitPreferences(userId, message).catch(() => {});
   const topicContext = extractTopicContext(historyRecords, message);
 
-  // Toxic responses containing meta-apologies or invalid references must be purged from memory
   const POISONED_PHRASE_RE =
     /I apologize|sorry for the confusion|let'?s refocus|oversight|Also consider \(not on this platform\)/i;
 
@@ -116,25 +171,28 @@ export async function runPipeline({ userId, username, message }) {
     (m) => !(m.role === 'assistant' && POISONED_PHRASE_RE.test(m.content)),
   );
 
-  // ── Step 2: Router Agent ──────────────────────────────────────────────────
-  if (!isProduction) {
-    console.time('[pipeline] step2 routerAgent');
+  // ── Step 2: Router / Planner Agent ───────────────────────────────────────
+  if (!isProduction) console.time('[pipeline] step2 routerAgent');
+
+  let plan;
+  try {
+    const routerResult = classifyIntent(message);
+    plan = normalizePlan(routerResult);
+  } catch (err) {
+    console.error('[pipeline] router failed, using fallback plan:', err?.message);
+    plan = { ...FALLBACK_PLAN };
   }
-  const { intent, confidence } = classifyIntent(message);
-  debugLog(`[pipeline] intent="${intent}" confidence="${confidence}"`);
-  if (!isProduction) {
-    console.timeEnd('[pipeline] step2 routerAgent');
-  }
+
+  debugLog(`[pipeline] intent="${plan.intent}" mode="${plan.mode}" confidence="${plan.confidence}"`);
+  if (!isProduction) console.timeEnd('[pipeline] step2 routerAgent');
 
   const isCommunityOrLeaderboard =
-    intent === 'community_summary' ||
-    intent === 'leaderboard_query' ||
-    intent === 'low_rating_query';
+    plan.intent === INTENTS.COMMUNITY_SUMMARY ||
+    plan.intent === INTENTS.LEADERBOARD_QUERY ||
+    plan.intent === INTENTS.LOW_RATING_QUERY;
 
-  // Build specialized contextual history frames
   let conversationContext;
   if (isCommunityOrLeaderboard) {
-    // Drop full legacy scopes for public trends queries to enforce pure grounding constraints
     const lastUserTurn = cleanHistory.filter((m) => m.role === 'user').slice(-1);
     conversationContext = lastUserTurn.length
       ? `User (previous): ${lastUserTurn[0].content}`
@@ -153,32 +211,34 @@ export async function runPipeline({ userId, username, message }) {
   debugLog(
     `[pipeline] turn #${newTurnCount}, history: ${historyRecords.length} msg(s), topics: ${topicContext?.join(', ') ?? 'none'}`,
   );
-  if (!isProduction) {
-    console.timeEnd('[pipeline] step1 conversationManager');
-  }
+  if (!isProduction) console.timeEnd('[pipeline] step1 conversationManager');
 
-  // ── Step 3: Platform Tools (Grounding Ingestion) ──────────────────────────
-  if (!isProduction) {
-    console.time('[pipeline] step3 platformTools');
-  }
-  const platformData = await fetchDataForIntent(intent, userId, message);
+  // ── Step 3: Platform Tools (conditional on plan) ─────────────────────────
+  if (!isProduction) console.time('[pipeline] step3 platformTools');
+
+  // TODO: Replace PLATFORM_INVENTORY_QUERY path with a deterministic MongoDB
+  // inventory handler so platform inventory queries never depend on free-form
+  // LLM generation.
+  const platformData = await buildPlatformDataForPlan({ plan, userId, userMessage: message });
+
+  // User profile context: load only when plan requires it.
+  const effectiveUserMemoryContext = plan.needsUserProfile ? baseUserMemoryContext : '';
+
   debugLog(`[pipeline] platformData: ${platformData.length} characters loaded`);
-  if (!isProduction) {
-    console.timeEnd('[pipeline] step3 platformTools');
-  }
+  if (!isProduction) console.timeEnd('[pipeline] step3 platformTools');
 
-  // ── Step 4: Answer Agent (Layer 1 Generation) ─────────────────────────────
-  if (!isProduction) {
-    console.time('[pipeline] step4 answerAgent');
-  }
-  let answer;
+  // ── Step 4: Answer Agent ──────────────────────────────────────────────────
+  if (!isProduction) console.time('[pipeline] step4 answerAgent');
+
+  let rawAnswer;
   try {
-    answer = await generateAnswer({
-      userMessage: message,
-      intent,
+    rawAnswer = await generateAnswer({
+      userMessage:      message,
+      intent:           plan.intent,
+      plan,
       conversationContext,
       platformData,
-      userMemoryContext,
+      userMemoryContext: effectiveUserMemoryContext,
     });
   } catch (err) {
     console.error('[pipeline] answerAgent compilation error:', err?.message);
@@ -192,7 +252,7 @@ export async function runPipeline({ userId, username, message }) {
     } else if (is429) {
       debugWarn('[pipeline] Gemini tier quota limitation triggered (429).');
     } else {
-      resetModel(); // Safe tear down of corrupted sockets or channels
+      resetModel();
     }
 
     if (!isProduction) {
@@ -201,117 +261,168 @@ export async function runPipeline({ userId, username, message }) {
     }
     throw new Error(is429 ? QUOTA_EXCEEDED_RESPONSE : GENERIC_ERROR_RESPONSE);
   }
-  if (!isProduction) {
-    console.timeEnd('[pipeline] step4 answerAgent');
-  }
+  if (!isProduction) console.timeEnd('[pipeline] step4 answerAgent');
 
-  // ── Step 4b: Extractions and Title Audits ──────────────────────────────────
-  if (!isProduction) {
-    console.time('[pipeline] step4b extractRecommendations');
-  }
-  const [{ cleanAnswer: rawClean, recommendations: rawReco }, knownTitles] = await Promise.all([
-    extractRecommendedPosts(answer),
-    loadKnownTitles(),
-  ]);
-  let cleanAnswer = rawClean;
-  let recommendations = rawReco;
-  debugLog(`[pipeline] extraction complete: ${recommendations.length} recommendations, ${knownTitles?.length ?? 0} canonical titles`);
-  if (!isProduction) {
-    console.timeEnd('[pipeline] step4b extractRecommendations');
-  }
+  // ── Step 5: Rule-based Validation & One-shot Reflection ──────────────────
+  if (!isProduction) console.time('[pipeline] step5 validateAndReflect');
 
-  // ── Step 5: Semantic Evaluation & Self-Healing Reflection Loop ────────────
-  if (!isProduction) {
-    console.time('[pipeline] step5 evaluateAndReflect');
-  }
-  let { evaluation, needsReflection } = evaluateResponse(cleanAnswer, recommendations, knownTitles);
-  let wasReflected = false;
+  let finalAnswer = rawAnswer;
+  let validation  = null;
+  let repaired    = false;
 
-  if (needsReflection) {
-    debugWarn('[pipeline] Layer 2 guardrail breach detected. Activating reflection loop. Flags:', evaluation.flags);
+  const needsValidation = shouldValidateAnswer({
+    plan,
+    intent: plan.intent,
+    answer: rawAnswer,
+  });
+
+  if (needsValidation) {
     try {
-      if (!isProduction) {
-        console.time('[pipeline] step5 reflection Pass');
-      }
-      const reflectedText = await generateReflection({
-        badAnswer: cleanAnswer,
-        flags: evaluation.flags,
-        userMessage: message,
-        intent,
+      validation = validateAnswer({
+        answer:           rawAnswer,
+        intent:           plan.intent,
+        plan,
         platformData,
-        userMemoryContext,
+        userMemoryContext: effectiveUserMemoryContext,
       });
-      if (!isProduction) {
-        console.timeEnd('[pipeline] step5 reflection Pass');
-      }
 
-      const re = await extractRecommendedPosts(reflectedText);
-      cleanAnswer = re.cleanAnswer;
-      recommendations = re.recommendations;
-      
-      // Re-evaluate corrected response quality metrics
-      ({ evaluation } = evaluateResponse(cleanAnswer, recommendations, knownTitles));
-      wasReflected = true;
-      debugLog('[pipeline] Reflection loop complete. Remaining security flags:', evaluation.flags.length);
-    } catch (err) {
-      debugWarn('[pipeline] Reflection system failure — falling back to legacy generation stream:', err?.message);
+      if (!validation.passed) {
+        debugWarn('[pipeline] validation failed. action:', validation.suggestedAction, 'flags:', validation.flags);
+
+        if (validation.suggestedAction === 'reflect') {
+          try {
+            if (!isProduction) console.time('[pipeline] step5 reflectionPass');
+            const repairedText = await generateReflection({
+              badAnswer:         rawAnswer,
+              flags:             validation.flags,
+              userMessage:       message,
+              intent:            plan.intent,
+              plan,
+              platformData,
+              userMemoryContext: effectiveUserMemoryContext,
+            });
+            if (!isProduction) console.timeEnd('[pipeline] step5 reflectionPass');
+
+            finalAnswer = repairedText;
+            repaired    = true;
+
+            // One additional validation pass — no further reflection regardless of result.
+            const postRepairValidation = validateAnswer({
+              answer:           finalAnswer,
+              intent:           plan.intent,
+              plan,
+              platformData,
+              userMemoryContext: effectiveUserMemoryContext,
+            });
+            validation = postRepairValidation;
+            debugLog('[pipeline] post-repair validation flags:', validation.flags.length);
+          } catch (reflErr) {
+            debugWarn('[pipeline] reflection failed, keeping original answer:', reflErr?.message);
+          }
+
+        } else if (validation.suggestedAction === 'hide_cards') {
+          // Clean prose is returned but cards will be suppressed below.
+          debugWarn('[pipeline] hide_cards: recommendation cards will be suppressed.');
+
+        } else if (validation.suggestedAction === 'filter_cards') {
+          // TODO: implement fine-grained card filtering by title.
+          // Currently falls back to hiding all cards to stay safe.
+          debugWarn('[pipeline] filter_cards: falling back to hide_cards (filtering not yet implemented).');
+
+        } else if (validation.suggestedAction === 'log_only') {
+          debugWarn('[pipeline] log_only: returning answer despite validation flags.');
+        }
+      }
+    } catch (valErr) {
+      console.error('[pipeline] validation threw unexpectedly — skipping:', valErr?.message);
+      validation = null;
     }
   }
 
-  evaluation = { ...evaluation, wasReflected };
+  if (!isProduction) console.timeEnd('[pipeline] step5 validateAndReflect');
 
-  // Structural Sanity Protection
+  // ── Step 4b: Recommendation Extraction ───────────────────────────────────
+  if (!isProduction) console.time('[pipeline] step4b extractRecommendations');
+
+  const [{ cleanAnswer, recommendations: rawReco }, knownTitles] = await Promise.all([
+    extractRecommendedPosts(finalAnswer),
+    loadKnownTitles(),
+  ]);
+
+  // Suppress cards when hide_cards / filter_cards was the action.
+  const suppressCards =
+    validation &&
+    !validation.passed &&
+    (validation.suggestedAction === 'hide_cards' || validation.suggestedAction === 'filter_cards');
+
+  let recommendations = suppressCards ? [] : rawReco;
+
+  debugLog(
+    `[pipeline] extraction complete: ${recommendations.length} recommendations, ${knownTitles?.length ?? 0} canonical titles`,
+  );
+  if (!isProduction) console.timeEnd('[pipeline] step4b extractRecommendations');
+
+  // ── Legacy semantic evaluation (backward compat with existing pipeline tests) ─
+  if (!isProduction) console.time('[pipeline] step5 evaluateAndReflect');
+  let { evaluation } = evaluateResponse(cleanAnswer, recommendations, knownTitles);
+  evaluation = { ...evaluation, wasReflected: repaired };
+
+  // Structural sanity protection.
   const { valid, reason } = validate(cleanAnswer);
   if (!valid) {
-    debugWarn('[pipeline] Structural baseline check failed:', reason);
+    debugWarn('[pipeline] structural baseline check failed:', reason);
     if (!isProduction) {
       console.timeEnd('[pipeline] step5 evaluateAndReflect');
       console.timeEnd('[pipeline] total');
     }
     return {
-      answer: GENERIC_ERROR_RESPONSE,
-      intent,
-      userTurnCount: newTurnCount,
+      answer:           GENERIC_ERROR_RESPONSE,
+      intent:           plan.intent,
+      mode:             plan.mode,
+      confidence:       plan.confidence,
+      userTurnCount:    newTurnCount,
       recommendedPosts: [],
-      evaluation: null,
+      recommendations:  [],
+      evaluation:       null,
+      validation,
+      repaired,
+      plan,
     };
   }
-  
+
   debugLog(
     `[pipeline] Target verification complete. grounding=${
       evaluation.groundingScore != null ? evaluation.groundingScore.toFixed(2) : 'n/a'
     } hallucinations=${evaluation.hallucinations.length} safety=${
       evaluation.safetyPassed ? 'OK' : 'FAIL'
-    } reflected=${wasReflected}`,
+    } reflected=${repaired}`,
   );
-  if (!isProduction) {
-    console.timeEnd('[pipeline] step5 evaluateAndReflect');
-  }
+  if (!isProduction) console.timeEnd('[pipeline] step5 evaluateAndReflect');
 
   // ── Step 6: Database Persistence ─────────────────────────────────────────
   await saveExchange(userId, username, message, cleanAnswer);
   debugLog('[pipeline] Canonical transaction saved successfully.');
 
-  // ── 5-turn Milestone Compressed Summary Trigger ───────────────────────────
   if (newTurnCount % 5 === 0) {
     debugLog(`[pipeline] 5-turn cadence achieved (turn ${newTurnCount}) — pushing rollups`);
-    const summary = buildSimpleSummary(historyRecords, message, cleanAnswer);
+    const summary    = buildSimpleSummary(historyRecords, message, cleanAnswer);
     const latestTopics = extractTopicContext(historyRecords, message) ?? [];
-    
-    // Dispatched safely to avoid thread pool blockages
     saveConversationSummary(userId, summary, latestTopics).catch(() => {});
   }
 
-  if (!isProduction) {
-    console.timeEnd('[pipeline] total');
-  }
+  if (!isProduction) console.timeEnd('[pipeline] total');
 
-  // Return payload precisely synchronized with the server's AIResponse GraphQL entity schema
   return {
-    answer: cleanAnswer,
-    intent,
-    userTurnCount: newTurnCount,
-    recommendedPosts: recommendations,
+    answer:           cleanAnswer,
+    intent:           plan.intent,
+    mode:             plan.mode,
+    confidence:       plan.confidence,
+    userTurnCount:    newTurnCount,
+    recommendedPosts: recommendations,   // backward-compat alias
+    recommendations,
     evaluation,
+    validation,
+    repaired,
+    plan,
   };
 }

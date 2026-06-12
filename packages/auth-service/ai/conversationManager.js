@@ -4,6 +4,7 @@ import ConversationHistory from '../models/ConversationHistory.js';
 import UserMemory from '../models/UserMemory.js';
 
 const MAX_HISTORY = parseInt(process.env.AI_MAX_HISTORY_MESSAGES ?? '3', 10);
+const MAX_STORED_MESSAGES = Math.max(MAX_HISTORY * 10, parseInt(process.env.AI_MAX_STORED_MESSAGES ?? '100', 10));
 
 /**
  * Load the last N messages for a user from the database.
@@ -12,9 +13,12 @@ const MAX_HISTORY = parseInt(process.env.AI_MAX_HISTORY_MESSAGES ?? '3', 10);
  */
 export async function loadHistory(userId) {
   try {
-    const record = await ConversationHistory.findOne({ userId }).lean();
+    const record = await ConversationHistory.findOne(
+      { userId },
+      { messages: { $slice: -MAX_HISTORY } },
+    ).lean();
     if (!record) return [];
-    return record.messages.slice(-MAX_HISTORY);
+    return Array.isArray(record.messages) ? record.messages : [];
   } catch {
     return [];
   }
@@ -29,6 +33,7 @@ export async function loadHistory(userId) {
  */
 export async function saveExchange(userId, username, userMessage, aiResponse) {
   try {
+    const now = new Date();
     await ConversationHistory.findOneAndUpdate(
       { userId },
       {
@@ -36,9 +41,10 @@ export async function saveExchange(userId, username, userMessage, aiResponse) {
         $push: {
           messages: {
             $each: [
-              { role: 'user', content: userMessage, createdAt: new Date() },
-              { role: 'assistant', content: aiResponse, createdAt: new Date() },
+              { role: 'user', content: userMessage, createdAt: now },
+              { role: 'assistant', content: aiResponse, createdAt: now },
             ],
+            $slice: -MAX_STORED_MESSAGES,
           },
         },
       },
@@ -70,9 +76,9 @@ export async function getUserTurnCount(userId) {
  * @returns {string}
  */
 export function buildConversationContext(historyRecords) {
-  if (!historyRecords.length) return '';
+  if (!Array.isArray(historyRecords) || !historyRecords.length) return '';
   return historyRecords
-    .map((m) => `${m.role === 'user' ? 'User' : 'Agent'}: ${m.content}`)
+    .map((m) => `${m.role === 'user' ? 'User' : 'Agent'}: ${String(m?.content ?? '')}`)
     .join('\n');
 }
 
@@ -149,11 +155,16 @@ export async function saveConversationSummary(userId, summary, topics = []) {
  */
 export function buildSimpleSummary(historyRecords, lastUserMessage, lastAIResponse) {
   const lines = ['[Conversation summary]:'];
-  for (const msg of historyRecords) {
+  for (const msg of (Array.isArray(historyRecords) ? historyRecords : [])) {
     const role = msg.role === 'user' ? 'User' : 'Agent';
-    lines.push(`  ${role}: ${msg.content.slice(0, 120)}`);
+    lines.push(`  ${role}: ${String(msg?.content ?? '').slice(0, 120)}`);
   }
-  lines.push(`  User: ${lastUserMessage.slice(0, 120)}`);
-  lines.push(`  Agent: ${lastAIResponse.slice(0, 120)}`);
+  lines.push(`  User: ${String(lastUserMessage ?? '').slice(0, 120)}`);
+  lines.push(`  Agent: ${String(lastAIResponse ?? '').slice(0, 120)}`);
   return lines.join('\n');
 }
+
+export const __test__ = {
+  MAX_HISTORY,
+  MAX_STORED_MESSAGES,
+};

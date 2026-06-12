@@ -15,6 +15,7 @@ const GamePostSchema = new Schema(
   {
     postType: { type: String, enum: ['GAME', 'IDEA'], default: 'GAME', index: true },
     title: { type: String, required: true, trim: true },
+    titleNormalized: { type: String, trim: true, lowercase: true },
     genre: { type: String, trim: true },
     platform: { type: String, trim: true },
     developer: { type: String, trim: true },
@@ -41,7 +42,16 @@ const GamePostSchema = new Schema(
   { timestamps: true },
 );
 
+GamePostSchema.pre('validate', function syncNormalizedTitle(next) {
+  this.titleNormalized = typeof this.title === 'string'
+    ? this.title.trim().toLowerCase()
+    : '';
+  next();
+});
+
 GamePostSchema.index({ title: 'text', review: 'text', tags: 'text' });
+GamePostSchema.index({ title: 1 });
+GamePostSchema.index({ titleNormalized: 1 });
 GamePostSchema.index({ createdAt: -1 });
 GamePostSchema.index({ postType: 1, createdAt: -1 });
 GamePostSchema.index({ postedBy: 1, createdAt: -1 });

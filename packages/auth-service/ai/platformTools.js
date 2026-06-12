@@ -1,6 +1,10 @@
 // packages/auth-service/ai/platformTools.js
-// Context Ingestion Layer — Fetches real-time structured data 
-// from MongoDB and external APIs based on intercepted routing intents.
+// MongoDB-backed data retrieval layer for Nova.
+//
+// Responsibilities:
+// - Deterministic, intent-aware data loading
+// - Compact prompt-friendly formatting
+// - No LLM calls and no final answer generation
 
 import mongoose from 'mongoose';
 import GamePost from '../models/GamePost.js';
@@ -8,305 +12,397 @@ import { attachCommunityRatingData, calculateTrendScore } from '../services/comm
 import { INTENTS } from './routerAgent.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
-const LOW_RATING_MAX_SCORE = 6;
-const DEFAULT_LOW_RATING_MIN_COUNT = Math.max(1, parseInt(process.env.LOW_RATING_MIN_COUNT ?? '2', 10));
 
-/**
- * Shared post formatter to convert Mongoose documents into high-density tokens for LLM parsing.
- * @param {object} p Enriched post item
- * @returns {string} Fully formatted text line
- */
-function formatPost(p) {
-  const communityRatingLine = p.communityRating != null
-    ? `Community Rating: ${p.communityRating.toFixed(1)}/10 · ${p.ratingCount} ${p.ratingCount === 1 ? 'rating' : 'ratings'}`
-    : 'Community Rating: Not rated yet';
+export const DEFAULT_PLATFORM_LIMIT = 12;
+export const MAX_PLATFORM_LIMIT = 50;
+export const RECOMMENDATION_CANDIDATE_LIMIT = 20;
+export const INVENTORY_LIMIT = 50;
+export const LOW_RATING_MAX_SCORE = 6.0;
+export const DEFAULT_LOW_RATING_MIN_COUNT = Math.max(1, parseInt(process.env.LOW_RATING_MIN_COUNT ?? '2', 10));
 
+const SAFE_POST_FIELDS = [
+  'title',
+  'genre',
+  'platform',
+  'developer',
+  'releaseYear',
+  'gameType',
+  'rating',
+  'tags',
+  'likedBy',
+  'bookmarkedBy',
+  'comments',
+  'postType',
+  'createdAt',
+  'updatedAt',
+].join(' ');
+
+function logDebug(tag, details) {
+  if (!isProduction) {
+    console.log(`[platformTools] ${tag}`, details);
+  }
+}
+
+function clampLimit(limit, fallback = DEFAULT_PLATFORM_LIMIT) {
+  const n = Number.isFinite(Number(limit)) ? Number(limit) : fallback;
+  return Math.min(MAX_PLATFORM_LIMIT, Math.max(1, Math.trunc(n)));
+}
+
+export function getGameTitle(post) {
+  return post?.gameTitle || post?.title || post?.name || 'Untitled Game';
+}
+
+export function getCommunityRating(post) {
+  return post?.communityRating ?? post?.averageRating ?? post?.rating ?? null;
+}
+
+export function getCount(post, countField, arrayField) {
+  if (typeof post?.[countField] === 'number') return post[countField];
+  if (Array.isArray(post?.[arrayField])) return post[arrayField].length;
+  return 0;
+}
+
+export function normalizeTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return tags.map((t) => String(t ?? '').trim()).filter(Boolean).slice(0, 8);
+}
+
+function compareAlphaTitle(a, b) {
+  const ta = getGameTitle(a).toLowerCase();
+  const tb = getGameTitle(b).toLowerCase();
+  if (ta !== tb) return ta.localeCompare(tb);
+  return String(a?._id ?? '').localeCompare(String(b?._id ?? ''));
+}
+
+function compareTopRated(a, b) {
   return (
-    `• "${p.title}"` +
-    (p.genre ? ` [${p.genre}]` : '') +
-    (p.authorRating != null ? ` — Author Rating: ${p.authorRating}/10` : '') +
-    ` — ${communityRatingLine}` +
-    (p.tags?.length ? ` tags: ${p.tags.slice(0, 4).join(', ')}` : '') +
-    (p.likedBy?.length ? ` ♥${p.likedBy.length}` : '') +
-    (p.comments?.length ? ` 💬${p.comments.length}` : '') +
-    (p.bookmarkedBy?.length ? ` 🔖${p.bookmarkedBy.length}` : '')
+    (getCommunityRating(b) ?? -1) - (getCommunityRating(a) ?? -1) ||
+    getCount(b, 'ratingCount', 'ratings') - getCount(a, 'ratingCount', 'ratings') ||
+    getCount(b, 'likesCount', 'likedBy') - getCount(a, 'likesCount', 'likedBy') ||
+    getCount(b, 'bookmarksCount', 'bookmarkedBy') - getCount(a, 'bookmarksCount', 'bookmarkedBy') ||
+    getCount(b, 'commentsCount', 'comments') - getCount(a, 'commentsCount', 'comments') ||
+    compareAlphaTitle(a, b)
   );
 }
 
-/**
- * Base data-loader abstraction layer interfacing directly with the GamePost aggregation pipeline.
- */
-async function loadPlatformPosts({ filter = {}, sort = { createdAt: -1 }, limit = 10, userId } = {}) {
+function compareLowRated(a, b) {
+  return (
+    (getCommunityRating(a) ?? 11) - (getCommunityRating(b) ?? 11) ||
+    getCount(b, 'ratingCount', 'ratings') - getCount(a, 'ratingCount', 'ratings') ||
+    compareAlphaTitle(a, b)
+  );
+}
+
+function compareTrending(a, b) {
+  const scoreA = calculateTrendScore({
+    communityRating: getCommunityRating(a),
+    ratingCount: getCount(a, 'ratingCount', 'ratings'),
+    likesCount: getCount(a, 'likesCount', 'likedBy'),
+    commentsCount: getCount(a, 'commentsCount', 'comments'),
+    bookmarksCount: getCount(a, 'bookmarksCount', 'bookmarkedBy'),
+  });
+  const scoreB = calculateTrendScore({
+    communityRating: getCommunityRating(b),
+    ratingCount: getCount(b, 'ratingCount', 'ratings'),
+    likesCount: getCount(b, 'likesCount', 'likedBy'),
+    commentsCount: getCount(b, 'commentsCount', 'comments'),
+    bookmarksCount: getCount(b, 'bookmarksCount', 'bookmarkedBy'),
+  });
+
+  return (
+    scoreB - scoreA ||
+    compareTopRated(a, b)
+  );
+}
+
+export function formatPostForPrompt(post, index) {
+  const title = getGameTitle(post);
+  const genre = post?.genre || 'N/A';
+  const platform = post?.platform || 'N/A';
+  const communityRating = getCommunityRating(post);
+  const ratingCount = getCount(post, 'ratingCount', 'ratings');
+  const likes = getCount(post, 'likesCount', 'likedBy');
+  const bookmarks = getCount(post, 'bookmarksCount', 'bookmarkedBy');
+  const comments = getCount(post, 'commentsCount', 'comments');
+  const tags = normalizeTags(post?.tags);
+
+  return [
+    `${index}. Game: ${title}`,
+    `   Genre: ${genre}`,
+    `   Platform: ${platform}`,
+    `   Community Rating: ${communityRating != null ? `${communityRating.toFixed(1)}/10` : 'N/A'}`,
+    `   Rating Count: ${ratingCount}`,
+    `   Likes: ${likes}`,
+    `   Bookmarks: ${bookmarks}`,
+    `   Comments: ${comments}`,
+    `   Tags: ${tags.length ? tags.join(', ') : 'N/A'}`,
+  ].join('\n');
+}
+
+export function formatPostsForPrompt({ title, posts }) {
+  const safePosts = Array.isArray(posts) ? posts : [];
+  if (!safePosts.length) {
+    return (
+      'Platform Data Status:\n' +
+      'No matching platform records were returned for this specific request.\n' +
+      'This does not necessarily mean the platform database is empty.'
+    );
+  }
+
+  const lines = [
+    `${title}:`,
+    `Total items included: ${safePosts.length}`,
+    '',
+    ...safePosts.map((p, i) => formatPostForPrompt(p, i + 1)),
+  ];
+  return lines.join('\n');
+}
+
+async function loadPlatformPosts({
+  filter = {},
+  sort = { createdAt: -1, _id: 1 },
+  limit = DEFAULT_PLATFORM_LIMIT,
+  userId,
+} = {}) {
+  const normalizedLimit = clampLimit(limit);
+
   const posts = await GamePost.find(filter)
     .sort(sort)
-    .limit(limit)
-    .select('title genre platform rating tags likedBy comments bookmarkedBy postType')
+    .limit(normalizedLimit)
+    .select(SAFE_POST_FIELDS)
     .lean();
+
   return attachCommunityRatingData(posts, userId);
 }
 
-/** Fetch the current user's bookmarked games. */
-export async function getMyBookmarks(userId) {
-  if (!mongoose.isValidObjectId(userId)) return 'No bookmarked games found.';
-  const ratedPosts = await loadPlatformPosts({ filter: { bookmarkedBy: userId }, limit: 10, userId });
-  if (!ratedPosts.length) return 'No bookmarked games found.';
-  return `Bookmarked games (${ratedPosts.length}):\n` + ratedPosts.map(formatPost).join('\n');
+function normalizeUserTagHints(userMessage = '') {
+  const text = String(userMessage ?? '').toLowerCase();
+  const hints = [];
+  for (const token of ['rpg', 'puzzle', 'action', 'strategy', 'indie', 'co-op', 'coop', 'simulation']) {
+    if (text.includes(token)) hints.push(token === 'coop' ? 'co-op' : token);
+  }
+  return hints;
 }
 
-/** Fetch the most recent community games. */
-export async function getRecentCommunityPosts(limit = 10) {
-  const ratedPosts = await loadPlatformPosts({ sort: { createdAt: -1 }, limit });
-  if (!ratedPosts.length) return 'No community posts found.';
-  return `Recent community posts (${ratedPosts.length}):\n` + ratedPosts.map(formatPost).join('\n');
+function selectRecommendationCandidates(posts, { userMessage = '' } = {}) {
+  const hints = normalizeUserTagHints(userMessage);
+  const score = (post) => {
+    const tags = normalizeTags(post.tags).map((t) => t.toLowerCase());
+    const tagMatches = hints.reduce((acc, tag) => acc + (tags.includes(tag) ? 1 : 0), 0);
+    return (
+      tagMatches * 10 +
+      (getCommunityRating(post) ?? 0) * 2 +
+      getCount(post, 'ratingCount', 'ratings') +
+      getCount(post, 'likesCount', 'likedBy') * 0.3 +
+      getCount(post, 'bookmarksCount', 'bookmarkedBy') * 0.4 +
+      getCount(post, 'commentsCount', 'comments') * 0.2
+    );
+  };
+
+  return [...posts]
+    .sort((a, b) => score(b) - score(a) || compareTopRated(a, b));
 }
 
-// Backward-compatible alias for older callers.
+export async function getMyBookmarks(userId, limit = DEFAULT_PLATFORM_LIMIT) {
+  if (!mongoose.isValidObjectId(userId)) {
+    return (
+      'Platform Data Status:\n' +
+      'No matching platform records were returned for this specific request.\n' +
+      'This does not necessarily mean the platform database is empty.'
+    );
+  }
+
+  const posts = await loadPlatformPosts({
+    filter: { bookmarkedBy: userId, postType: 'GAME' },
+    sort: { createdAt: -1, _id: 1 },
+    limit,
+    userId,
+  });
+
+  return formatPostsForPrompt({ title: 'Bookmarked Games', posts });
+}
+
+export async function getRecentCommunityPosts(limit = DEFAULT_PLATFORM_LIMIT) {
+  const posts = await loadPlatformPosts({
+    filter: { postType: 'GAME' },
+    sort: { createdAt: -1, _id: 1 },
+    limit,
+  });
+  return formatPostsForPrompt({ title: 'Recent Community Posts', posts });
+}
+
 export const getCommunityPosts = getRecentCommunityPosts;
 
-/** Fetch games sorted by rating (highest first). */
-export async function getTopRatedGames(limit = 10) {
-  const ratedPosts = await loadPlatformPosts({ filter: { postType: 'GAME' }, limit: limit * 3 });
-  const topPosts = ratedPosts
-    .filter((post) => post.communityRating != null || post.authorRating != null)
-    .sort((a, b) =>
-      (b.communityRating ?? -1) - (a.communityRating ?? -1) ||
-      (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
-      (b.authorRating ?? 0) - (a.authorRating ?? 0),
-    )
-    .slice(0, limit);
-  if (!topPosts.length) return 'No rated games found.';
-  return `Top-rated games (${topPosts.length}):\n` + topPosts.map(formatPost).join('\n');
+export async function getPlatformInventory(limit = INVENTORY_LIMIT) {
+  const posts = await loadPlatformPosts({
+    filter: { postType: 'GAME' },
+    sort: { title: 1, _id: 1 },
+    limit,
+  });
+
+  const sorted = [...posts].sort(compareAlphaTitle).slice(0, clampLimit(limit, INVENTORY_LIMIT));
+  return formatPostsForPrompt({ title: 'Platform Inventory', posts: sorted });
 }
 
-/**
- * Fetch low-rated games sorted by community rating ascending.
- * "Low rating" implies an evaluation benchmark <= LOW_RATING_MAX_SCORE.
- */
+export async function getTopRatedGames(limit = DEFAULT_PLATFORM_LIMIT) {
+  const posts = await loadPlatformPosts({
+    filter: { postType: 'GAME' },
+    sort: { createdAt: -1, _id: 1 },
+    limit: Math.max(clampLimit(limit) * 4, 40),
+  });
+
+  const sorted = [...posts]
+    .filter((post) => getCommunityRating(post) != null)
+    .sort(compareTopRated)
+    .slice(0, clampLimit(limit));
+
+  return formatPostsForPrompt({ title: 'Top Rated Games', posts: sorted });
+}
+
+export function selectLowRatedPosts(posts, { maxCommunityRating = LOW_RATING_MAX_SCORE, minRatingCount = DEFAULT_LOW_RATING_MIN_COUNT, limit = DEFAULT_PLATFORM_LIMIT } = {}) {
+  return [...(posts || [])]
+    .filter((post) => {
+      const rating = getCommunityRating(post);
+      return rating != null && rating <= maxCommunityRating && getCount(post, 'ratingCount', 'ratings') >= minRatingCount;
+    })
+    .sort(compareLowRated)
+    .slice(0, clampLimit(limit));
+}
+
 export async function getLowRatedGames({
-  limit = 10,
+  limit = DEFAULT_PLATFORM_LIMIT,
   minRatingCount = DEFAULT_LOW_RATING_MIN_COUNT,
   maxCommunityRating = LOW_RATING_MAX_SCORE,
 } = {}) {
-  const normalizedLimit = Math.max(1, limit);
-  const normalizedMinCount = Math.max(1, minRatingCount);
   const posts = await loadPlatformPosts({
     filter: { postType: 'GAME' },
-    limit: Math.max(normalizedLimit * 8, 40),
+    sort: { createdAt: -1, _id: 1 },
+    limit: Math.max(clampLimit(limit) * 6, 48),
   });
 
-  const lowRated = posts
-    .filter((post) =>
-      post.communityRating != null &&
-      post.communityRating <= maxCommunityRating &&
-      (post.ratingCount ?? 0) >= normalizedMinCount,
-    )
-    .sort((a, b) =>
-      (a.communityRating ?? 11) - (b.communityRating ?? 11) ||
-      (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
-      (a.authorRating ?? 0) - (b.authorRating ?? 0),
-    )
-    .slice(0, normalizedLimit);
-
-  if (!lowRated.length) {
-    return `Low-rated games (community rating <= ${maxCommunityRating}/10, min ${normalizedMinCount} ratings): none found.`;
-  }
-
-  return (
-    `Low-rated games (community rating <= ${maxCommunityRating}/10, min ${normalizedMinCount} ratings) (${lowRated.length}):\n` +
-    lowRated.map(formatPost).join('\n')
-  );
+  const lowRated = selectLowRatedPosts(posts, { maxCommunityRating, minRatingCount, limit });
+  return formatPostsForPrompt({ title: `Low Rated Games (<= ${maxCommunityRating.toFixed(1)}/10)`, posts: lowRated });
 }
 
-/** Fetch community games sorted by trend score. */
-export async function getTrendingCommunityPosts(limit = 10) {
-  const posts = await loadPlatformPosts({ filter: { postType: 'GAME' }, limit: limit * 4 });
-  posts.sort((a, b) =>
-    calculateTrendScore({
-      communityRating: b.communityRating,
-      ratingCount: b.ratingCount,
-      likesCount: b.likedBy?.length ?? 0,
-      commentsCount: b.comments?.length ?? 0,
-      bookmarksCount: b.bookmarkedBy?.length ?? 0,
-    }) -
-    calculateTrendScore({
-      communityRating: a.communityRating,
-      ratingCount: a.ratingCount,
-      likesCount: a.likedBy?.length ?? 0,
-      commentsCount: a.comments?.length ?? 0,
-      bookmarksCount: a.bookmarkedBy?.length ?? 0,
-    }),
-  );
-  const topPosts = posts.slice(0, limit);
-  if (!topPosts.length) return 'No posts found.';
-  return `Trending community posts (${topPosts.length}):\n` + topPosts.map(formatPost).join('\n');
+export async function getTrendingCommunityPosts(limit = DEFAULT_PLATFORM_LIMIT) {
+  const posts = await loadPlatformPosts({
+    filter: { postType: 'GAME' },
+    sort: { createdAt: -1, _id: 1 },
+    limit: Math.max(clampLimit(limit) * 4, 40),
+  });
+
+  const sorted = [...posts].sort(compareTrending).slice(0, clampLimit(limit));
+  return formatPostsForPrompt({ title: 'Trending Community Posts', posts: sorted });
 }
 
-// Backward-compatible alias for older callers.
 export const getTrendingPosts = getTrendingCommunityPosts;
 
-/** Fetch games sorted by community engagement (most-engaged first). */
-export async function getMostEngagedPosts(limit = 10) {
-  const ratedPosts = await loadPlatformPosts({ limit: limit * 3 });
-  ratedPosts.sort((a, b) =>
-    calculateTrendScore({
-      communityRating: b.communityRating,
-      ratingCount: b.ratingCount,
-      likesCount: b.likedBy?.length ?? 0,
-      commentsCount: b.comments?.length ?? 0,
-      bookmarksCount: b.bookmarkedBy?.length ?? 0,
-    }) -
-    calculateTrendScore({
-      communityRating: a.communityRating,
-      ratingCount: a.ratingCount,
-      likesCount: a.likedBy?.length ?? 0,
-      commentsCount: a.comments?.length ?? 0,
-      bookmarksCount: a.bookmarkedBy?.length ?? 0,
-    }),
-  );
-  const top = ratedPosts.slice(0, limit);
-  if (!top.length) return 'No posts found.';
-  return `Most-engaged posts (${top.length}):\n` + top.map(formatPost).join('\n');
+export async function getMostEngagedPosts(limit = DEFAULT_PLATFORM_LIMIT) {
+  const posts = await loadPlatformPosts({
+    filter: { postType: 'GAME' },
+    sort: { createdAt: -1, _id: 1 },
+    limit: Math.max(clampLimit(limit) * 4, 40),
+  });
+
+  const sorted = [...posts].sort(compareTrending).slice(0, clampLimit(limit));
+  return formatPostsForPrompt({ title: 'Most Engaged Posts', posts: sorted });
 }
 
-// Backward-compatible alias for older callers.
 export const getMostLikedPosts = getMostEngagedPosts;
 
-// ── Web search rate limiter (protects Tavily free-tier quota) ────────────────
-// Allocations: 1,000 calls/month — 30/day global ceiling, 3/hour threshold per individual profile.
-const _webSearchLimiter = {
-  GLOBAL_DAILY_LIMIT: 30,
-  PER_USER_HOURLY_LIMIT: 3,
-  _global: { count: 0, resetAt: 0 },
-  _users: new Map(),
-  check(userId) {
-    const now = Date.now();
-    if (now >= this._global.resetAt) {
-      const midnight = new Date();
-      midnight.setUTCHours(24, 0, 0, 0);
-      this._global = { count: 0, resetAt: midnight.getTime() };
-    }
-    if (this._global.count >= this.GLOBAL_DAILY_LIMIT)
-      return { ok: false, reason: 'Daily web-search limit reached.' };
-    let u = this._users.get(userId);
-    if (!u || now >= u.resetAt) {
-      u = { count: 0, resetAt: now + 3_600_000 };
-      this._users.set(userId, u);
-    }
-    if (u.count >= this.PER_USER_HOURLY_LIMIT)
-      return { ok: false, reason: 'Web search limit reached for this hour.' };
-    return { ok: true };
-  },
-  increment(userId) {
-    this._global.count++;
-    const u = this._users.get(userId);
-    if (u) u.count++;
-  },
-};
-
-/**
- * Tavily search processor — triggered exclusively when canonical tokens are bound to process.env.
- * Prevents hallucinations by importing auxiliary grounding metadata.
- */
-export async function searchWeb(query, userId = 'global') {
-  const check = _webSearchLimiter.check(String(userId));
-  if (!check.ok) {
-    console.warn('[platformTools:web-search] Rate limit:', check.reason);
-    return '';
-  }
-  const response = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: process.env.TAVILY_API_KEY,
-      query,
-      max_results: 2,
-      search_depth: 'basic',
-      include_answer: true,
-      include_images: false,
-    }),
-    signal: AbortSignal.timeout(10_000),
+export async function getRecommendationCandidates({ userId, userMessage = '', limit = RECOMMENDATION_CANDIDATE_LIMIT } = {}) {
+  const posts = await loadPlatformPosts({
+    filter: { postType: 'GAME' },
+    sort: { createdAt: -1, _id: 1 },
+    limit: Math.max(clampLimit(limit) * 4, 40),
+    userId,
   });
-  if (!response.ok) throw new Error(`Tavily API error: ${response.status}`);
-  const data = await response.json();
-  _webSearchLimiter.increment(String(userId));
-  if (!isProduction) {
-    console.log(
-      `[platformTools:web-search] queryLength=${query.length} — global today: ${_webSearchLimiter._global.count}/${_webSearchLimiter.GLOBAL_DAILY_LIMIT}`,
-    );
-  }
-  if (!data.results?.length && !data.answer) return '';
-  let output = `Web search results for "${query}":\n`;
-  
-  if (data.answer) {
-    output += `Summary: ${data.answer}\n\n`;
-  }
-  if (data.results?.length) {
-    output += data.results
-      .map((r, i) => `[${i + 1}] ${r.title}\n${(r.content ?? '').slice(0, 200)}\nSource: ${r.url}`)
-      .join('\n\n');
-  }
-  return output;
+
+  const candidates = selectRecommendationCandidates(posts, { userMessage }).slice(0, clampLimit(limit, RECOMMENDATION_CANDIDATE_LIMIT));
+  return formatPostsForPrompt({ title: 'Recommendation Candidates', posts: candidates });
 }
 
-/**
- * Core Orchestration Router — Dynamically binds intent scopes to matching data access sub-handlers.
- * Combines collections to optimize context injection values for answer agents.
- *
- * @param {string} intent One of the structural INTENTS constants exported by routerAgent
- * @param {string} userId Unique identity identifier mapping
- * @param {string} userMessage Raw message string for web-search compilation
- * @returns {Promise<string>} Concatenated context segments
- */
+export async function buildPlatformDataForPlan({
+  plan,
+  userId = null,
+  userMessage = '',
+  limit,
+} = {}) {
+  const safePlan = plan ?? {};
+  const intent = safePlan.intent ?? INTENTS.GENERAL_CHAT;
+
+  logDebug('buildPlatformDataForPlan', {
+    intent,
+    mode: safePlan.mode ?? 'unknown',
+    needsDatabase: Boolean(safePlan.needsDatabase),
+    limit: limit ?? null,
+  });
+
+  if (safePlan.needsDatabase === false) return '';
+
+  switch (intent) {
+    case INTENTS.PLATFORM_INVENTORY_QUERY:
+      return getPlatformInventory(limit ?? INVENTORY_LIMIT);
+
+    case INTENTS.LEADERBOARD_QUERY:
+      return getTopRatedGames(limit ?? DEFAULT_PLATFORM_LIMIT);
+
+    case INTENTS.LOW_RATING_QUERY:
+      return getLowRatedGames({ limit: limit ?? DEFAULT_PLATFORM_LIMIT });
+
+    case INTENTS.COMMUNITY_SUMMARY:
+      return getTrendingCommunityPosts(limit ?? DEFAULT_PLATFORM_LIMIT);
+
+    case INTENTS.GAME_RECOMMENDATION:
+      return getRecommendationCandidates({ userId, userMessage, limit: limit ?? RECOMMENDATION_CANDIDATE_LIMIT });
+
+    case INTENTS.BOOKMARK_ANALYSIS: {
+      const [bookmarks, candidates] = await Promise.all([
+        getMyBookmarks(userId, Math.max(6, clampLimit(limit ?? DEFAULT_PLATFORM_LIMIT))),
+        getRecommendationCandidates({ userId, userMessage, limit: limit ?? RECOMMENDATION_CANDIDATE_LIMIT }),
+      ]);
+      return `${bookmarks}\n\n${candidates}`;
+    }
+
+    default:
+      return '';
+  }
+}
+
+export async function buildPlatformDataForIntent(intent, options = {}) {
+  const plan = {
+    intent,
+    mode: 'query',
+    needsDatabase: intent !== INTENTS.GENERAL_CHAT,
+  };
+  return buildPlatformDataForPlan({ plan, ...options });
+}
+
 export async function fetchDataForIntent(intent, userId, userMessage = '') {
   try {
-    switch (intent) {
-      case INTENTS.BOOKMARK_ANALYSIS:
-        return await getMyBookmarks(userId);
-
-      case INTENTS.COMMUNITY_SUMMARY:
-        return [
-          await getLowRatedGames(),
-          await getTrendingCommunityPosts(),
-        ].join('\n\n');
-
-      case INTENTS.LEADERBOARD_QUERY:
-        return [
-          await getLowRatedGames(),
-          await getTopRatedGames(),
-        ].join('\n\n');
-
-      case INTENTS.LOW_RATING_QUERY:
-        return await getLowRatedGames();
-
-      case INTENTS.GAME_RECOMMENDATION: {
-        const [bookmarks, community] = await Promise.all([
-          getMyBookmarks(userId),
-          getMostEngagedPosts(5),
-        ]);
-        let result = `${bookmarks}\n\n${community}`;
-
-        // Augment with internet snapshots if specific variables cross knowledge-base structures
-        if (process.env.TAVILY_API_KEY && userMessage.trim()) {
-          const webData = await searchWeb(`best ${userMessage}`, userId).catch(() => '');
-          if (webData) {
-            result +=
-              `\n\n--- Web Suggestions (games not on this platform) ---\n` +
-              `${webData}\n` +
-              `--- End Web Suggestions ---`;
-          }
-        }
-        return result;
-      }
-
-      case INTENTS.GENERAL_CHAT:
-      default:
-        if (process.env.TAVILY_API_KEY && userMessage.trim()) {
-          return await searchWeb(userMessage, userId).catch(() => '');
-        }
-        return '';
-    }
+    const result = await buildPlatformDataForIntent(intent, { userId, userMessage });
+    logDebug('fetchDataForIntent', {
+      intent,
+      resultLength: result.length,
+    });
+    return result;
   } catch (err) {
     console.warn('[platformTools] fetchDataForIntent error:', err?.message);
-    return '';
+    return (
+      'Platform Data Status:\n' +
+      'No matching platform records were returned for this specific request.\n' +
+      'This does not necessarily mean the platform database is empty.'
+    );
   }
 }
+
+export const __test__ = {
+  clampLimit,
+  getGameTitle,
+  getCommunityRating,
+  getCount,
+  normalizeTags,
+  formatPostForPrompt,
+  formatPostsForPrompt,
+  selectLowRatedPosts,
+};
