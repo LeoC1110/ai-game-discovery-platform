@@ -46,6 +46,7 @@ const SAFE_GAME_FIELDS = [
   'platform',
   'developer',
   'releaseYear',
+  'description',
   'tags',
   'updatedAt',
   'createdAt',
@@ -60,6 +61,10 @@ function logDebug(tag, details) {
 function clampLimit(limit, fallback = DEFAULT_PLATFORM_LIMIT) {
   const n = Number.isFinite(Number(limit)) ? Number(limit) : fallback;
   return Math.min(MAX_PLATFORM_LIMIT, Math.max(1, Math.trunc(n)));
+}
+
+function normalizeTitle(value = '') {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 export function getGameTitle(post) {
@@ -324,6 +329,7 @@ async function loadCanonicalGames({
     platform: game.platform,
     developer: game.developer,
     releaseYear: game.releaseYear,
+    description: game.description,
     tags: Array.isArray(game.tags) ? game.tags : [],
     communityRating: null,
     ratingCount: 0,
@@ -345,6 +351,99 @@ async function loadLegacyInventoryPosts({ limit = INVENTORY_LIMIT } = {}) {
     .lean();
 
   return posts;
+}
+
+async function loadGameDetailsByTitle(title, { userId, limit = 5 } = {}) {
+  const normalizedTitle = normalizeTitle(title);
+
+  if (!normalizedTitle) {
+    return [];
+  }
+
+  const [canonicalGame, posts] = await Promise.all([
+    Game.findOne({ titleNormalized: normalizedTitle })
+      .select(SAFE_GAME_FIELDS)
+      .lean(),
+    GamePost.find({ postType: 'GAME', titleNormalized: normalizedTitle })
+      .sort({ featured: -1, createdAt: -1, _id: 1 })
+      .limit(clampLimit(limit, 5))
+      .select(SAFE_POST_FIELDS)
+      .populate({ path: 'game', select: SAFE_GAME_FIELDS })
+      .lean(),
+  ]);
+
+  const attachedPosts = attachCommunityRatingData(posts, userId);
+  const merged = [];
+
+  if (canonicalGame) {
+    merged.push({
+      _id: canonicalGame._id,
+      title: canonicalGame.title,
+      genre: canonicalGame.genre,
+      platform: canonicalGame.platform,
+      developer: canonicalGame.developer,
+      releaseYear: canonicalGame.releaseYear,
+      description: canonicalGame.description,
+      tags: Array.isArray(canonicalGame.tags) ? canonicalGame.tags : [],
+      communityRating: null,
+      ratingCount: 0,
+      likesCount: 0,
+      bookmarksCount: 0,
+      commentsCount: 0,
+      source: 'Game',
+    });
+  }
+
+  for (const post of attachedPosts) {
+    const key = normalizeTitle(getGameTitle(post));
+    if (!key) continue;
+    if (merged.some((item) => normalizeTitle(item.title) === key)) continue;
+    merged.push({
+      ...post,
+      source: 'GamePost',
+    });
+  }
+
+  return merged;
+}
+
+function formatGameDetailsForPrompt({ title, records }) {
+  const safeRecords = Array.isArray(records) ? records : [];
+
+  if (!safeRecords.length) {
+    return (
+      `${title}:\n` +
+      'No matching game records were found for this title.\n' +
+      'This does not necessarily mean the platform database is empty.'
+    );
+  }
+
+  const lines = [
+    `${title}:`,
+    `Total matching records: ${safeRecords.length}`,
+    '',
+  ];
+
+  for (const record of safeRecords) {
+    lines.push(`Game: ${record.title || 'Untitled Game'}`);
+    lines.push(`   Genre: ${record.genre || 'N/A'}`);
+    lines.push(`   Platform: ${record.platform || 'N/A'}`);
+    lines.push(`   Developer: ${record.developer || 'N/A'}`);
+    lines.push(`   Release Year: ${record.releaseYear != null ? record.releaseYear : 'N/A'}`);
+    if (record.description) {
+      lines.push(`   Description: ${record.description}`);
+    }
+    lines.push(`   Community Rating: ${record.communityRating != null ? `${Number(record.communityRating).toFixed(1)}/10` : 'N/A'}`);
+    lines.push(`   Rating Count: ${record.ratingCount ?? 0}`);
+    lines.push(`   Likes: ${record.likesCount ?? 0}`);
+    lines.push(`   Bookmarks: ${record.bookmarksCount ?? 0}`);
+    lines.push(`   Comments: ${record.commentsCount ?? 0}`);
+    lines.push(`   Tags: ${Array.isArray(record.tags) && record.tags.length ? normalizeTags(record.tags).join(', ') : 'N/A'}`);
+    lines.push(`   Source: ${record.source || 'N/A'}`);
+    lines.push('');
+  }
+
+  return lines.join('\n').trim();
 }
 
 function normalizeUserTagHints(userMessage = '') {
@@ -550,15 +649,31 @@ export async function buildPlatformDataForPlan({
 } = {}) {
   const safePlan = plan ?? {};
   const intent = safePlan.intent ?? INTENTS.GENERAL_CHAT;
+  const layer2Intent = safePlan.layer2Intent ?? null;
 
   logDebug('buildPlatformDataForPlan', {
     intent,
+    layer2Intent,
     mode: safePlan.mode ?? 'unknown',
     needsDatabase: Boolean(safePlan.needsDatabase),
     limit: limit ?? null,
   });
 
   if (safePlan.needsDatabase === false) return '';
+
+  if (layer2Intent === 'game_detail_query') {
+    const gameTitles = Array.isArray(safePlan.entities?.games) && safePlan.entities.games.length
+      ? safePlan.entities.games
+      : [userMessage];
+
+    const detailRecords = [];
+    for (const title of gameTitles) {
+      const records = await loadGameDetailsByTitle(title, { userId, limit: 5 });
+      detailRecords.push(...records);
+    }
+
+    return formatGameDetailsForPrompt({ title: 'Game Details', records: detailRecords });
+  }
 
   switch (intent) {
     case INTENTS.PLATFORM_INVENTORY_QUERY:
