@@ -5,70 +5,12 @@ New features and updates should be added under the relevant version or date sect
 
 ---
 
-## [2026-06-13] — Nova Intent Routing, Platform Browsing, and Chat UX Improvements
+## [2026-06-13] — Private Data Protection and Demo-safe Repository Update
 
-### `AgentPage.jsx` — Chat Reset, Suggestions, and Streaming Stability
-
-Improved the Nova chat page so user actions produce clearer, more reliable results.
-
-- Fixed Clear History so local messages, streaming state, and Apollo history cache reset immediately without leaving stale user bubbles behind
-- Added session guards around streaming callbacks so old stream events cannot repopulate the chat after a reset
-- Refined Try asking prompts into a shorter closed-loop set covering browsing, trending, top-rated, low-rated, recommendations, trend picks, and taste analysis
-- Changed the all-games shortcut into paged browsing with `Show the first 10 games on the platform.`
-- Added language-aware progress text and preserved streamed recommendation cards after canonical history refreshes
-
-### `routerAgent.js` — Broader English and Chinese Intent Coverage
-
-Expanded the deterministic planner so mixed, platform-data, and taste-profile requests route to the correct execution path.
-
-- Added mixed query-plus-recommendation detection for requests such as trending/top/low-rated results plus a personalized recommendation
-- Added English and Chinese taste/profile patterns for bookmark analysis without overmatching mixed prompts
-- Added inventory next-batch handling for prompts such as `show more platform games`, `next batch of games`, and `换一批平台游戏`
-- Kept low-rated, top-rated, trending, and platform inventory requests from stealing each other's routes
-
-### `platformTools.js` — Mixed Data Loading and Scalable Inventory Defaults
-
-Strengthened platform-data retrieval for Nova answers.
-
-- Added mixed query/recommendation data assembly with safe fallback sections when MongoDB is unavailable in isolated tests
-- Added user taste signal summaries from bookmarked games, including rating, engagement, dominant tags, genres, and archetype hints
-- Reduced default platform inventory browsing from 50 records to 10 records so large databases are presented in manageable batches
-- Kept deterministic ranking and formatting for top-rated, low-rated, trending, and recommendation candidate sections
-
-### `answerAgent.js` — Grounded Output Rules and Batching Guidance
-
-Updated Nova's prompt rules to keep answers concise, grounded, and aligned with the planner.
-
-- Added explicit query, recommendation, mixed, taste-profile, high-rating, low-rating, and community trend rules
-- Limited trending, top-rated, and low-rated lists to the first 5 games by default with next-batch guidance
-- Limited platform inventory lists to the first 10 games by default and instructed Nova to avoid repeating titles when the user asks for more
-- Allowed low-rated or divisive games to be recommended only with transparent context when they match the user's taste
-- Continued sanitizing apology-style or self-referential leading text from final user-facing answers
-
-### `aiPipeline.js` and Fallback Prompts — Chinese Greeting Fast Path
-
-Improved greeting handling without invoking the AI model.
-
-- Added a fixed Chinese greeting response for `你好`, `您好`, and `nihao`
-- Kept simple greetings on the no-database, no-Gemini fast path while saving the correct localized response to history
-- Shortened the default English greeting for a more direct Nova introduction
-
-### Frontend Polish and Post Flow Copy
-
-Smoothed smaller UI issues discovered during chat and post creation testing.
-
-- Added safer wrapping for long markdown, inline code, and code block content in Nova responses
-- Ensured the root layout cannot exceed viewport width on mobile
-- Shortened post creation button labels from `Continue to Recommendation` / `Publish Recommendation` to `Continue` / `Publish`
-
-### Tests
-
-Expanded regression coverage across the Nova frontend and auth-service AI layer.
-
-- Added router tests for English and Chinese query, recommendation, mixed, taste-profile, inventory, and next-batch prompts
-- Added answer-agent tests for platform inventory batching and community list limits
-- Added platform-tools tests for mixed fallback data and deterministic taste signal summaries
-- Updated pipeline, AgentPage, and PostPage tests for the new greeting, clear-history, prompt, and copy behavior
+- Improved Nova AI pipeline architecture
+- Added demo-safe public repository structure
+- Excluded private data and production-only AI configuration from public version control
+- Kept private prompt templates and internal recommendation rules out of the public repo
 
 ---
 

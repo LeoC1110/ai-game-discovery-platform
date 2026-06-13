@@ -43,3 +43,31 @@ npm-debug.log*
 
 # Local AI conversation history fallback
 packages/auth-service/data/conversationHistory.json
+
+# Private Nova AI logic and production-only pipeline internals
+packages/auth-service/ai/answerAgent.js
+packages/auth-service/ai/routerAgent.js
+packages/auth-service/ai/validatorAgent.js
+packages/auth-service/ai/platformTools.js
+packages/auth-service/ai/aiPipeline.js
+
+# Private prompt templates and internal agent policy
+packages/auth-service/prompts/aiAgentSystemPrompt.js
+packages/auth-service/prompts/platformContextTemplate.js
+packages/auth-service/prompts/fallbackResponses.js
+
+# Private scoring logic and recommendation strategy internals
+packages/auth-service/services/communityRatingService.js
+
+# Private user memory/profile and conversation schema internals
+packages/auth-service/services/userMemoryService.js
+packages/auth-service/models/UserMemory.js
+packages/auth-service/models/UserPreference.js
+packages/auth-service/models/ConversationHistory.js
+packages/auth-service/models/User.js
+packages/auth-service/models/EmailVerification.js
+packages/auth-service/graphql/schema.js
+
+# Local-only and deployment-specific docs/configs
+RAILWAY_DEPLOYMENT_PLAN.md
+docs/private-data-inventory.md
