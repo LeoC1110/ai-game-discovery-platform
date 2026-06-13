@@ -6,8 +6,20 @@
 // to skip all Gemini calls and return deterministic responses for local development.
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
-import { INTENTS } from './routerAgent.js';
+import { LAYER2_INTENTS } from './routerAgent.js';
 import { getMockAnswer, getMockReflection } from './mockAiService.js';
+
+// Legacy intent constants retained for backward compatibility with older plan fields.
+const INTENTS = {
+  GAME_RECOMMENDATION: 'game_recommendation',
+  BOOKMARK_ANALYSIS: 'bookmark_analysis',
+  MIXED_QUERY_RECOMMENDATION: 'mixed_query_recommendation',
+  COMMUNITY_SUMMARY: 'community_summary',
+  LEADERBOARD_QUERY: 'leaderboard_query',
+  LOW_RATING_QUERY: 'low_rating_query',
+  GENERAL_CHAT: 'general_chat',
+  PLATFORM_INVENTORY_QUERY: 'platform_inventory_query',
+};
 
 const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS ?? '30000', 10);
 
@@ -71,6 +83,22 @@ const INTENT_ROLE_MAP = {
     'have a helpful, friendly conversation about games, recommendations, and the platform',
   [INTENTS.PLATFORM_INVENTORY_QUERY]:
     'list games currently available on the platform using platform data only', 
+  [LAYER2_INTENTS.CONTEXT_BASED_RECOMMENDATION]:
+    'generate context-aware recommendations grounded in user constraints and platform data',
+  [LAYER2_INTENTS.SIMILAR_GAME_DISCOVERY]:
+    'find games similar to a referenced game using platform data only',
+  [LAYER2_INTENTS.COMPARE_GAMES]:
+    'compare specific games and help the user decide what to play',
+  [LAYER2_INTENTS.RECOMMENDATION_EXPLANATION]:
+    'explain why a recommendation fits the user based on profile and platform context',
+  [LAYER2_INTENTS.TASTE_PROFILE_ANALYSIS]:
+    'analyze the user\'s taste profile from bookmarks and preference signals',
+  [LAYER2_INTENTS.REFINE_RECOMMENDATIONS]:
+    'refine recommendations based on explicit user feedback and updated preferences',
+  [LAYER2_INTENTS.GAME_DETAIL_QUERY]:
+    'answer detailed questions about a specific game from platform data',
+  [LAYER2_INTENTS.FOLLOW_UP_ACTION]:
+    'confirm follow-up actions and provide the next best platform step',
 };
 
 
@@ -92,6 +120,10 @@ const RECO_FORMAT_RULE =
   `- If no specific games are being recommended, omit the block entirely.`;
 
 function getEffectiveIntent(intent, plan) {
+  return plan?.layer2Intent ?? plan?.intent ?? intent;
+}
+
+function getLegacyIntent(intent, plan) {
   return plan?.intent ?? intent;
 }
 
@@ -140,16 +172,20 @@ function buildExecutionPlanPrompt(plan) {
 
   return (
     `--- Execution Plan ---\n` +
-    `Intent: ${plan.intent ?? 'N/A'}\n` +
+    `Legacy Intent: ${plan.intent ?? 'N/A'}\n` +
+    `Primary Behavior: ${plan.primaryBehavior ?? 'N/A'}\n` +
+    `Layer 1 Behaviors: ${(plan.layer1Behaviors ?? []).join(', ') || 'N/A'}\n` +
+    `Layer 2 Intent: ${plan.layer2Intent ?? 'N/A'}\n` +
     `Mode: ${plan.mode ?? 'N/A'}\n` +
     `Response Style: ${plan.responseStyle ?? 'N/A'}\n` +
     `Execution Order: ${(plan.executionOrder ?? []).join(' -> ') || 'N/A'}\n` +
     `Needs Recommendation: ${Boolean(plan.needsRecommendation)}\n` +
     `Needs User Profile: ${Boolean(plan.needsUserProfile)}\n` +
+    `Needs Action: ${Boolean(plan.needsAction)}\n` +
     `--- End Execution Plan ---\n` +
     `Follow this execution plan. Do not change the user's intent. ` +
-    `If the plan says query mode, answer as a platform-data query. ` +
-    `If the plan says recommendation mode, generate grounded recommendations only from Platform Data.`
+    `Use Layer 2 Intent and Router Signals as high-priority guidance when they are present. ` +
+    `Stay grounded in Platform Data and do not invent unavailable games, ratings, tags, or user activity.`
   );
 }
 
@@ -267,7 +303,11 @@ function buildOffTopicRules() {
 function buildModeRulesPrompt(plan) {
   if (!plan?.mode) return '';
 
-  if (plan.mode === 'query') {
+  const mode = String(plan.mode).toLowerCase();
+
+  // ── Legacy Query Mode ──────────────────────────────────────────────────────
+  // Used by the old router for factual platform-data queries.
+  if (mode === 'query') {
     return (
       `Mode-specific rules: Query Mode\n` +
       `- Answer as a factual platform-data query.\n` +
@@ -281,18 +321,76 @@ function buildModeRulesPrompt(plan) {
     );
   }
 
-  if (plan.mode === 'recommendation') {
+  // ── New Discovery Mode ─────────────────────────────────────────────────────
+  // Used by the new router for browsing, exploring, and platform inventory.
+  if (mode === 'discovery') {
     return (
-      `Mode-specific rules: Recommendation Mode\n` +
-      `- Recommend only games present in Platform Data.\n` +
-      `- Use user profile, bookmarks, saved games, stated preferences, and current message preferences when available.\n` +
-      `- Explain why each recommendation matches the user or request.\n` +
-      `- If specific games are recommended, include a valid RECOMMENDATIONS block.\n` +
-      `- If user profile context is missing, rely on current message preferences and Platform Data only.`
+      `Mode-specific rules: Discovery Mode\n` +
+      `- Help the user browse or explore games available in Platform Data.\n` +
+      `- Use only titles, genres, platforms, tags, ratings, and community signals from Platform Data.\n` +
+      `- Do not invent games or use external knowledge for platform inventory results.\n` +
+      `- If the user asks to browse, show, list, or explore games, provide a clear exploratory list.\n` +
+      `- Show only the first 10 matching games by default unless the user asks for a different number.\n` +
+      `- If the user asks for more, another batch, next batch, 换一批, 下一批, or 再来一批, use conversation context to avoid repeating previously shown titles.\n` +
+      `- Keep the wording exploratory and platform-centered, such as "Here are some games available on the platform..." or "From the current platform data...".\n` +
+      `- Do not frame the response as personalized unless the plan also includes personalization or recommendation signals.`
     );
   }
 
-  if (plan.mode === 'mixed') {
+  // ── New Ranking Mode ───────────────────────────────────────────────────────
+  // Used by the new router for trending, top-rated, low-rated, leaderboard,
+  // popular, mixed-rating, and community-signal queries.
+  if (mode === 'ranking') {
+    return (
+      `Mode-specific rules: Ranking Mode\n` +
+      `- Answer as a community-signal or ranking query.\n` +
+      `- Prioritize Community Rating, Rating Count, likes, bookmarks, comments, and trending tags when available.\n` +
+      `- Treat Author Rating as the post author's personal score, not the full community opinion.\n` +
+      `- For trending, popular, hottest, top-rated, leaderboard, best, low-rated, worst-rated, or mixed-rating lists, show only the first 5 matching games by default unless the user asks for a different count.\n` +
+      `- For top-rated, best, highest-rated, or leaderboard requests, rank from highest to lowest community rating and prefer stronger rating count or engagement when ratings are similar.\n` +
+      `- For low-rated, worst-rated, or poorly rated requests, rank from lowest to highest community rating.\n` +
+      `- Do not use personalized wording such as "matches your taste" or "based on your bookmarks" unless the plan also explicitly includes personalization.\n` +
+      `- Use neutral platform/community wording such as "Based on current community activity..." or "The platform data shows...".\n` +
+      `- If Platform Data is not attached, say the platform data was not attached to this request; do not claim there are no ranked games.`
+    );
+  }
+
+  // ── Legacy + New Recommendation Mode ───────────────────────────────────────
+  // Used by both old and new routers.
+  if (mode === 'recommendation') {
+    return (
+      `Mode-specific rules: Recommendation Mode\n` +
+      `- Recommend only games present in Platform Data.\n` +
+      `- Use user profile, bookmarks, saved games, stated preferences, current message preferences, and Router Signals when available.\n` +
+      `- Explain why each recommendation matches the user, the request, or the extracted constraints.\n` +
+      `- If Router Signals include constraints such as mood, platform, session length, preferred genres, or excluded genres, apply them as high-priority guidance.\n` +
+      `- If constraints conflict, prioritize explicit exclusions first, then explicit preferences, then softer mood or vibe signals.\n` +
+      `- If specific games are recommended, include a valid RECOMMENDATIONS block.\n` +
+      `- If user profile context is missing, rely on current message preferences and Platform Data only.\n` +
+      `- If there are not enough matching platform games, say so clearly and suggest the closest available matches from Platform Data.`
+    );
+  }
+
+  // ── New Personalization Mode ───────────────────────────────────────────────
+  // Used by the new router for "for me", "my taste", bookmarks, preferences,
+  // taste analysis, and feedback-based personalization.
+  if (mode === 'personalization') {
+    return (
+      `Mode-specific rules: Personalization Mode\n` +
+      `- Use the user's bookmarks, saved games, stated preferences, taste profile, and Router Signals when they are provided.\n` +
+      `- Personalize only when supported by User Preference Profile, bookmarks, current message preferences, or extracted constraints.\n` +
+      `- Use careful wording such as "your saved games suggest", "you seem to lean toward", or "this may fit your preference for...".\n` +
+      `- Do not make unsupported personality claims or claim private user traits as facts.\n` +
+      `- If the user asks for taste analysis, summarize 2-4 evidence-backed taste traits before suggesting next steps.\n` +
+      `- If the user asks for personalized recommendations, recommend only games from Platform Data.\n` +
+      `- If Router Signals include excluded genres or tags, avoid recommending games that clearly match those exclusions.\n` +
+      `- If profile or bookmark data is sparse, say the personalization is tentative and explain what extra signals would improve it.`
+    );
+  }
+
+  // ── Legacy Mixed Mode ──────────────────────────────────────────────────────
+  // Kept for backward compatibility with the old router.
+  if (mode === 'mixed') {
     return (
       `Mode-specific rules: Mixed Mode\n` +
       `- First answer the platform query using Platform Data.\n` +
@@ -300,16 +398,270 @@ function buildModeRulesPrompt(plan) {
       `- If the user asks for another batch, avoid repeating titles already shown in the conversation and use the next 5 relevant platform games from Platform Data when possible.\n` +
       `- Then provide recommendations if the plan requires recommendation.\n` +
       `- Clearly separate platform facts from personalized suggestions.\n` +
-      `- Recommendation titles must still come only from Platform Data.`
+      `- Recommendation titles must still come only from Platform Data.\n` +
+      `- If Router Signals are present, use them to decide whether the second part should be personalized, comparative, explanatory, or action-oriented.`
     );
   }
 
-  if (plan.mode === 'general_chat') {
+  // ── New Action Mode ────────────────────────────────────────────────────────
+  // Used by the new router for save, bookmark, wishlist, view details,
+  // trailer, review, share, and other follow-up actions.
+  if (mode === 'action') {
+    return (
+      `Mode-specific rules: Action / Engagement Mode\n` +
+      `- Respond with an action-oriented confirmation or the next clear platform step.\n` +
+      `- Do not claim that an action was completed unless an explicit action result or persistence status is provided in context.\n` +
+      `- If the user asks to save, bookmark, add to wishlist, write a review, share, or watch a trailer, confirm what Nova understood and explain the next step.\n` +
+      `- If the action target is unclear, ask for the exact game title in one short sentence.\n` +
+      `- If Router Signals include entities.games, use those game titles as the action target.\n` +
+      `- Keep the response short, practical, and platform-action focused.\n` +
+      `- Do not append a RECOMMENDATIONS block unless the response also includes specific game recommendations.`
+    );
+  }
+
+  // ── General Chat Mode ──────────────────────────────────────────────────────
+  if (mode === 'general_chat') {
     return (
       `Mode-specific rules: General Chat Mode\n` +
       `- Keep the response short and helpful.\n` +
       `- Do not mention missing platform data unless the user asks for platform games, recommendations, trends, ratings, bookmarks, or community activity.\n` +
       `- Guide the user toward useful Nova actions such as trending games, bookmark-based recommendations, low-rated games, or community summaries.`
+    );
+  }
+
+  // ── Safe fallback for future modes ─────────────────────────────────────────
+  return (
+    `Mode-specific rules: Fallback Mode\n` +
+    `- Follow the Execution Plan, Layer 2 Intent, Router Signals, and Platform Data.\n` +
+    `- Stay grounded in Platform Data.\n` +
+    `- Do not invent unavailable games, ratings, tags, bookmarks, likes, comments, or user activity.\n` +
+    `- If the mode is unclear, answer conservatively and ask a short clarifying question only when necessary.`
+  );
+}
+
+function buildConversationGuidancePrompt(plan) {
+  if (!plan) return '';
+
+  const layer2Intent = plan.layer2Intent;
+  const primaryBehavior = plan.primaryBehavior;
+  const mode = plan.mode;
+
+  return (
+    `Conversation guidance rules:\n` +
+    `- When appropriate, end the response with one short and useful next step.\n` +
+    `- Do not force a follow-up question after every answer.\n` +
+    `- The next step should match the Router Agent's intent classification.\n` +
+    `- Keep the next step natural, concise, and product-like.\n` +
+    `- Do not sound like a sales funnel.\n` +
+    `- Do not introduce actions that are not supported by the platform.\n` +
+    buildGuidanceByRouterIntent({ layer2Intent, primaryBehavior, mode })
+  );
+}
+
+function buildGuidanceByRouterIntent({ layer2Intent, primaryBehavior, mode }) {
+  switch (layer2Intent) {
+    case LAYER2_INTENTS.CONTEXT_BASED_RECOMMENDATION:
+      return (
+        `- For context-based recommendations, suggest one follow-up such as saving a game, asking why it fits, or refining the request.\n`
+      );
+
+    case LAYER2_INTENTS.SIMILAR_GAME_DISCOVERY:
+      return (
+        `- For similar game discovery, suggest viewing details, finding more similar games, or saving one to bookmarks.\n`
+      );
+
+    case LAYER2_INTENTS.COMPARE_GAMES:
+      return (
+        `- For comparison answers, end with a practical decision-oriented next step, such as choosing one to play first or saving the better fit.\n`
+      );
+
+    case LAYER2_INTENTS.RECOMMENDATION_EXPLANATION:
+      return (
+        `- For recommendation explanations, suggest asking for similar games or refining the user's preferences.\n`
+      );
+
+    case LAYER2_INTENTS.TASTE_PROFILE_ANALYSIS:
+      return (
+        `- For taste profile analysis, suggest asking for personalized recommendations or refining the user's taste profile.\n`
+      );
+
+    case LAYER2_INTENTS.REFINE_RECOMMENDATIONS:
+      return (
+        `- For feedback and refinement, confirm the adjustment for the current context and suggest generating a refreshed recommendation list.\n`
+      );
+
+    case LAYER2_INTENTS.GAME_DETAIL_QUERY:
+      return (
+        `- For game detail answers, suggest saving the game, watching the trailer, comparing it, or finding similar games.\n`
+      );
+
+    case LAYER2_INTENTS.FOLLOW_UP_ACTION:
+      return (
+        `- For follow-up actions, keep the response action-focused and do not add unnecessary extra prompts.\n`
+      );
+
+    default:
+      break;
+  }
+
+  switch (primaryBehavior) {
+    case 'discovery':
+      return (
+        `- For discovery results, suggest browsing more, viewing details, or asking Nova for recommendations.\n`
+      );
+
+    case 'ranking':
+      return (
+        `- For ranking results, suggest viewing details, comparing top games, or asking Nova which one fits the user best.\n`
+      );
+
+    case 'recommendation':
+      return (
+        `- For recommendation results, suggest saving one game, asking why it fits, or finding similar games.\n`
+      );
+
+    case 'personalization':
+      return (
+        `- For personalization answers, suggest asking for recommendations based on the user's taste or refining preferences.\n`
+      );
+
+    case 'action_engagement':
+      return (
+        `- For action-oriented requests, keep the next step short and directly related to the requested action.\n`
+      );
+
+    default:
+      return (
+        `- If no clear next step is needed, end the response naturally without forcing a follow-up.\n`
+      );
+  }
+}
+
+function buildRouterSignalPrompt(plan) {
+  if (!plan) return '';
+
+  const layer1 = Array.isArray(plan.layer1Behaviors) ? plan.layer1Behaviors : [];
+  const entities = plan.entities ?? {};
+  const constraints = plan.constraints ?? {};
+
+  const games = Array.isArray(entities.games) ? entities.games : [];
+  const genres = Array.isArray(entities.genres) ? entities.genres : [];
+  const platforms = Array.isArray(entities.platforms) ? entities.platforms : [];
+
+  const excludedGenres = Array.isArray(constraints.excludedGenres)
+    ? constraints.excludedGenres
+    : [];
+  const preferredGenres = Array.isArray(constraints.preferredGenres)
+    ? constraints.preferredGenres
+    : [];
+
+  const hasRouterFields =
+    Boolean(plan.layer2Intent) ||
+    Boolean(plan.primaryBehavior) ||
+    layer1.length > 0 ||
+    games.length > 0 ||
+    genres.length > 0 ||
+    platforms.length > 0 ||
+    Boolean(constraints.mood) ||
+    Boolean(constraints.platform) ||
+    Boolean(constraints.sessionLength) ||
+    excludedGenres.length > 0 ||
+    preferredGenres.length > 0 ||
+    Boolean(constraints.feedbackDirection);
+
+  if (!hasRouterFields) return '';
+
+  return (
+    `--- Router Signals ---\n` +
+    `Primary Behavior: ${plan.primaryBehavior ?? 'N/A'}\n` +
+    `Layer 1 Behaviors: ${layer1.join(', ') || 'N/A'}\n` +
+    `Layer 2 Intent: ${plan.layer2Intent ?? 'N/A'}\n` +
+    `Reference Games: ${games.join(', ') || 'N/A'}\n` +
+    `Detected Genres: ${genres.join(', ') || 'N/A'}\n` +
+    `Detected Platforms: ${platforms.join(', ') || 'N/A'}\n` +
+    `Constraint Mood: ${constraints.mood ?? 'N/A'}\n` +
+    `Constraint Platform: ${constraints.platform ?? 'N/A'}\n` +
+    `Constraint Session Length: ${constraints.sessionLength ?? 'N/A'}\n` +
+    `Excluded Genres: ${excludedGenres.join(', ') || 'N/A'}\n` +
+    `Preferred Genres: ${preferredGenres.join(', ') || 'N/A'}\n` +
+    `Feedback Direction: ${constraints.feedbackDirection ?? 'N/A'}\n` +
+    `--- End Router Signals ---\n` +
+    `If Router Signals are present, apply them as high-priority guidance for recommendation scope, comparisons, and follow-up style while still staying grounded in Platform Data.`
+  );
+}
+
+function buildLayer2IntentRulesPrompt(plan) {
+  const layer2Intent = plan?.layer2Intent;
+  if (!layer2Intent) return '';
+
+  if (layer2Intent === LAYER2_INTENTS.CONTEXT_BASED_RECOMMENDATION) {
+    return (
+      `Layer 2 rules: context_based_recommendation\n` +
+      `- Use Router Signals constraints (mood, platform, session length, preferred/excluded genres, feedback direction) to shape recommendations.\n` +
+      `- When constraints conflict, prioritize explicit exclusions first, then explicit preferences.\n` +
+      `- Explain clearly how each recommended game satisfies the extracted constraints.`
+    );
+  }
+
+  if (layer2Intent === LAYER2_INTENTS.SIMILAR_GAME_DISCOVERY) {
+    return (
+      `Layer 2 rules: similar_game_discovery\n` +
+      `- Use entities.games from Router Signals as the reference game(s).\n` +
+      `- If multiple reference games exist, preserve each one in the similarity rationale.\n` +
+      `- If no reference game is available, ask for the target game title before recommending.`
+    );
+  }
+
+  if (layer2Intent === LAYER2_INTENTS.COMPARE_GAMES) {
+    return (
+      `Layer 2 rules: compare_games\n` +
+      `- Compare the games listed in entities.games directly.\n` +
+      `- Highlight practical trade-offs (gameplay style, difficulty, pacing, social/co-op fit, and likely fit for the user).\n` +
+      `- End with a concise recommendation on which game to start first, grounded in available data.`
+    );
+  }
+
+  if (layer2Intent === LAYER2_INTENTS.TASTE_PROFILE_ANALYSIS) {
+    return (
+      `Layer 2 rules: taste_profile_analysis\n` +
+      `- Focus primarily on bookmarks and user profile signals to describe taste traits.\n` +
+      `- Use cautious language and evidence-based statements; avoid overconfident personality claims.\n` +
+      `- If profile signals are sparse, say the profile is tentative and ask for more saved-game context.`
+    );
+  }
+
+  if (layer2Intent === LAYER2_INTENTS.RECOMMENDATION_EXPLANATION) {
+    return (
+      `Layer 2 rules: recommendation_explanation\n` +
+      `- Explain why the relevant game recommendation fits the user, citing bookmarks, stated preferences, and community/platform signals when available.\n` +
+      `- Keep the explanation specific and evidence-backed instead of generic praise.`
+    );
+  }
+
+  if (layer2Intent === LAYER2_INTENTS.REFINE_RECOMMENDATIONS) {
+    return (
+      `Layer 2 rules: refine_recommendations\n` +
+      `- Acknowledge the user's feedback based on feedbackDirection and genre/tag preference signals.\n` +
+      `- Confirm what should be avoided and what should be prioritized in the current recommendation context.\n` +
+      `- Do not claim the preference was permanently saved or updated unless persistence status is explicitly provided in context.\n`
+    );
+  }
+
+  if (layer2Intent === LAYER2_INTENTS.GAME_DETAIL_QUERY) {
+    return (
+      `Layer 2 rules: game_detail_query\n` +
+      `- Answer about the specific game in entities.games when present.\n` +
+      `- Cover concrete details available in Platform Data and avoid unsupported claims.\n` +
+      `- If no game is provided, ask a short clarifying question for the exact title.`
+    );
+  }
+
+  if (layer2Intent === LAYER2_INTENTS.FOLLOW_UP_ACTION) {
+    return (
+      `Layer 2 rules: follow_up_action\n` +
+      `- Return action-oriented confirmation or the next clear step.\n` +
+      `- Do not claim an action was executed unless that action status is explicitly provided in context.\n` +
+      `- Keep the response short, directive, and platform-action focused.`
     );
   }
 
@@ -390,6 +742,13 @@ function buildPlatformDataPrompt(platformData, intent) {
     );
   }
 
+  if (intent === LAYER2_INTENTS.FOLLOW_UP_ACTION) {
+    return (
+      `Platform action context: No platform action result was attached. ` +
+      `Do not claim the action was completed. Provide the next clear step or ask for the target game if needed.\n`
+    );
+  }
+
   return (
     `Platform data status: No platform data was attached to this request. ` +
     `Do not claim the database or platform is empty. Instead, say that you cannot access the platform data for this specific request.\n`
@@ -415,14 +774,18 @@ function buildSystemPrompt({
   userMemoryContext = '',
 }) {
   const effectiveIntent = getEffectiveIntent(intent, plan);
+  const legacyIntent = getLegacyIntent(intent, plan);
   const role = INTENT_ROLE_MAP[effectiveIntent] ?? 'assist with game discovery questions';
 
   return [
     buildCorePrompt(role),
     buildExecutionPlanPrompt(plan),
+    buildRouterSignalPrompt(plan),
     buildBehaviorRulesPrompt(),
-    buildIntentRulesPrompt(effectiveIntent),
+    buildIntentRulesPrompt(legacyIntent),
+    buildLayer2IntentRulesPrompt(plan),
     buildModeRulesPrompt(plan),
+    buildConversationGuidancePrompt(plan),
     buildUserMemoryPrompt(userMemoryContext, plan),
     buildPlatformDataPrompt(platformData, effectiveIntent),
     buildRecommendationFormatPrompt(),
@@ -619,8 +982,11 @@ export async function generateReflection({
 
 // Test-only export for isolated unit testing of prompt-construction modules.
 export const __test__ = {
+  INTENTS,
   buildSystemPrompt,
   buildIntentRulesPrompt,
+  buildLayer2IntentRulesPrompt,
+  buildRouterSignalPrompt,
   buildPlatformDataPrompt,
   buildRecommendationFormatPrompt,
   buildLowRatingRules,

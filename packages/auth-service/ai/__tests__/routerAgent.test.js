@@ -1,662 +1,481 @@
 // packages/auth-service/ai/__tests__/routerAgent.test.js
-// Isolated unit tests for classifyIntent() in routerAgent.js.
+// Isolated unit tests for classifyIntent() and extractEntitiesAndConstraints() in routerAgent.js
 //
 // No MongoDB, no Gemini, no aiPipeline, no AnswerAgent, no ValidatorAgent.
-// classifyIntent() is a pure function — tests are fully synchronous.
+// Both functions are pure — tests are fully synchronous.
 //
 // Run with:
 //   node --test ai/__tests__/routerAgent.test.js
-// Or via the workspace test script after adding this file to the test list.
+// Or via workspace test script:
+//   npm test
 
-import { test, describe } from 'node:test';
-import assert from 'node:assert/strict';
+import { test, describe } from "node:test";
+import assert from "node:assert/strict";
 
-import { classifyIntent, INTENTS, MODES } from '../routerAgent.js';
+import {
+  classifyIntent,
+  extractEntitiesAndConstraints,
+  LAYER1_BEHAVIORS,
+  LAYER2_INTENTS,
+  MODES,
+} from "../routerAgent.js";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Test Helpers ──────────────────────────────────────────────────────────────
 
-/**
- * Assert that a plan contains every expected key/value pair.
- * Extra keys in the plan are ignored.
- */
-function assertPlan(plan, expected) {
-  for (const [key, value] of Object.entries(expected)) {
-    if (Array.isArray(value)) {
-      assert.deepEqual(
-        plan[key],
-        value,
-        `Expected plan.${key} to equal ${JSON.stringify(value)}, got ${JSON.stringify(plan[key])}`,
-      );
-    } else {
-      assert.equal(
-        plan[key],
-        value,
-        `Expected plan.${key} = ${JSON.stringify(value)}, got ${JSON.stringify(plan[key])}`,
-      );
-    }
+function assertContainsAll(arr, expected) {
+  for (const item of expected) {
+    assert.ok(arr.includes(item), `Expected array to contain ${item}, but got ${JSON.stringify(arr)}`);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Suite 1 — Query mode
+// Suite 1 — extractEntitiesAndConstraints
 // ─────────────────────────────────────────────────────────────────────────────
-describe('classifyIntent — Query mode', () => {
 
-  // ── PLATFORM_INVENTORY_QUERY ──────────────────────────────────────────────
+describe("extractEntitiesAndConstraints", () => {
+  describe("Game extraction", () => {
+    test('extracts quoted titles: "Portal 2"', () => {
+      const result = extractEntitiesAndConstraints('I love "Portal 2"');
+      assert.ok(result.entities.games.includes("Portal 2"));
+    });
 
-  test('show all games on the platform → platform_inventory_query / query', () => {
-    const plan = classifyIntent('show all games on the platform');
-    assertPlan(plan, {
-      intent:              INTENTS.PLATFORM_INVENTORY_QUERY,
-      mode:                MODES.QUERY,
-      needsDatabase:       true,
-      needsUserProfile:    false,
-      needsRecommendation: false,
-      needsValidation:     false,
-      executionOrder:      ['query'],
-      responseStyle:       'factual_list',
+    test("extracts games from 'games like X' phrasing", () => {
+      const result = extractEntitiesAndConstraints("find games like Stardew Valley");
+      assert.ok(result.entities.games.includes("Stardew Valley"));
+    });
+
+    test("extracts games from comparison 'X or Y'", () => {
+      const result = extractEntitiesAndConstraints("should I play Elden Ring or Sekiro");
+      assertContainsAll(result.entities.games, ["Elden Ring", "Sekiro"]);
+    });
+
+    test("filters out generic phrases", () => {
+      const result = extractEntitiesAndConstraints("what games are good");
+      assert.ok(!result.entities.games.includes("game"));
+      assert.ok(!result.entities.games.includes("games"));
+    });
+
+    test("handles empty message gracefully", () => {
+      const result = extractEntitiesAndConstraints("");
+      assert.equal(result.entities.games.length, 0);
     });
   });
 
-  test('find all games in platform → platform_inventory_query', () => {
-    const plan = classifyIntent('find all games in platform');
-    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
-    assert.equal(plan.mode,   MODES.QUERY);
-  });
+  describe("Platform detection", () => {
+    test("detects PC platform", () => {
+      const result = extractEntitiesAndConstraints("Can I play this on PC?");
+      assert.ok(result.entities.platforms.includes("pc"));
+    });
 
-  test('list available games → platform_inventory_query', () => {
-    const plan = classifyIntent('list available games');
-    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
-  });
+    test("detects Switch platform", () => {
+      const result = extractEntitiesAndConstraints("Is this on Switch?");
+      assert.ok(result.entities.platforms.includes("switch"));
+    });
 
-  test('what games are available → platform_inventory_query', () => {
-    const plan = classifyIntent('what games are available on the platform');
-    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
-  });
+    test("detects PlayStation", () => {
+      const result = extractEntitiesAndConstraints("does this run on PS5?");
+      assert.ok(result.entities.platforms.includes("playstation"));
+    });
 
-  test('show the first 10 games on the platform → platform_inventory_query', () => {
-    const plan = classifyIntent('show the first 10 games on the platform');
-    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
-    assert.equal(plan.mode, MODES.QUERY);
-  });
-
-  test('show more platform games → platform_inventory_query', () => {
-    const plan = classifyIntent('show more platform games');
-    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
-    assert.equal(plan.mode, MODES.QUERY);
-  });
-
-  // ── LOW_RATING_QUERY ──────────────────────────────────────────────────────
-
-  test('find low-rated games → low_rating_query / query', () => {
-    const plan = classifyIntent('find low-rated games');
-    assertPlan(plan, {
-      intent:              INTENTS.LOW_RATING_QUERY,
-      mode:                MODES.QUERY,
-      needsDatabase:       true,
-      needsUserProfile:    false,
-      needsRecommendation: false,
-      needsValidation:     true,   // HIGH_RISK
-      executionOrder:      ['query'],
-      responseStyle:       'factual_list',
+    test("detects mobile platform", () => {
+      const result = extractEntitiesAndConstraints("Looking for iOS games");
+      assert.ok(result.entities.platforms.includes("mobile"));
     });
   });
 
-  test('find low-rated games on the platform → low_rating_query', () => {
-    const plan = classifyIntent('find low-rated games on the platform');
-    assert.equal(plan.intent, INTENTS.LOW_RATING_QUERY);
-    assert.equal(plan.mode, MODES.QUERY);
-  });
+  describe("Genre detection", () => {
+    test("detects horror", () => {
+      const result = extractEntitiesAndConstraints("Recommend me a horror game");
+      assert.ok(result.entities.genres.includes("horror"));
+    });
 
-  test('show worst rated games → low_rating_query', () => {
-    const plan = classifyIntent('show worst rated games');
-    assert.equal(plan.intent, INTENTS.LOW_RATING_QUERY);
-    assert.equal(plan.needsValidation, true);
-  });
+    test("detects RPG", () => {
+      const result = extractEntitiesAndConstraints("I love RPGs");
+      assert.ok(result.entities.genres.includes("rpg"));
+    });
 
-  test('show poorly rated games → low_rating_query', () => {
-    assert.equal(classifyIntent('show poorly rated games').intent, INTENTS.LOW_RATING_QUERY);
-  });
+    test("detects open_world", () => {
+      const result = extractEntitiesAndConstraints("Find me open-world games");
+      assert.ok(result.entities.genres.includes("open_world"));
+    });
 
-  test('bottom rated games → low_rating_query', () => {
-    assert.equal(classifyIntent('bottom rated games').intent, INTENTS.LOW_RATING_QUERY);
-  });
+    test("detects story_driven", () => {
+      const result = extractEntitiesAndConstraints("I prefer story-driven narratives");
+      assert.ok(result.entities.genres.includes("story_driven"));
+    });
 
-  // ── LEADERBOARD_QUERY ─────────────────────────────────────────────────────
-
-  test('list top-rated games → leaderboard_query / query', () => {
-    const plan = classifyIntent('list top-rated games');
-    assertPlan(plan, {
-      intent:              INTENTS.LEADERBOARD_QUERY,
-      mode:                MODES.QUERY,
-      needsDatabase:       true,
-      needsUserProfile:    false,
-      needsRecommendation: false,
-      needsValidation:     true,   // HIGH_RISK
-      executionOrder:      ['query'],
-      responseStyle:       'factual_list',
+    test("detects multiplayer", () => {
+      const result = extractEntitiesAndConstraints("Looking for co-op games");
+      assert.ok(result.entities.genres.includes("multiplayer"));
     });
   });
 
-  test('show the leaderboard → leaderboard_query', () => {
-    assert.equal(classifyIntent('show the leaderboard').intent, INTENTS.LEADERBOARD_QUERY);
-  });
+  describe("Constraint extraction", () => {
+    test("extracts hardware: low_end_pc", () => {
+      const result = extractEntitiesAndConstraints("Can run on low-end PC?");
+      assert.equal(result.constraints.hardware, "low_end_pc");
+    });
 
-  test('highest rated games → leaderboard_query', () => {
-    assert.equal(classifyIntent('highest rated games').intent, INTENTS.LEADERBOARD_QUERY);
-  });
+    test("extracts hardware: high_end_pc", () => {
+      const result = extractEntitiesAndConstraints("high-end PC gaming");
+      assert.equal(result.constraints.hardware, "high_end_pc");
+    });
 
-  test('best game on the platform → leaderboard_query', () => {
-    assert.equal(classifyIntent('what is the best game').intent, INTENTS.LEADERBOARD_QUERY);
-  });
+    test("extracts playStyle: co_op", () => {
+      const result = extractEntitiesAndConstraints("Looking for co-op games");
+      assert.equal(result.constraints.playStyle, "co_op");
+    });
 
-  // ── COMMUNITY_SUMMARY ─────────────────────────────────────────────────────
+    test("extracts playStyle: multiplayer", () => {
+      const result = extractEntitiesAndConstraints("multiplayer experience");
+      assert.equal(result.constraints.playStyle, "multiplayer");
+    });
 
-  test('summarize community activity → community_summary / query', () => {
-    const plan = classifyIntent('summarize community activity');
-    assertPlan(plan, {
-      intent:              INTENTS.COMMUNITY_SUMMARY,
-      mode:                MODES.QUERY,
-      needsDatabase:       true,
-      needsUserProfile:    false,
-      needsRecommendation: false,
-      needsValidation:     true,   // HIGH_RISK
-      executionOrder:      ['query'],
-      responseStyle:       'factual_list',
+    test("extracts playStyle: story_driven", () => {
+      const result = extractEntitiesAndConstraints("story-driven gameplay");
+      assert.equal(result.constraints.playStyle, "story_driven");
+    });
+
+    test("extracts playStyle: open_world", () => {
+      const result = extractEntitiesAndConstraints("open-world adventures");
+      assert.equal(result.constraints.playStyle, "open_world");
+    });
+
+    test("extracts difficulty: beginner_friendly", () => {
+      const result = extractEntitiesAndConstraints("beginner-friendly games");
+      assert.equal(result.constraints.difficulty, "beginner_friendly");
+    });
+
+    test("extracts difficulty: challenging", () => {
+      const result = extractEntitiesAndConstraints("I like challenging games");
+      assert.equal(result.constraints.difficulty, "challenging");
+    });
+
+    test("extracts sessionLength: short_session", () => {
+      const result = extractEntitiesAndConstraints("short games to finish quickly");
+      assert.equal(result.constraints.sessionLength, "short_session");
+    });
+
+    test("extracts sessionLength: weekend_session", () => {
+      const result = extractEntitiesAndConstraints("games for the weekend");
+      assert.equal(result.constraints.sessionLength, "weekend_session");
+    });
+
+    test("extracts sessionLength: long_session", () => {
+      const result = extractEntitiesAndConstraints("long games with hundreds of hours");
+      assert.equal(result.constraints.sessionLength, "long_session");
+    });
+
+    test("extracts mood: relaxing", () => {
+      const result = extractEntitiesAndConstraints("relaxing, cozy games");
+      assert.equal(result.constraints.mood, "relaxing");
+    });
+
+    test("extracts mood: emotional", () => {
+      const result = extractEntitiesAndConstraints("touching, emotional story");
+      assert.equal(result.constraints.mood, "emotional");
     });
   });
 
-  test('show trending games → community_summary', () => {
-    assert.equal(classifyIntent('show trending games').intent, INTENTS.COMMUNITY_SUMMARY);
+  describe("Feedback constraints", () => {
+    test("detects feedbackDirection: more_like_this", () => {
+      const result = extractEntitiesAndConstraints("more like this RPG");
+      assert.equal(result.constraints.feedbackDirection, "more_like_this");
+    });
+
+    test("detects feedbackDirection: less_like_this", () => {
+      const result = extractEntitiesAndConstraints("less like this, fewer puzzles");
+      assert.equal(result.constraints.feedbackDirection, "less_like_this");
+    });
+
+    test("detects feedbackDirection: not_for_me", () => {
+      const result = extractEntitiesAndConstraints("This is not for me");
+      assert.equal(result.constraints.feedbackDirection, "not_for_me");
+    });
+
+    test("tracks excluded genres", () => {
+      const result = extractEntitiesAndConstraints("I dislike horror games and puzzles");
+      assertContainsAll(result.constraints.excludedGenres, ["horror", "puzzle"]);
+    });
+
+    test("tracks preferred genres", () => {
+      const result = extractEntitiesAndConstraints("I prefer RPGs and strategy games");
+      assertContainsAll(result.constraints.preferredGenres, ["rpg", "strategy"]);
+    });
   });
 
-  test('most liked games → community_summary', () => {
-    assert.equal(classifyIntent('most liked games').intent, INTENTS.COMMUNITY_SUMMARY);
-  });
+  describe("Return structure", () => {
+    test("always returns entities object with required fields", () => {
+      const result = extractEntitiesAndConstraints("test message");
+      assert.ok(result.entities);
+      assert.ok(Array.isArray(result.entities.games));
+      assert.ok(Array.isArray(result.entities.genres));
+      assert.ok(Array.isArray(result.entities.platforms));
+      assert.ok(Array.isArray(result.entities.tags));
+      assert.ok(Array.isArray(result.entities.actions));
+    });
 
-  test('community picks → community_summary', () => {
-    assert.equal(classifyIntent('community picks').intent, INTENTS.COMMUNITY_SUMMARY);
-  });
-
-  test('another batch → community_summary', () => {
-    assert.equal(classifyIntent('show another batch').intent, INTENTS.COMMUNITY_SUMMARY);
-  });
-
-  test('换一批 → community_summary', () => {
-    assert.equal(classifyIntent('换一批').intent, INTENTS.COMMUNITY_SUMMARY);
-  });
-
-  // ── PLATFORM_INVENTORY_QUERY has needsValidation false ───────────────────
-
-  test('platform_inventory_query needsValidation is false (not high-risk)', () => {
-    assert.equal(classifyIntent('list all games').needsValidation, false);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Suite 2 — Recommendation mode
-// ─────────────────────────────────────────────────────────────────────────────
-describe('classifyIntent — Recommendation mode', () => {
-
-  const EXPECTED_REC_PLAN = {
-    mode:                MODES.RECOMMENDATION,
-    needsDatabase:       true,
-    needsUserProfile:    true,
-    needsRecommendation: true,
-    needsValidation:     true,
-    dataSources:         ['platform_posts', 'user_bookmarks', 'user_profile'],
-    executionOrder:      ['retrieve_candidates', 'rank', 'answer'],
-    responseStyle:       'personalized_recommendation',
-  };
-
-  // ── GAME_RECOMMENDATION ───────────────────────────────────────────────────
-
-  test('recommend games for me → game_recommendation / recommendation', () => {
-    const plan = classifyIntent('recommend games for me');
-    assertPlan(plan, { intent: INTENTS.GAME_RECOMMENDATION, ...EXPECTED_REC_PLAN });
-  });
-
-  test('suggest something to play → game_recommendation', () => {
-    assert.equal(classifyIntent('suggest something to play').intent, INTENTS.GAME_RECOMMENDATION);
-  });
-
-  test('what should I play next → game_recommendation', () => {
-    assert.equal(classifyIntent('what should I play next').intent, INTENTS.GAME_RECOMMENDATION);
-  });
-
-  test('I like puzzle games → game_recommendation', () => {
-    const plan = classifyIntent('I like puzzle games');
-    assert.equal(plan.intent, INTENTS.GAME_RECOMMENDATION);
-    assert.equal(plan.mode,   MODES.RECOMMENDATION);
-  });
-
-  test('games similar to Minecraft → game_recommendation', () => {
-    assert.equal(classifyIntent('games similar to Minecraft').intent, INTENTS.GAME_RECOMMENDATION);
-  });
-
-  test('games like Dark Souls → game_recommendation', () => {
-    assert.equal(classifyIntent('games like Dark Souls').intent, INTENTS.GAME_RECOMMENDATION);
-  });
-
-  test('find me some games to play → game_recommendation', () => {
-    assert.equal(classifyIntent('find me some games to play').intent, INTENTS.GAME_RECOMMENDATION);
-  });
-
-  test('game recommendation plan has all required fields', () => {
-    const plan = classifyIntent('recommend a game for me');
-    assertPlan(plan, EXPECTED_REC_PLAN);
-  });
-
-  // ── BOOKMARK_ANALYSIS ─────────────────────────────────────────────────────
-
-  test('recommend based on my bookmarks → bookmark_analysis / recommendation', () => {
-    const plan = classifyIntent('recommend based on my bookmarks');
-    assertPlan(plan, { intent: INTENTS.BOOKMARK_ANALYSIS, ...EXPECTED_REC_PLAN });
-  });
-
-  test('analyze my saved games → bookmark_analysis', () => {
-    assert.equal(classifyIntent('analyze my saved games').intent, INTENTS.BOOKMARK_ANALYSIS);
-  });
-
-  test('what games have I saved → bookmark_analysis', () => {
-    assert.equal(classifyIntent('what games have I saved').intent, INTENTS.BOOKMARK_ANALYSIS);
-  });
-
-  test('analyze my taste → bookmark_analysis', () => {
-    assert.equal(classifyIntent('analyze my taste').intent, INTENTS.BOOKMARK_ANALYSIS);
-  });
-
-  test('bookmark list → bookmark_analysis', () => {
-    assert.equal(classifyIntent('show my bookmark list').intent, INTENTS.BOOKMARK_ANALYSIS);
-  });
-
-  test('bookmark_analysis is recommendation mode (not query)', () => {
-    assert.equal(classifyIntent('my bookmarks').mode, MODES.RECOMMENDATION);
-  });
-
-  test('analyze my taste and recommend a game → bookmark_analysis, not mixed', () => {
-    const plan = classifyIntent('analyze my taste and recommend a game');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('what is my game taste → bookmark_analysis', () => {
-    const plan = classifyIntent('what is my game taste');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('summarize my taste → bookmark_analysis', () => {
-    const plan = classifyIntent('summarize my taste');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('what kind of gamer am I → bookmark_analysis', () => {
-    const plan = classifyIntent('what kind of gamer am I');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('based on my bookmarks suggest a game → bookmark_analysis, not mixed', () => {
-    const plan = classifyIntent('based on my bookmarks suggest a game');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
+    test("always returns constraints object with all fields", () => {
+      const result = extractEntitiesAndConstraints("test message");
+      assert.ok(result.constraints);
+      assert.ok(result.constraints.hasOwnProperty("mood"));
+      assert.ok(result.constraints.hasOwnProperty("hardware"));
+      assert.ok(result.constraints.hasOwnProperty("platform"));
+      assert.ok(result.constraints.hasOwnProperty("playStyle"));
+      assert.ok(result.constraints.hasOwnProperty("difficulty"));
+      assert.ok(result.constraints.hasOwnProperty("sessionLength"));
+      assert.ok(result.constraints.hasOwnProperty("feedbackDirection"));
+      assert.ok(result.constraints.hasOwnProperty("excludedGenres"));
+      assert.ok(result.constraints.hasOwnProperty("preferredGenres"));
+      assert.ok(result.constraints.hasOwnProperty("excludedTags"));
+      assert.ok(result.constraints.hasOwnProperty("preferredTags"));
+    });
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Suite 3 — Mixed mode
+// Suite 2 — classifyIntent Layer 1 behavior detection
 // ─────────────────────────────────────────────────────────────────────────────
-describe('classifyIntent — Mixed mode', () => {
 
-  const EXPECTED_MIXED_PLAN = {
-    intent:              INTENTS.MIXED_QUERY_RECOMMENDATION,
-    mode:                MODES.MIXED,
-    needsDatabase:       true,
-    needsUserProfile:    true,
-    needsRecommendation: true,
-    needsValidation:     true,
-    dataSources:         ['platform_posts', 'community_signals', 'user_bookmarks', 'user_profile'],
-    executionOrder:      ['query_first', 'recommend_second'],
-    responseStyle:       'facts_then_recommendation',
-  };
-
-  test('show trending games and recommend one for me → mixed', () => {
-    assertPlan(classifyIntent('Show trending games and recommend one for me'), EXPECTED_MIXED_PLAN);
+describe("classifyIntent — Layer 1 behavior detection", () => {
+  test("detects DISCOVERY", () => {
+    const result = classifyIntent("show me some games");
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.DISCOVERY));
   });
 
-  test('find top-rated games and suggest one based on my bookmarks → mixed', () => {
-    assertPlan(
-      classifyIntent('Find top-rated games and suggest one based on my bookmarks'),
-      EXPECTED_MIXED_PLAN,
-    );
+  test("detects RANKING", () => {
+    const result = classifyIntent("What are the trending games?");
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.RANKING));
   });
 
-  test('list popular games and tell me which one I should play → mixed', () => {
-    assertPlan(classifyIntent('List popular games and tell me which one I should play'), EXPECTED_MIXED_PLAN);
+  test("detects RECOMMENDATION", () => {
+    const result = classifyIntent("Can you recommend a game?");
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.RECOMMENDATION));
   });
 
-  test('find low-rated games and suggest something better for me → mixed', () => {
-    assertPlan(classifyIntent('find low-rated games and suggest something better for me'), EXPECTED_MIXED_PLAN);
+  test("detects PERSONALIZATION", () => {
+    const result = classifyIntent("What games match my taste?");
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.PERSONALIZATION));
   });
 
-  test('show community favorites and recommend one based on my taste → mixed', () => {
-    assertPlan(
-      classifyIntent('show community favorites and recommend one based on my taste'),
-      EXPECTED_MIXED_PLAN,
-    );
+  test("detects ACTION_ENGAGEMENT", () => {
+    const result = classifyIntent("Save this game to my bookmarks");
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.ACTION_ENGAGEMENT));
   });
 
-  test('analyze community trends and suggest a game for me → mixed', () => {
-    assertPlan(classifyIntent('analyze community trends and suggest a game for me'), EXPECTED_MIXED_PLAN);
-  });
-
-  test('mixed confidence is signal_match', () => {
-    const plan = classifyIntent('show popular games and recommend one for me');
-    assert.equal(plan.confidence, 'signal_match');
-  });
-
-  test('mixed needsDatabase is true', () => {
-    assert.equal(classifyIntent('list trending games and suggest one for me').needsDatabase, true);
-  });
-
-  test('mixed needsUserProfile is true', () => {
-    assert.equal(classifyIntent('show top-rated games and recommend based on my preference').needsUserProfile, true);
-  });
-
-  test('mixed executionOrder runs query first', () => {
-    const plan = classifyIntent('show trending and recommend for me');
-    assert.equal(plan.executionOrder[0], 'query_first');
-    assert.equal(plan.executionOrder[1], 'recommend_second');
+  test("detects GENERAL_CHAT for greeting", () => {
+    const result = classifyIntent("Hello!");
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.GENERAL_CHAT));
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Suite 4 — General Chat mode
+// Suite 3 — classifyIntent Layer 2 intent detection
 // ─────────────────────────────────────────────────────────────────────────────
-describe('classifyIntent — General Chat mode', () => {
 
-  const EXPECTED_CHAT_PLAN = {
-    intent:              INTENTS.GENERAL_CHAT,
-    mode:                MODES.GENERAL_CHAT,
-    needsDatabase:       false,
-    needsUserProfile:    false,
-    needsRecommendation: false,
-    needsValidation:     false,
-    dataSources:         [],
-    executionOrder:      ['short_guidance'],
-    responseStyle:       'general_guidance',
-  };
-
-  test('"Hello" → general_chat, needsDatabase false', () => {
-    assertPlan(classifyIntent('Hello'), EXPECTED_CHAT_PLAN);
+describe("classifyIntent — Layer 2 intent detection", () => {
+  test("detects CONTEXT_BASED_RECOMMENDATION", () => {
+    const result = classifyIntent("Recommend relaxing games for the weekend");
+    assert.equal(result.layer2Intent, LAYER2_INTENTS.CONTEXT_BASED_RECOMMENDATION);
   });
 
-  test('"hi" → general_chat', () => {
-    assertPlan(classifyIntent('hi'), EXPECTED_CHAT_PLAN);
+  test("detects SIMILAR_GAME_DISCOVERY", () => {
+    const result = classifyIntent("Games like Elden Ring");
+    assert.equal(result.layer2Intent, LAYER2_INTENTS.SIMILAR_GAME_DISCOVERY);
   });
 
-  test('"hey!" → general_chat', () => {
-    assertPlan(classifyIntent('hey!'), EXPECTED_CHAT_PLAN);
+  test("detects COMPARE_GAMES", () => {
+    const result = classifyIntent("Which is better: Elden Ring or Sekiro?");
+    assert.equal(result.layer2Intent, LAYER2_INTENTS.COMPARE_GAMES);
   });
 
-  test('"Thanks" → general_chat', () => {
-    assertPlan(classifyIntent('Thanks'), EXPECTED_CHAT_PLAN);
+  test("detects RECOMMENDATION_EXPLANATION", () => {
+    const result = classifyIntent("Why did you recommend this game?");
+    assert.equal(result.layer2Intent, LAYER2_INTENTS.RECOMMENDATION_EXPLANATION);
   });
 
-  test('"thank you" → general_chat', () => {
-    assertPlan(classifyIntent('thank you'), EXPECTED_CHAT_PLAN);
+  test("detects TASTE_PROFILE_ANALYSIS", () => {
+    const result = classifyIntent("Analyze my bookmarks and summarize my taste");
+    assert.equal(result.layer2Intent, LAYER2_INTENTS.TASTE_PROFILE_ANALYSIS);
   });
 
-  test('"help" → general_chat', () => {
-    assertPlan(classifyIntent('help'), EXPECTED_CHAT_PLAN);
+  test("detects GAME_DETAIL_QUERY", () => {
+    const result = classifyIntent("Tell me about this game");
+    assert.equal(result.layer2Intent, LAYER2_INTENTS.GAME_DETAIL_QUERY);
   });
 
-  test('"What can you do?" → general_chat', () => {
-    assertPlan(classifyIntent('What can you do?'), EXPECTED_CHAT_PLAN);
-  });
-
-  test('"How does Nova work?" → general_chat', () => {
-    assertPlan(classifyIntent('How does Nova work?'), EXPECTED_CHAT_PLAN);
-  });
-
-  test('"What can I ask you?" → general_chat', () => {
-    assertPlan(classifyIntent('What can I ask you?'), EXPECTED_CHAT_PLAN);
-  });
-
-  test('"Tell me about this platform." → general_chat', () => {
-    assertPlan(classifyIntent('Tell me about this platform.'), EXPECTED_CHAT_PLAN);
-  });
-
-  test('unrecognised message falls back to general_chat', () => {
-    const plan = classifyIntent('blah blah xyz 12345');
-    assertPlan(plan, EXPECTED_CHAT_PLAN);
-  });
-
-  test('fallback confidence is default', () => {
-    assert.equal(classifyIntent('some random unknown message').confidence, 'default');
-  });
-
-  test('general_chat needsDatabase is false (never queries MongoDB)', () => {
-    assert.equal(classifyIntent('hi there').needsDatabase, false);
-  });
-
-  test('empty string falls back to general_chat', () => {
-    assertPlan(classifyIntent(''), EXPECTED_CHAT_PLAN);
-  });
-
-  test('null input falls back to general_chat', () => {
-    assertPlan(classifyIntent(null), EXPECTED_CHAT_PLAN);
+  test("detects FOLLOW_UP_ACTION", () => {
+    const result = classifyIntent("Bookmark this game");
+    assert.equal(result.layer2Intent, LAYER2_INTENTS.FOLLOW_UP_ACTION);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Suite 5 — Chinese routing coverage
+// Suite 4 — classifyIntent mode resolution
 // ─────────────────────────────────────────────────────────────────────────────
-describe('classifyIntent — Chinese intent coverage', () => {
-  test('查看社区的高分评价游戏 → leaderboard_query', () => {
-    const plan = classifyIntent('查看社区的高分评价游戏');
-    assert.equal(plan.intent, INTENTS.LEADERBOARD_QUERY);
-    assert.equal(plan.mode, MODES.QUERY);
-    assert.equal(plan.needsDatabase, true);
+
+describe("classifyIntent — mode resolution", () => {
+  test("resolves GENERAL_CHAT mode for greeting", () => {
+    const result = classifyIntent("Hi there!");
+    assert.equal(result.mode, MODES.GENERAL_CHAT);
   });
 
-  test('查看社区低分游戏 → low_rating_query', () => {
-    const plan = classifyIntent('查看社区低分游戏');
-    assert.equal(plan.intent, INTENTS.LOW_RATING_QUERY);
-    assert.equal(plan.mode, MODES.QUERY);
-    assert.equal(plan.needsDatabase, true);
+  test("resolves DISCOVERY mode", () => {
+    const result = classifyIntent("Show me games");
+    assert.equal(result.mode, MODES.DISCOVERY);
   });
 
-  test('总结社区热门趋势 → community_summary', () => {
-    const plan = classifyIntent('总结社区热门趋势');
-    assert.equal(plan.intent, INTENTS.COMMUNITY_SUMMARY);
-    assert.equal(plan.mode, MODES.QUERY);
+  test("resolves RECOMMENDATION mode", () => {
+    const result = classifyIntent("Recommend me a game");
+    assert.equal(result.mode, MODES.RECOMMENDATION);
   });
 
-  test('推荐三款适合我的游戏 → game_recommendation', () => {
-    const plan = classifyIntent('推荐三款适合我的游戏');
-    assert.equal(plan.intent, INTENTS.GAME_RECOMMENDATION);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  test("resolves RANKING mode", () => {
+    const result = classifyIntent("Show top-rated games");
+    assert.equal(result.mode, MODES.RANKING);
   });
 
-  test('根据我的收藏推荐游戏 → bookmark_analysis', () => {
-    const plan = classifyIntent('根据我的收藏推荐游戏');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('查看我的收藏夹推荐 → bookmark_analysis, not mixed', () => {
-    const plan = classifyIntent('查看我的收藏夹推荐');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('我的游戏品味如何 → bookmark_analysis', () => {
-    const plan = classifyIntent('我的游戏品味如何');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('我的品味如何 → bookmark_analysis', () => {
-    const plan = classifyIntent('我的品味如何');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('我是怎样的玩家 → bookmark_analysis', () => {
-    const plan = classifyIntent('我是怎样的玩家');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('我的口味如何 → bookmark_analysis', () => {
-    const plan = classifyIntent('我的口味如何');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('我适合什么类型游戏 → bookmark_analysis', () => {
-    const plan = classifyIntent('我适合什么类型游戏');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('分析我的游戏品味 → bookmark_analysis', () => {
-    const plan = classifyIntent('分析我的游戏品味');
-    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
-    assert.equal(plan.mode, MODES.RECOMMENDATION);
-  });
-
-  test('查看热门游戏并推荐一个给我 → mixed_query_recommendation', () => {
-    const plan = classifyIntent('查看热门游戏并推荐一个给我');
-    assert.equal(plan.intent, INTENTS.MIXED_QUERY_RECOMMENDATION);
-    assert.equal(plan.mode, MODES.MIXED);
-  });
-
-  test('列出平台所有游戏 → platform_inventory_query', () => {
-    const plan = classifyIntent('列出平台所有游戏');
-    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
-    assert.equal(plan.mode, MODES.QUERY);
+  test("resolves mode based on primary behavior (even with multiple behaviors detected)", () => {
+    const result = classifyIntent("Show trending games and recommend one for me");
+    // Multiple behaviors (RANKING, RECOMMENDATION, DISCOVERY, PERSONALIZATION) are detected,
+    // but mode follows primaryBehavior (PERSONALIZATION based on priority)
+    assert.equal(result.mode, MODES.PERSONALIZATION);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Suite 5 — Misclassification prevention
+// Suite 5 — classifyIntent confidence levels
 // ─────────────────────────────────────────────────────────────────────────────
-describe('classifyIntent — Misclassification prevention', () => {
 
-  // Platform inventory queries must not be classified as recommendations.
-  test('"find all games on the platform" → NOT game_recommendation', () => {
-    const plan = classifyIntent('find all games on the platform');
-    assert.notEqual(plan.intent, INTENTS.GAME_RECOMMENDATION);
-    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
+describe("classifyIntent — confidence levels", () => {
+  test("returns default confidence for empty message", () => {
+    const result = classifyIntent("");
+    assert.equal(result.confidence, "default");
   });
 
-  test('"show every game available" → platform_inventory_query, not recommendation', () => {
-    const plan = classifyIntent('show every game available');
-    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
-    assert.equal(plan.mode,   MODES.QUERY);
+  test("returns pattern_match confidence for Layer 1 detection", () => {
+    const result = classifyIntent("Show me games");
+    assert.equal(result.confidence, "pattern_match");
   });
 
-  test('"list all available titles on the platform" → platform_inventory_query', () => {
-    assert.equal(
-      classifyIntent('list all available titles on the platform').intent,
-      INTENTS.PLATFORM_INVENTORY_QUERY,
-    );
-  });
-
-  // Bookmark queries must be recommendation mode, not query mode.
-  test('"my bookmark list" → RECOMMENDATION mode, not QUERY', () => {
-    assert.equal(classifyIntent('my bookmark list').mode, MODES.RECOMMENDATION);
-  });
-
-  // Leaderboard query must not trigger recommendation mode.
-  test('"top-rated games" alone → leaderboard_query, not recommendation', () => {
-    const plan = classifyIntent('top-rated games');
-    assert.equal(plan.intent, INTENTS.LEADERBOARD_QUERY);
-    assert.equal(plan.mode,   MODES.QUERY);
-    assert.equal(plan.needsRecommendation, false);
-  });
-
-  // Trending alone must not trigger recommendation mode.
-  test('"trending games" alone → community_summary, not recommendation', () => {
-    const plan = classifyIntent('trending games');
-    assert.equal(plan.intent, INTENTS.COMMUNITY_SUMMARY);
-    assert.equal(plan.mode,   MODES.QUERY);
-    assert.equal(plan.needsRecommendation, false);
-  });
-
-  // "recommend" alone must not trigger a query (no database-only path).
-  test('"recommend me a game" → recommendation, needsUserProfile true', () => {
-    const plan = classifyIntent('recommend me a game');
-    assert.equal(plan.mode,            MODES.RECOMMENDATION);
-    assert.equal(plan.needsUserProfile, true);
-  });
-
-  // Mixed must win over pure query when both signals are present.
-  test('"show popular games and recommend for me" → mixed, not community_summary', () => {
-    const plan = classifyIntent('show popular games and recommend for me');
-    assert.equal(plan.mode,   MODES.MIXED);
-    assert.equal(plan.intent, INTENTS.MIXED_QUERY_RECOMMENDATION);
-  });
-
-  // Mixed must win over pure recommendation when both signals are present.
-  test('"find top-rated and suggest one for me" → mixed, not game_recommendation', () => {
-    const plan = classifyIntent('find top-rated and suggest one for me');
-    assert.equal(plan.mode,   MODES.MIXED);
-    assert.equal(plan.intent, INTENTS.MIXED_QUERY_RECOMMENDATION);
-  });
-
-  // "find me games to play" must be recommendation, not platform inventory.
-  test('"find me games to play" → game_recommendation, not platform_inventory_query', () => {
-    const plan = classifyIntent('find me games to play');
-    assert.equal(plan.intent, INTENTS.GAME_RECOMMENDATION);
-    assert.notEqual(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
-  });
-
-  // General chat must not reach the database even if "game" is mentioned.
-  test('"what can you do with games?" → general_chat, needsDatabase false', () => {
-    const plan = classifyIntent('what can you do with games?');
-    assert.equal(plan.mode,         MODES.GENERAL_CHAT);
-    assert.equal(plan.needsDatabase, false);
+  test("returns layer2_match confidence when Layer 2 intent detected", () => {
+    const result = classifyIntent("Games like Stardew Valley");
+    assert.equal(result.confidence, "layer2_match");
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Suite 6 — Backward compatibility
+// Suite 6 — classifyIntent extracted entities and constraints
 // ─────────────────────────────────────────────────────────────────────────────
-describe('classifyIntent — Backward compatibility', () => {
 
-  test('always returns an intent field', () => {
-    const messages = [
-      'recommend a game',
-      'show all games',
-      'hello',
-      'show trending and recommend for me',
-      'unknown message xyz',
+describe("classifyIntent — extracted entities and constraints", () => {
+  test("includes extracted entities in result", () => {
+    const result = classifyIntent('Recommend games like "Portal 2" for PC');
+    assert.ok(result.entities.games.includes("Portal 2"));
+    assert.ok(result.entities.platforms.includes("pc"));
+  });
+
+  test("includes extracted constraints in result", () => {
+    const result = classifyIntent("short, beginner-friendly PC games for the weekend");
+    assert.equal(result.constraints.difficulty, "beginner_friendly");
+    assert.equal(result.constraints.sessionLength, "weekend_session");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite 7 — classifyIntent edge cases
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("classifyIntent — edge cases", () => {
+  test("handles null message gracefully", () => {
+    const result = classifyIntent(null);
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.GENERAL_CHAT));
+  });
+
+  test("handles whitespace-only message", () => {
+    const result = classifyIntent("   ");
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.GENERAL_CHAT));
+  });
+
+  test("handles unrecognized message", () => {
+    const result = classifyIntent("xyz abc 123 !@#$%");
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.GENERAL_CHAT));
+    assert.equal(result.confidence, "default");
+  });
+
+  test("case-insensitive matching", () => {
+    const result1 = classifyIntent("SHOW ME GAMES");
+    const result2 = classifyIntent("show me games");
+    assert.deepEqual(result1.layer1Behaviors, result2.layer1Behaviors);
+  });
+
+  test("handles Chinese language input", () => {
+    const result = classifyIntent("推荐一些放松的游戏");
+    assert.ok(result.layer1Behaviors.includes(LAYER1_BEHAVIORS.RECOMMENDATION));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite 8 — classifyIntent return structure validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("classifyIntent — return structure validation", () => {
+  test("returns all required fields", () => {
+    const result = classifyIntent("Recommend a game");
+    const requiredFields = [
+      "routerVersion",
+      "layer1Behaviors",
+      "primaryBehavior",
+      "layer2Intent",
+      "mode",
+      "confidence",
+      "needsDatabase",
+      "needsUserProfile",
+      "needsRecommendation",
+      "needsValidation",
+      "needsAction",
+      "dataSources",
+      "executionOrder",
+      "responseStyle",
+      "entities",
+      "constraints",
     ];
-    for (const msg of messages) {
-      const plan = classifyIntent(msg);
-      assert.ok(plan.intent, `Expected intent field for message: "${msg}"`);
+    for (const field of requiredFields) {
+      assert.ok(result.hasOwnProperty(field), `Missing field: ${field}`);
     }
   });
 
-  test('always returns a confidence field', () => {
-    const plan = classifyIntent('recommend games like Zelda');
-    assert.ok(['pattern_match', 'signal_match', 'default'].includes(plan.confidence));
+  test("entities object has correct structure", () => {
+    const result = classifyIntent("Recommend RPG games");
+    assert.ok(Array.isArray(result.entities.games));
+    assert.ok(Array.isArray(result.entities.genres));
+    assert.ok(Array.isArray(result.entities.platforms));
+    assert.ok(Array.isArray(result.entities.tags));
+    assert.ok(Array.isArray(result.entities.actions));
   });
 
-  test('pattern_match confidence for recognised single-intent', () => {
-    assert.equal(classifyIntent('recommend a game').confidence, 'pattern_match');
+  test("constraints object has correct structure", () => {
+    const result = classifyIntent("short PC games");
+    assert.ok(result.constraints.hasOwnProperty("mood"));
+    assert.ok(result.constraints.hasOwnProperty("hardware"));
+    assert.ok(result.constraints.hasOwnProperty("platform"));
+    assert.ok(result.constraints.hasOwnProperty("playStyle"));
+    assert.ok(result.constraints.hasOwnProperty("difficulty"));
+    assert.ok(result.constraints.hasOwnProperty("sessionLength"));
+    assert.ok(result.constraints.hasOwnProperty("feedbackDirection"));
+    assert.ok(Array.isArray(result.constraints.excludedGenres));
+    assert.ok(Array.isArray(result.constraints.preferredGenres));
+    assert.ok(Array.isArray(result.constraints.excludedTags));
+    assert.ok(Array.isArray(result.constraints.preferredTags));
   });
 
-  test('signal_match confidence for mixed intent', () => {
-    assert.equal(classifyIntent('list popular games and recommend for me').confidence, 'signal_match');
+  test("dataSources is always an array", () => {
+    const result = classifyIntent("Recommend me a game");
+    assert.ok(Array.isArray(result.dataSources));
   });
 
-  test('default confidence for unrecognised input', () => {
-    assert.equal(classifyIntent('xyzzy frobble wibble').confidence, 'default');
+  test("executionOrder is always an array", () => {
+    const result = classifyIntent("Show me games");
+    assert.ok(Array.isArray(result.executionOrder));
   });
 });

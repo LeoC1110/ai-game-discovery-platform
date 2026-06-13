@@ -8,7 +8,9 @@ import {
   __test__,
 } from '../answerAgent.js';
 
-import { INTENTS } from '../routerAgent.js';
+import { LAYER2_INTENTS } from '../routerAgent.js';
+
+const { INTENTS } = __test__;
 
 test('buildSystemPrompt includes Nova identity, platform data, and user memory context', () => {
   const prompt = __test__.buildSystemPrompt({
@@ -72,6 +74,123 @@ test('buildModeRulesPrompt limits mixed trending summaries to five items', () =>
 
   assert.match(prompt, /summarize only the 5 hottest relevant platform games/);
   assert.match(prompt, /avoid repeating titles already shown/);
+});
+
+test('buildSystemPrompt includes router signals when new plan fields are present', () => {
+  const prompt = __test__.buildSystemPrompt({
+    intent: INTENTS.GAME_RECOMMENDATION,
+    plan: {
+      intent: INTENTS.GAME_RECOMMENDATION,
+      layer1Behaviors: ['recommendation', 'personalization'],
+      primaryBehavior: 'personalization',
+      layer2Intent: LAYER2_INTENTS.CONTEXT_BASED_RECOMMENDATION,
+      entities: {
+        games: ['Portal 2'],
+        genres: ['puzzle'],
+        platforms: ['pc'],
+      },
+      constraints: {
+        mood: 'relaxing',
+        platform: 'pc',
+        sessionLength: 'short_session',
+        excludedGenres: ['horror'],
+        preferredGenres: ['puzzle'],
+        feedbackDirection: 'prefer',
+      },
+    },
+    platformData: 'Game: Portal 2',
+  });
+
+  assert.match(prompt, /--- Router Signals ---/);
+  assert.match(prompt, /Layer 2 Intent: context_based_recommendation/);
+  assert.match(prompt, /Reference Games: Portal 2/);
+  assert.match(prompt, /Detected Genres: puzzle/);
+  assert.match(prompt, /Detected Platforms: pc/);
+  assert.match(prompt, /Constraint Mood: relaxing/);
+  assert.match(prompt, /Constraint Platform: pc/);
+  assert.match(prompt, /Constraint Session Length: short_session/);
+  assert.match(prompt, /Excluded Genres: horror/);
+  assert.match(prompt, /Preferred Genres: puzzle/);
+  assert.match(prompt, /Feedback Direction: prefer/);
+});
+
+test('buildLayer2IntentRulesPrompt adds context-based recommendation constraint usage', () => {
+  const prompt = __test__.buildLayer2IntentRulesPrompt({
+    layer2Intent: LAYER2_INTENTS.CONTEXT_BASED_RECOMMENDATION,
+  });
+
+  assert.match(prompt, /context_based_recommendation/);
+  assert.match(prompt, /Use Router Signals constraints/);
+  assert.match(prompt, /prioritize explicit exclusions first/);
+});
+
+test('buildLayer2IntentRulesPrompt uses entities.games for similar game discovery', () => {
+  const prompt = __test__.buildLayer2IntentRulesPrompt({
+    layer2Intent: LAYER2_INTENTS.SIMILAR_GAME_DISCOVERY,
+  });
+
+  assert.match(prompt, /similar_game_discovery/);
+  assert.match(prompt, /Use entities\.games/);
+  assert.match(prompt, /reference game/);
+});
+
+test('buildLayer2IntentRulesPrompt compares entities.games for compare_games', () => {
+  const prompt = __test__.buildLayer2IntentRulesPrompt({
+    layer2Intent: LAYER2_INTENTS.COMPARE_GAMES,
+  });
+
+  assert.match(prompt, /compare_games/);
+  assert.match(prompt, /Compare the games listed in entities\.games directly/);
+  assert.match(prompt, /trade-offs/);
+});
+
+test('buildLayer2IntentRulesPrompt focuses on bookmarks for taste profile analysis', () => {
+  const prompt = __test__.buildLayer2IntentRulesPrompt({
+    layer2Intent: LAYER2_INTENTS.TASTE_PROFILE_ANALYSIS,
+  });
+
+  assert.match(prompt, /taste_profile_analysis/);
+  assert.match(prompt, /Focus primarily on bookmarks and user profile signals/);
+});
+
+test('buildLayer2IntentRulesPrompt explains recommendation fit for recommendation explanation', () => {
+  const prompt = __test__.buildLayer2IntentRulesPrompt({
+    layer2Intent: LAYER2_INTENTS.RECOMMENDATION_EXPLANATION,
+  });
+
+  assert.match(prompt, /recommendation_explanation/);
+  assert.match(prompt, /fits the user/);
+  assert.match(prompt, /bookmarks/);
+});
+
+test('buildLayer2IntentRulesPrompt acknowledges preference updates for refinement', () => {
+  const prompt = __test__.buildLayer2IntentRulesPrompt({
+    layer2Intent: LAYER2_INTENTS.REFINE_RECOMMENDATIONS,
+  });
+
+  assert.match(prompt, /refine_recommendations/);
+  assert.match(prompt, /preferences were updated/);
+  assert.match(prompt, /what will be avoided and what will be prioritized/);
+});
+
+test('buildLayer2IntentRulesPrompt handles specific game detail queries', () => {
+  const prompt = __test__.buildLayer2IntentRulesPrompt({
+    layer2Intent: LAYER2_INTENTS.GAME_DETAIL_QUERY,
+  });
+
+  assert.match(prompt, /game_detail_query/);
+  assert.match(prompt, /specific game in entities\.games/);
+  assert.match(prompt, /ask a short clarifying question/);
+});
+
+test('buildLayer2IntentRulesPrompt returns action confirmation guidance for follow up actions', () => {
+  const prompt = __test__.buildLayer2IntentRulesPrompt({
+    layer2Intent: LAYER2_INTENTS.FOLLOW_UP_ACTION,
+  });
+
+  assert.match(prompt, /follow_up_action/);
+  assert.match(prompt, /action-oriented confirmation or the next clear step/);
+  assert.match(prompt, /Do not claim an action was executed unless/);
 });
 
 test('buildIntentRulesPrompt loads low-rating rules', () => {
