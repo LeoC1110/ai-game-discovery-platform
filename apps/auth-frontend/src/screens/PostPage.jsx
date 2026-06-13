@@ -327,7 +327,7 @@ export default function PostPage() {
                     onClick={goToStep2}
                     disabled={!canContinueToStep2}
                   >
-                    Continue to Recommendation
+                    Continue
                   </button>
                 </div>
               </div>
@@ -431,7 +431,7 @@ export default function PostPage() {
 
                 <div className="post-form__footer">
                   <button className={`btn-primary ${loading ? 'is-loading' : ''}`} type="submit" disabled={loading} aria-busy={loading} style={{ flex: 1 }}>
-                    {loading ? 'Publishing…' : 'Publish Recommendation'}
+                    {loading ? 'Publishing…' : 'Publish'}
                   </button>
                   <button
                     type="button"

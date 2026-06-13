@@ -48,9 +48,14 @@ const RECOMMENDATION_INTENTS = new Set([
 // the normal first-match pattern loop runs.
 
 const QUERY_SIGNAL_PATTERNS = [
-  /\b(show|find|list|display|summarize|analyse|analyze)\b/i,
+  /\b(show|find|list|display|summarize)\b/i,
+  /\b(analyse|analyze)\b.*\b(community|trend|trending|rating|rated|leaderboard|popular|liked|bookmarked)\b/i,
   /\b(trending|popular|top[\s-]?rated|low[\s-]?rated|most\s+liked|most\s+bookmarked)\b/i,
+  /\b(another|next|more)\s+(batch|set|group|five|5)\b/i,
+  /\bshow\s+more\b/i,
   /\bcommunity\b/i,
+  /(查看|显示|列出|总结|社区|热门|趋势|高分|低分|评分|排行榜|榜单|换一批|下一批|再来一批)/,
+  /分析.*(社区|趋势|评分|榜单|排行榜)/,
 ];
 
 const RECOMMENDATION_SIGNAL_PATTERNS = [
@@ -60,6 +65,7 @@ const RECOMMENDATION_SIGNAL_PATTERNS = [
   /\bwhat\s+should\s+i\s+play\b/i,
   /\bwhich\s+one\s+(should\s+i|i\s+should)\s+play\b/i,
   /\btell\s+me\s+which\s+one\s+(to|i\s+should)\s+play\b/i,
+  /(推荐|建议|适合我|玩什么|根据我的收藏|根据我的口味)/,
 ];
 
 const GENERAL_CHAT_PATTERNS = [
@@ -70,6 +76,29 @@ const GENERAL_CHAT_PATTERNS = [
   /\bhow\s+does\s+nova\s+work\b/i,
   /\bwhat\s+can\s+i\s+ask\b/i,
   /\btell\s+me\s+about\s+(this\s+)?platform\b/i,
+];
+
+const PROFILE_ONLY_PATTERNS = [
+  /\banaly[sz]e\s+my\s+(taste|preferences?|profile)\b/i,
+  /\b(summarize|summarise|describe)\s+my\s+(game\s+)?(taste|preferences?|profile)\b/i,
+  /\bwhat\s+(is|'s)\s+my\s+(game\s+)?(taste|preference|profile)\b/i,
+  /\bwhat\s+kind\s+of\s+gamer\s+am\s+i\b/i,
+  /\bwhat\s+does\s+my\s+(game\s+)?taste\s+say\s+about\s+me\b/i,
+  /\bwhat\s+games?\s+have\s+i\s+saved\b/i,
+  /\bshow\s+my\s+bookmark\s+list\b/i,
+  /^\s*recommend\s+based\s+on\s+my\s+bookmarks?\b/i,
+  /^\s*based\s+on\s+my\s+(bookmarks?|taste|preference)\b/i,
+  /查看.*我的收藏夹.*推荐/,
+  /根据我的收藏.*推荐/,
+  /我的游戏品味如何/,
+  /我的游戏品味怎么样/,
+  /我的品味如何/,
+  /我的品味怎么样/,
+  /我的口味如何/,
+  /我适合什么类型游戏/,
+  /我是怎样的玩家/,
+  /我是什么样的玩家/,
+  /分析我的游戏品味/,
 ];
 
 /**
@@ -94,6 +123,10 @@ function hasRecommendationSignal(msg) {
  */
 function hasGeneralChatSignal(msg) {
   return GENERAL_CHAT_PATTERNS.some((re) => re.test(msg));
+}
+
+function hasProfileOnlySignal(msg) {
+  return PROFILE_ONLY_PATTERNS.some((re) => re.test(msg));
 }
 
 /**
@@ -188,11 +221,16 @@ const INTENT_PATTERNS = [
       /\b(show|find|list|display|get)\b.*\b(all|every|available)\b.*\b(game|games|title|titles)\b/i,
       /\b(all|every|available)\b.*\b(game|games|title|titles)\b.*\b(platform|community)\b/i,
       /\bwhat\s+games\b.*\b(platform|available|listed)\b/i,
-      /\bgames\s+(in|on)\s+(the\s+)?platform\b/i,
+      /\b(show|list|get)\s+(more|another|next)\b.*\b(platform\s+)?games\b/i,
+      /\b(next|another)\s+(batch|set|group)\s+of\s+(platform\s+)?games\b/i,
+      /^(?!.*\b(low[\s-]?rated|lowest[\s-]?rated|worst[\s-]?rated|worst|bottom\s+rated|poorly\s+rated|top[\s-]?rated|highest[\s-]?rated|trending|popular)\b).*\bgames\s+(in|on)\s+(the\s+)?platform\b/i,
       /\blist\s+(the\s+)?platform\s+games\b/i,
       /\bshow\s+(the\s+)?platform\s+games\b/i,
       /\bfind\s+(the\s+)?platform\s+games\b/i,
       /\bavailable\s+games\b/i,
+      /(换一批|下一批|再来一批).*(平台)?游戏/,
+      /(查看|显示|列出).*(全部|所有).*(游戏|标题)/,
+      /(平台|社区).*(有哪些|有什么).*(游戏|标题)/,
     ],
   },
 
@@ -206,6 +244,9 @@ const INTENT_PATTERNS = [
       /worst\s+game/i,
       /bottom\s+rated/i,
       /poorly\s+rated/i,
+      /低分/,
+      /评分低/,
+      /口碑差/,
     ],
   },
 
@@ -218,6 +259,10 @@ const INTENT_PATTERNS = [
       /best\s+game/i,
       /\#?1\s+game/i,
       /rank(ing)?/i,
+      /高分/,
+      /评分最高/,
+      /排行榜/,
+      /榜单/,
     ],
   },
 
@@ -231,6 +276,15 @@ const INTENT_PATTERNS = [
       /what.*people.*play(ing)?/i,
       /latest\s+review/i,
       /community\s+pick/i,
+      /\b(another|next|more)\s+(batch|set|group|five|5)\b/i,
+      /\bshow\s+more\b/i,
+      /社区/,
+      /热门/,
+      /趋势/,
+      /最多点赞/,
+      /换一批/,
+      /下一批/,
+      /再来一批/,
     ],
   },
 
@@ -247,6 +301,22 @@ const INTENT_PATTERNS = [
       /games?\s+i.*saved/i,
       /analyse.*my\s+taste/i,
       /analyze.*my\s+taste/i,
+      /(summarize|summarise|describe).*my\s+(game\s+)?(taste|preferences?|profile)/i,
+      /what\s+kind\s+of\s+gamer\s+am\s+i/i,
+      /what\s+does\s+my\s+(game\s+)?taste\s+say\s+about\s+me/i,
+      /收藏/,
+      /已保存/,
+      /我的列表/,
+      /分析.*口味/,
+      /我的游戏品味如何/,
+      /我的游戏品味怎么样/,
+      /我的品味如何/,
+      /我的品味怎么样/,
+      /我的口味如何/,
+      /我适合什么类型游戏/,
+      /我是怎样的玩家/,
+      /我是什么样的玩家/,
+      /分析我的游戏品味/,
     ],
   },
 
@@ -262,6 +332,12 @@ const INTENT_PATTERNS = [
       /games?\s+like/i,
       /i\s+like\b/i,
       /match.*my\s+taste/i,
+      /推荐/,
+      /建议/,
+      /玩什么/,
+      /适合我/,
+      /类似.*游戏/,
+      /我喜欢/,
 
       // Narrow "find me games" pattern.
       // Intentionally excludes /find.*game/i to avoid catching platform inventory queries.
@@ -274,10 +350,12 @@ const INTENT_PATTERNS = [
  * Classify a user message and return a structured execution plan.
  *
  * Evaluation order:
- *   1. Mixed intent  — checked first via signal co-occurrence.
- *   2. General chat  — checked second so casual messages never reach the DB.
- *   3. Intent table  — first-match pattern loop for Query / Recommendation.
- *   4. Fallback      — GENERAL_CHAT if nothing matches.
+ *   1. Specific profile intent — checked before mixed so bookmark/taste phrases
+ *      are not misclassified by broad query + recommendation signals.
+ *   2. Mixed intent  — checked via signal co-occurrence.
+ *   3. General chat  — checked so casual messages never reach the DB.
+ *   4. Intent table  — first-match pattern loop for Query / Recommendation.
+ *   5. Fallback      — GENERAL_CHAT if nothing matches.
  *
  * @param {string} message
  * @returns {{
@@ -296,23 +374,28 @@ const INTENT_PATTERNS = [
 export function classifyIntent(message) {
   const msg = (message ?? '').trim();
 
-  // 1. Mixed intent — must run before the single-intent pattern table.
+  // 1. Specific profile intent — more precise than mixed signal co-occurrence.
+  if (hasProfileOnlySignal(msg)) {
+    return buildPlan(INTENTS.BOOKMARK_ANALYSIS, 'pattern_match');
+  }
+
+  // 2. Mixed intent — runs before the remaining single-intent pattern table.
   if (isMixedIntent(msg)) {
     return buildPlan(INTENTS.MIXED_QUERY_RECOMMENDATION, 'signal_match');
   }
 
-  // 2. General chat — short-circuit before any DB-touching patterns.
+  // 3. General chat — short-circuit before any DB-touching patterns.
   if (hasGeneralChatSignal(msg)) {
     return buildPlan(INTENTS.GENERAL_CHAT, 'pattern_match');
   }
 
-  // 3. Single-intent pattern table.
+  // 4. Single-intent pattern table.
   for (const { intent, patterns } of INTENT_PATTERNS) {
     if (patterns.some((re) => re.test(msg))) {
       return buildPlan(intent, 'pattern_match');
     }
   }
 
-  // 4. Fallback.
+  // 5. Fallback.
   return buildPlan(INTENTS.GENERAL_CHAT, 'default');
 }

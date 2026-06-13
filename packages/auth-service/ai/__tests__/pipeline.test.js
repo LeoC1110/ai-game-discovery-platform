@@ -22,7 +22,7 @@ import mongoose from 'mongoose';
 mongoose.set('bufferCommands', false);
 
 import { runPipeline } from '../aiPipeline.js';
-import { GREETING_RESPONSE } from '../../prompts/fallbackResponses.js';
+import { CHINESE_GREETING_RESPONSE, GREETING_RESPONSE } from '../../prompts/fallbackResponses.js';
 
 const TEST_USER_ID  = 'pipeline-test-user-000';
 const TEST_USERNAME = 'pipeline_testuser';
@@ -66,14 +66,14 @@ describe('runPipeline — greeting fast-path', () => {
     assert.strictEqual(result.answer, GREETING_RESPONSE);
   });
 
-  test('"你好" returns GREETING_RESPONSE', async () => {
+  test('"你好" returns CHINESE_GREETING_RESPONSE', async () => {
     const result = await runPipeline({ userId: TEST_USER_ID, username: TEST_USERNAME, message: '你好' });
-    assert.strictEqual(result.answer, GREETING_RESPONSE);
+    assert.strictEqual(result.answer, CHINESE_GREETING_RESPONSE);
   });
 
-  test('"nihao" returns GREETING_RESPONSE', async () => {
+  test('"nihao" returns CHINESE_GREETING_RESPONSE', async () => {
     const result = await runPipeline({ userId: TEST_USER_ID, username: TEST_USERNAME, message: 'nihao' });
-    assert.strictEqual(result.answer, GREETING_RESPONSE);
+    assert.strictEqual(result.answer, CHINESE_GREETING_RESPONSE);
   });
 
   test('greeting result has the correct shape', async () => {

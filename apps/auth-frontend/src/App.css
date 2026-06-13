@@ -1479,6 +1479,8 @@ select:focus-visible {
 .agent-message__text {
   margin: 0;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .agent-message__text--muted {
@@ -1487,6 +1489,12 @@ select:focus-visible {
 
 .agent-message__markdown {
   margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.agent-message__markdown * {
+  max-width: 100%;
 }
 
 .agent-message__markdown p {
@@ -1517,6 +1525,15 @@ select:focus-visible {
   border-radius: 3px;
   font-family: monospace;
   font-size: 0.9em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.agent-message__markdown pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .agent-message__subtext {

@@ -74,6 +74,18 @@ describe('classifyIntent — Query mode', () => {
     assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
   });
 
+  test('show the first 10 games on the platform → platform_inventory_query', () => {
+    const plan = classifyIntent('show the first 10 games on the platform');
+    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
+    assert.equal(plan.mode, MODES.QUERY);
+  });
+
+  test('show more platform games → platform_inventory_query', () => {
+    const plan = classifyIntent('show more platform games');
+    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
+    assert.equal(plan.mode, MODES.QUERY);
+  });
+
   // ── LOW_RATING_QUERY ──────────────────────────────────────────────────────
 
   test('find low-rated games → low_rating_query / query', () => {
@@ -88,6 +100,12 @@ describe('classifyIntent — Query mode', () => {
       executionOrder:      ['query'],
       responseStyle:       'factual_list',
     });
+  });
+
+  test('find low-rated games on the platform → low_rating_query', () => {
+    const plan = classifyIntent('find low-rated games on the platform');
+    assert.equal(plan.intent, INTENTS.LOW_RATING_QUERY);
+    assert.equal(plan.mode, MODES.QUERY);
   });
 
   test('show worst rated games → low_rating_query', () => {
@@ -158,6 +176,14 @@ describe('classifyIntent — Query mode', () => {
 
   test('community picks → community_summary', () => {
     assert.equal(classifyIntent('community picks').intent, INTENTS.COMMUNITY_SUMMARY);
+  });
+
+  test('another batch → community_summary', () => {
+    assert.equal(classifyIntent('show another batch').intent, INTENTS.COMMUNITY_SUMMARY);
+  });
+
+  test('换一批 → community_summary', () => {
+    assert.equal(classifyIntent('换一批').intent, INTENTS.COMMUNITY_SUMMARY);
   });
 
   // ── PLATFORM_INVENTORY_QUERY has needsValidation false ───────────────────
@@ -246,6 +272,36 @@ describe('classifyIntent — Recommendation mode', () => {
 
   test('bookmark_analysis is recommendation mode (not query)', () => {
     assert.equal(classifyIntent('my bookmarks').mode, MODES.RECOMMENDATION);
+  });
+
+  test('analyze my taste and recommend a game → bookmark_analysis, not mixed', () => {
+    const plan = classifyIntent('analyze my taste and recommend a game');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('what is my game taste → bookmark_analysis', () => {
+    const plan = classifyIntent('what is my game taste');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('summarize my taste → bookmark_analysis', () => {
+    const plan = classifyIntent('summarize my taste');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('what kind of gamer am I → bookmark_analysis', () => {
+    const plan = classifyIntent('what kind of gamer am I');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('based on my bookmarks suggest a game → bookmark_analysis, not mixed', () => {
+    const plan = classifyIntent('based on my bookmarks suggest a game');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
   });
 });
 
@@ -392,6 +448,97 @@ describe('classifyIntent — General Chat mode', () => {
 
   test('null input falls back to general_chat', () => {
     assertPlan(classifyIntent(null), EXPECTED_CHAT_PLAN);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite 5 — Chinese routing coverage
+// ─────────────────────────────────────────────────────────────────────────────
+describe('classifyIntent — Chinese intent coverage', () => {
+  test('查看社区的高分评价游戏 → leaderboard_query', () => {
+    const plan = classifyIntent('查看社区的高分评价游戏');
+    assert.equal(plan.intent, INTENTS.LEADERBOARD_QUERY);
+    assert.equal(plan.mode, MODES.QUERY);
+    assert.equal(plan.needsDatabase, true);
+  });
+
+  test('查看社区低分游戏 → low_rating_query', () => {
+    const plan = classifyIntent('查看社区低分游戏');
+    assert.equal(plan.intent, INTENTS.LOW_RATING_QUERY);
+    assert.equal(plan.mode, MODES.QUERY);
+    assert.equal(plan.needsDatabase, true);
+  });
+
+  test('总结社区热门趋势 → community_summary', () => {
+    const plan = classifyIntent('总结社区热门趋势');
+    assert.equal(plan.intent, INTENTS.COMMUNITY_SUMMARY);
+    assert.equal(plan.mode, MODES.QUERY);
+  });
+
+  test('推荐三款适合我的游戏 → game_recommendation', () => {
+    const plan = classifyIntent('推荐三款适合我的游戏');
+    assert.equal(plan.intent, INTENTS.GAME_RECOMMENDATION);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('根据我的收藏推荐游戏 → bookmark_analysis', () => {
+    const plan = classifyIntent('根据我的收藏推荐游戏');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('查看我的收藏夹推荐 → bookmark_analysis, not mixed', () => {
+    const plan = classifyIntent('查看我的收藏夹推荐');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('我的游戏品味如何 → bookmark_analysis', () => {
+    const plan = classifyIntent('我的游戏品味如何');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('我的品味如何 → bookmark_analysis', () => {
+    const plan = classifyIntent('我的品味如何');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('我是怎样的玩家 → bookmark_analysis', () => {
+    const plan = classifyIntent('我是怎样的玩家');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('我的口味如何 → bookmark_analysis', () => {
+    const plan = classifyIntent('我的口味如何');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('我适合什么类型游戏 → bookmark_analysis', () => {
+    const plan = classifyIntent('我适合什么类型游戏');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('分析我的游戏品味 → bookmark_analysis', () => {
+    const plan = classifyIntent('分析我的游戏品味');
+    assert.equal(plan.intent, INTENTS.BOOKMARK_ANALYSIS);
+    assert.equal(plan.mode, MODES.RECOMMENDATION);
+  });
+
+  test('查看热门游戏并推荐一个给我 → mixed_query_recommendation', () => {
+    const plan = classifyIntent('查看热门游戏并推荐一个给我');
+    assert.equal(plan.intent, INTENTS.MIXED_QUERY_RECOMMENDATION);
+    assert.equal(plan.mode, MODES.MIXED);
+  });
+
+  test('列出平台所有游戏 → platform_inventory_query', () => {
+    const plan = classifyIntent('列出平台所有游戏');
+    assert.equal(plan.intent, INTENTS.PLATFORM_INVENTORY_QUERY);
+    assert.equal(plan.mode, MODES.QUERY);
   });
 });
 

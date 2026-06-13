@@ -31,6 +31,20 @@ test('buildIntentRulesPrompt loads personalized recommendation rules', () => {
   assert.match(prompt, /Personalized recommendation response rules/);
   assert.match(prompt, /personalization is allowed/i);
   assert.match(prompt, /Recommend games from Platform Data first/);
+  assert.match(prompt, /Community ratings are subjective signals/);
+  assert.match(prompt, /community opinion is mixed or lower/);
+});
+
+test('buildIntentRulesPrompt loads taste profile rules for bookmark analysis', () => {
+  const prompt = __test__.buildIntentRulesPrompt(INTENTS.BOOKMARK_ANALYSIS);
+
+  assert.match(prompt, /Personalized recommendation response rules/);
+  assert.match(prompt, /Taste profile response rules/);
+  assert.match(prompt, /User Taste Signals/);
+  assert.match(prompt, /what kind of gamer they are/);
+  assert.match(prompt, /brief taste summary and focus on recommendations/);
+  assert.match(prompt, /Do not present personality claims as facts/);
+  assert.match(prompt, /do not force a RECOMMENDATIONS block/);
 });
 
 test('buildIntentRulesPrompt loads community trend rules for community intent', () => {
@@ -39,7 +53,25 @@ test('buildIntentRulesPrompt loads community trend rules for community intent', 
   assert.match(prompt, /Platform data query rules/);
   assert.match(prompt, /Community trend and leaderboard response rules/);
   assert.match(prompt, /community signals/);
+  assert.match(prompt, /show only the first 5 matching platform games by default/);
+  assert.match(prompt, /avoid repeating previously shown titles/);
   assert.match(prompt, /Do not use first-person personalized wording/);
+});
+
+test('buildModeRulesPrompt limits mixed trending summaries to five items', () => {
+  const prompt = __test__.buildSystemPrompt({
+    intent: INTENTS.MIXED_QUERY_RECOMMENDATION,
+    plan: {
+      intent: INTENTS.MIXED_QUERY_RECOMMENDATION,
+      mode: 'mixed',
+      needsRecommendation: true,
+      needsUserProfile: true,
+    },
+    platformData: 'Trending Community Posts:\n1. Game: Example',
+  });
+
+  assert.match(prompt, /summarize only the 5 hottest relevant platform games/);
+  assert.match(prompt, /avoid repeating titles already shown/);
 });
 
 test('buildIntentRulesPrompt loads low-rating rules', () => {
@@ -48,6 +80,7 @@ test('buildIntentRulesPrompt loads low-rating rules', () => {
   assert.match(prompt, /Low rating rules/);
   assert.match(prompt, /Community Rating/);
   assert.match(prompt, /lowest to highest Community Rating/);
+  assert.match(prompt, /show only the first 5 matching games by default/);
 });
 
 test('buildIntentRulesPrompt loads high-rating rules for leaderboard intent', () => {
@@ -56,6 +89,7 @@ test('buildIntentRulesPrompt loads high-rating rules for leaderboard intent', ()
   assert.match(prompt, /High rating rules/);
   assert.match(prompt, /Community Rating > 6\.0\/10/);
   assert.match(prompt, /Community Rating >= 8\.0\/10/);
+  assert.match(prompt, /show only the first 5 matching games by default/);
   assert.match(prompt, /Do not mention, list, summarize, or recommend low-rated games/);
 });
 
@@ -86,6 +120,22 @@ test('buildPlatformDataPrompt handles general chat safely', () => {
 
   assert.match(prompt, /No platform data was attached to this casual\/general message/);
   assert.match(prompt, /Do not mention missing platform data unless the user asks/);
+});
+
+test('buildSystemPrompt limits platform inventory lists to ten games', () => {
+  const prompt = __test__.buildSystemPrompt({
+    intent: INTENTS.PLATFORM_INVENTORY_QUERY,
+    plan: {
+      intent: INTENTS.PLATFORM_INVENTORY_QUERY,
+      mode: 'query',
+      needsDatabase: true,
+    },
+    platformData: 'Platform Inventory:\n1. Game: Example',
+  });
+
+  assert.match(prompt, /show only the first 10 games by default/);
+  assert.match(prompt, /show more platform games/);
+  assert.match(prompt, /avoid repeating previously shown titles/);
 });
 
 test('RECO_FORMAT_RULE contains valid recommendation block structure and no malformed fragments', () => {

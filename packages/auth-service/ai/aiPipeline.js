@@ -38,7 +38,12 @@ import {
   shouldValidateAnswer,
   validateAnswer,
 } from './validatorAgent.js';
-import { GREETING_RESPONSE, GENERIC_ERROR_RESPONSE, QUOTA_EXCEEDED_RESPONSE } from '../prompts/fallbackResponses.js';
+import {
+  CHINESE_GREETING_RESPONSE,
+  GREETING_RESPONSE,
+  GENERIC_ERROR_RESPONSE,
+  QUOTA_EXCEEDED_RESPONSE,
+} from '../prompts/fallbackResponses.js';
 import { buildUserMemoryContext, saveExplicitPreferences } from '../services/userMemoryService.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -53,9 +58,14 @@ const debugWarn = (...args) => {
 // ── Greeting fast-path ───────────────────────────────────────────────────────
 const SIMPLE_GREETING_RE =
   /^\s*(hi|hello|hey|yo|sup|hiya|howdy|greetings|ping|test|你好|您好|nihao)[!?.,'"\s]*$/i;
+const CHINESE_GREETING_RE = /^\s*(你好|您好|nihao)[!?.,'"\s]*$/i;
 
 function isSimpleGreeting(message) {
   return SIMPLE_GREETING_RE.test(message);
+}
+
+function getGreetingResponse(message) {
+  return CHINESE_GREETING_RE.test(message) ? CHINESE_GREETING_RESPONSE : GREETING_RESPONSE;
 }
 
 // ── Plan normalizer ──────────────────────────────────────────────────────────
@@ -135,9 +145,10 @@ export async function runPipeline({ userId, username, message }) {
     if (!isProduction) {
       console.timeEnd('[pipeline] total');
     }
-    saveExchange(userId, username, message, GREETING_RESPONSE).catch(() => {});
+    const greetingResponse = getGreetingResponse(message);
+    saveExchange(userId, username, message, greetingResponse).catch(() => {});
     return {
-      answer:           GREETING_RESPONSE,
+      answer:           greetingResponse,
       intent:           'general_chat',
       mode:             'general_chat',
       confidence:       'default',

@@ -10,36 +10,36 @@ import { streamNovaResponse } from '../services/aiStreamClient';
 
 const SUGGESTIONS = [
   {
-    label: 'Show all games',
-    prompt: 'Show all games on the platform.',
+    label: 'Browse games',
+    prompt: 'Show the first 10 games on the platform.',
   },
   {
-    label: 'Trending now',
+    label: 'Trending',
     prompt: 'Show the top trending games in the community right now.',
   },
   {
-    label: 'Top-rated games',
+    label: 'Top rated',
     prompt: 'Find top-rated community games.',
   },
   {
-    label: 'Low-rated games',
+    label: 'Low rated',
     prompt: 'Find low-rated games on the platform.',
   },
   {
-    label: 'Recommend games',
+    label: 'Recommend',
     prompt: 'Recommend three games from the platform.',
   },
   {
-    label: 'Use my bookmarks',
-    prompt: 'Recommend games based on my bookmarks.',
+    label: 'For me',
+    prompt: 'Recommend games based on my bookmarks and preferences.',
   },
   {
-    label: 'Analyze my taste',
-    prompt: 'Analyze my bookmarked games and summarize my taste.',
+    label: 'Trend picks',
+    prompt: 'Show trending games and recommend one based on my taste.',
   },
   {
-    label: 'Community summary',
-    prompt: 'Summarize current community activity.',
+    label: 'My taste',
+    prompt: 'Analyze my bookmarked games and summarize my taste profile.',
   },
 ];
 
@@ -161,12 +161,12 @@ export default function AgentPage() {
   const greetingMessage = {
     id: 'greeting',
     role: 'agent',
-    text: "Hi, I'm Nova. I can help you find games you might like, understand community trends, and get recommendations based on your bookmarks and preferences. What would you like to explore today?",
+    text: "Hi, I’m Nova. I can help you find games you might enjoy, explore community trends, or recommend titles based on your bookmarks and preferences. What would you like to discover today?",
   };
 
   const toUiMessages = (history = []) =>
     history.map((m, idx) => ({
-      id: m.createdAt || `${m.role}-${idx}`,
+      id: `${m.createdAt || 'no-date'}-${m.role}-${idx}`,
       role: m.role === 'user' ? 'user' : 'agent',
       text: m.content,
     }));
@@ -209,6 +209,13 @@ export default function AgentPage() {
   const [askAI, { loading: askingFallback }] = useMutation(ASK_AI);
   const [clearHistory] = useMutation(CLEAR_AI_HISTORY);
   const isThinking = isStreaming || askingFallback;
+
+  const setMessagesForSession = (expectedVersion, updater) => {
+    setMessages((prev) => {
+      if (expectedVersion !== sessionVersionRef.current) return prev;
+      return typeof updater === 'function' ? updater(prev) : updater;
+    });
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -291,7 +298,7 @@ export default function AgentPage() {
         ? finalPayload.recommendedPosts
         : [];
 
-      setMessages((prev) => [
+      setMessagesForSession(activeSessionVersion, (prev) => [
         ...(prev ?? []),
         {
           id: `agent-${Date.now()}`,
@@ -306,7 +313,7 @@ export default function AgentPage() {
       if (activeSessionVersion !== sessionVersionRef.current) return;
       const latestHistory = refreshed?.data?.myAIHistory ?? [];
       if (latestHistory.length) {
-        setMessages((prev) => hydrateHistoryWithRecommendations(latestHistory, prev));
+        setMessagesForSession(activeSessionVersion, (prev) => hydrateHistoryWithRecommendations(latestHistory, prev));
       }
     } catch (streamErr) {
       if (activeSessionVersion !== sessionVersionRef.current) return;
@@ -315,7 +322,7 @@ export default function AgentPage() {
         const { data } = await askAI({ variables: { message: userText } });
         if (activeSessionVersion !== sessionVersionRef.current) return;
         const { answer, recommendedPosts } = data.askAI;
-        setMessages((prev) => [
+        setMessagesForSession(activeSessionVersion, (prev) => [
           ...(prev ?? []),
           {
             id: `agent-${Date.now()}`,
@@ -330,7 +337,7 @@ export default function AgentPage() {
           fallbackErr?.graphQLErrors?.[0]?.message ??
           streamErr?.message ??
           'Something went wrong. Please check that GOOGLE_API_KEY is configured on the server.';
-        setMessages((prev) => [
+        setMessagesForSession(activeSessionVersion, (prev) => [
           ...(prev ?? []),
           { id: `error-${Date.now()}`, role: 'agent', text: `⚠️ ${errMsg}`, isError: true },
         ]);
@@ -350,9 +357,23 @@ export default function AgentPage() {
     setIsStreaming(false);
     setStreamingText('');
     setStreamingProgress('');
-    await clearHistory();
-    setInput('');
     setMessages([greetingMessage]);
+    setInput('');
+
+    clearHistory({
+      update(cache) {
+        cache.modify({
+          id: 'ROOT_QUERY',
+          fields: {
+            myAIHistory() {
+              return [];
+            },
+          },
+        });
+      },
+    }).catch(() => {
+      // Keep UI reset even if the backend clear operation fails.
+    });
   };
 
   const isLoading = messages === null || historyLoading;
@@ -455,6 +476,7 @@ export default function AgentPage() {
               disabled={isThinking || isLoading}
             />
             <button
+              type="button"
               className={`btn-primary agent-input-row__send ${isThinking ? 'is-loading' : ''}`}
               onClick={() => sendMessage()}
               disabled={isThinking || isLoading || !input.trim()}
@@ -467,6 +489,7 @@ export default function AgentPage() {
           {/* Clear history */}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button
+              type="button"
               className="btn-ghost agent-clear-btn"
               onClick={handleClear}
               title="Delete all your AI conversation history"

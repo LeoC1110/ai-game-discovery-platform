@@ -3,12 +3,29 @@ import React from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from './helpers';
 import AgentPage from '../screens/AgentPage';
-import { ASK_AI, MY_AI_HISTORY } from '../gql/askAI';
+import { ASK_AI, CLEAR_AI_HISTORY, MY_AI_HISTORY } from '../gql/askAI';
 
 // Empty history — resolves the historyLoading state so the chat UI renders
 const historyMock = {
   request: { query: MY_AI_HISTORY },
   result: { data: { myAIHistory: [] } },
+};
+
+const populatedHistoryMock = {
+  request: { query: MY_AI_HISTORY },
+  result: {
+    data: {
+      myAIHistory: [
+        { role: 'user', content: 'Old question', createdAt: '2026-06-12T00:00:00.000Z' },
+        { role: 'assistant', content: 'Old answer', createdAt: '2026-06-12T00:00:01.000Z' },
+      ],
+    },
+  },
+};
+
+const clearHistoryMock = {
+  request: { query: CLEAR_AI_HISTORY },
+  result: { data: { clearAIHistory: true } },
 };
 
 function makeAskAIMock(message, answer, recommendedPosts = []) {
@@ -21,7 +38,7 @@ function makeAskAIMock(message, answer, recommendedPosts = []) {
 describe('AgentPage — layout', () => {
   test('renders heading and suggestion buttons', () => {
     renderWithProviders(<AgentPage />, { mocks: [historyMock] });
-    expect(screen.getByText(/AI Game Agent/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ask Nova/i)).toBeInTheDocument();
     expect(screen.getAllByRole('button').length).toBeGreaterThan(0);
   });
 
@@ -109,7 +126,7 @@ describe('AgentPage — AI response logic', () => {
   });
 
   test('clicking a suggestion populates and sends the message', async () => {
-    const suggestionText = 'Recommend games based on my bookmarks.';
+    const suggestionText = 'Recommend games based on my bookmarks and preferences.';
     const mocks = [
       historyMock,
       makeAskAIMock(suggestionText, 'Based on your bookmarks, here are some top picks for you.'),
@@ -117,12 +134,28 @@ describe('AgentPage — AI response logic', () => {
     renderWithProviders(<AgentPage />, { mocks });
     await waitFor(() => screen.getByPlaceholderText(/ask about games/i));
 
-    const suggestions = screen.getAllByRole('button', { name: /recommend games/i });
-    fireEvent.click(suggestions[0]);
+    fireEvent.click(screen.getByRole('button', { name: /for me/i }));
 
     await waitFor(() => {
       // The suggestion text should appear as the user message bubble
-      expect(screen.getAllByText(/recommend games/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/bookmarks and preferences/i).length).toBeGreaterThan(0);
     }, { timeout: 3000 });
+  });
+
+  test('Clear History removes visible chat bubbles immediately', async () => {
+    renderWithProviders(<AgentPage />, {
+      mocks: [populatedHistoryMock, clearHistoryMock],
+    });
+
+    await waitFor(() => expect(screen.getByText(/old question/i)).toBeInTheDocument());
+    expect(screen.getByText(/old answer/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /clear history/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/old question/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/old answer/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/i['’]m nova/i)).toBeInTheDocument();
+    });
   });
 });

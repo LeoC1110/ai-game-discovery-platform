@@ -17,7 +17,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 export const DEFAULT_PLATFORM_LIMIT = 12;
 export const MAX_PLATFORM_LIMIT = 50;
 export const RECOMMENDATION_CANDIDATE_LIMIT = 20;
-export const INVENTORY_LIMIT = 50;
+export const INVENTORY_LIMIT = 10;
 export const LOW_RATING_MAX_SCORE = 6.0;
 export const DEFAULT_LOW_RATING_MIN_COUNT = Math.max(1, parseInt(process.env.LOW_RATING_MIN_COUNT ?? '2', 10));
 
@@ -83,6 +83,98 @@ export function getCount(post, countField, arrayField) {
 export function normalizeTags(tags) {
   if (!Array.isArray(tags)) return [];
   return tags.map((t) => String(t ?? '').trim()).filter(Boolean).slice(0, 8);
+}
+
+function normalizeSignalToken(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function collectTopTokens(posts, fieldName, limit = 6) {
+  const counts = new Map();
+  for (const post of posts || []) {
+    const values = fieldName === 'tags'
+      ? normalizeTags(post?.tags)
+      : [getFieldFromPostOrGame(post, fieldName, '')];
+
+    for (const value of values) {
+      const token = normalizeSignalToken(value);
+      if (!token || token === 'n/a') continue;
+      counts.set(token, (counts.get(token) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([token, count]) => `${token} (${count})`);
+}
+
+function hasAnyToken(tokens, candidates) {
+  return tokens.some((token) => candidates.some((candidate) => token.includes(candidate)));
+}
+
+export function buildUserTasteSignals(posts = []) {
+  const safePosts = Array.isArray(posts) ? posts : [];
+  if (!safePosts.length) {
+    return [
+      'User Taste Signals:',
+      '- Bookmarked games analyzed: 0',
+      '- Taste confidence: low (no bookmarked games were available)',
+      '- Guidance: Ask the user to bookmark games or share preferences before making strong taste claims.',
+    ].join('\n');
+  }
+
+  const ratings = safePosts
+    .map((post) => getCommunityRating(post))
+    .filter((rating) => rating != null && Number.isFinite(Number(rating)))
+    .map(Number);
+  const averageRating = ratings.length
+    ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+    : null;
+  const highRatedCount = ratings.filter((rating) => rating >= 8).length;
+  const lowRatedCount = ratings.filter((rating) => rating <= LOW_RATING_MAX_SCORE).length;
+  const totalEngagement = safePosts.reduce((sum, post) => (
+    sum +
+    getCount(post, 'likesCount', 'likedBy') +
+    getCount(post, 'bookmarksCount', 'bookmarkedBy') +
+    getCount(post, 'commentsCount', 'comments')
+  ), 0);
+  const averageEngagement = totalEngagement / safePosts.length;
+  const topTags = collectTopTokens(safePosts, 'tags');
+  const topGenres = collectTopTokens(safePosts, 'genre', 4);
+  const combinedTokens = [...topTags, ...topGenres].map((token) => token.replace(/\s+\(\d+\)$/, ''));
+  const archetypes = [];
+
+  if (averageRating != null && averageRating >= 8 && averageEngagement >= 3) {
+    archetypes.push('community-favorite player');
+  }
+  if (lowRatedCount > 0 || (averageRating != null && averageRating < 6.8)) {
+    archetypes.push('niche or contrarian picker');
+  }
+  if (hasAnyToken(combinedTokens, ['adventure', 'open-world', 'exploration', 'survival'])) {
+    archetypes.push('adventure-oriented explorer');
+  }
+  if (hasAnyToken(combinedTokens, ['rpg', 'role-playing', 'souls', 'roguelike', 'action'])) {
+    archetypes.push('challenge-seeking progression fan');
+  }
+  if (hasAnyToken(combinedTokens, ['strategy', 'simulation', 'puzzle', 'management', 'tactics'])) {
+    archetypes.push('systems-minded thinker');
+  }
+  if (hasAnyToken(combinedTokens, ['indie', 'story', 'narrative', 'experimental', 'atmospheric'])) {
+    archetypes.push('taste-driven curator');
+  }
+
+  return [
+    'User Taste Signals:',
+    `- Bookmarked games analyzed: ${safePosts.length}`,
+    `- Average community rating of bookmarks: ${averageRating != null ? `${averageRating.toFixed(1)}/10` : 'N/A'}`,
+    `- High-rated bookmark share: ${ratings.length ? `${highRatedCount}/${ratings.length}` : 'N/A'}`,
+    `- Low-rated or divisive bookmark share: ${ratings.length ? `${lowRatedCount}/${ratings.length}` : 'N/A'}`,
+    `- Average community engagement per bookmark: ${averageEngagement.toFixed(1)}`,
+    `- Dominant bookmark tags: ${topTags.length ? topTags.join(', ') : 'N/A'}`,
+    `- Dominant bookmark genres: ${topGenres.length ? topGenres.join(', ') : 'N/A'}`,
+    `- Taste archetype hints: ${archetypes.length ? archetypes.join(', ') : 'not enough signal yet'}`,
+  ].join('\n');
 }
 
 function compareAlphaTitle(a, b) {
@@ -161,7 +253,7 @@ export function formatPostsForPrompt({ title, posts }) {
   const safePosts = Array.isArray(posts) ? posts : [];
   if (!safePosts.length) {
     return (
-      'Platform Data Status:\n' +
+      `${title}:\n` +
       'No matching platform records were returned for this specific request.\n' +
       'This does not necessarily mean the platform database is empty.'
     );
@@ -174,6 +266,23 @@ export function formatPostsForPrompt({ title, posts }) {
     ...safePosts.map((p, i) => formatPostForPrompt(p, i + 1)),
   ];
   return lines.join('\n');
+}
+
+function formatPlatformDataFallback(title = 'Platform Data Status') {
+  return (
+    `${title}:\n` +
+    'No matching platform records were returned for this specific request.\n' +
+    'This does not necessarily mean the platform database is empty.'
+  );
+}
+
+async function safePlatformSection(title, loader) {
+  try {
+    return await loader();
+  } catch (err) {
+    console.warn(`[platformTools] ${title} retrieval failed:`, err?.message);
+    return formatPlatformDataFallback(title);
+  }
 }
 
 async function loadPlatformPosts({
@@ -295,6 +404,17 @@ export async function getMyBookmarks(userId, limit = DEFAULT_PLATFORM_LIMIT) {
   });
 
   return formatPostsForPrompt({ title: 'Bookmarked Games', posts });
+}
+
+async function getMyBookmarkPosts(userId, limit = DEFAULT_PLATFORM_LIMIT) {
+  if (!mongoose.isValidObjectId(userId)) return [];
+
+  return loadPlatformPosts({
+    filter: { bookmarkedBy: userId, postType: 'GAME' },
+    sort: { createdAt: -1, _id: 1 },
+    limit,
+    userId,
+  });
 }
 
 export async function getRecentCommunityPosts(limit = DEFAULT_PLATFORM_LIMIT) {
@@ -456,12 +576,29 @@ export async function buildPlatformDataForPlan({
     case INTENTS.GAME_RECOMMENDATION:
       return getRecommendationCandidates({ userId, userMessage, limit: limit ?? RECOMMENDATION_CANDIDATE_LIMIT });
 
+    case INTENTS.MIXED_QUERY_RECOMMENDATION: {
+      const bookmarkLimit = Math.max(6, clampLimit(limit ?? DEFAULT_PLATFORM_LIMIT));
+      const [trending, bookmarkPosts, candidates] = await Promise.all([
+        safePlatformSection('Trending Community Posts', () => getTrendingCommunityPosts(limit ?? DEFAULT_PLATFORM_LIMIT)),
+        safePlatformSection('Bookmarked Games', () => getMyBookmarkPosts(userId, bookmarkLimit)),
+        safePlatformSection('Recommendation Candidates', () => getRecommendationCandidates({ userId, userMessage, limit: limit ?? RECOMMENDATION_CANDIDATE_LIMIT })),
+      ]);
+      const bookmarks = Array.isArray(bookmarkPosts)
+        ? formatPostsForPrompt({ title: 'Bookmarked Games', posts: bookmarkPosts })
+        : bookmarkPosts;
+      const tasteSignals = buildUserTasteSignals(Array.isArray(bookmarkPosts) ? bookmarkPosts : []);
+      return `${trending}\n\n${bookmarks}\n\n${tasteSignals}\n\n${candidates}`;
+    }
+
     case INTENTS.BOOKMARK_ANALYSIS: {
-      const [bookmarks, candidates] = await Promise.all([
-        getMyBookmarks(userId, Math.max(6, clampLimit(limit ?? DEFAULT_PLATFORM_LIMIT))),
+      const bookmarkLimit = Math.max(6, clampLimit(limit ?? DEFAULT_PLATFORM_LIMIT));
+      const [bookmarkPosts, candidates] = await Promise.all([
+        getMyBookmarkPosts(userId, bookmarkLimit),
         getRecommendationCandidates({ userId, userMessage, limit: limit ?? RECOMMENDATION_CANDIDATE_LIMIT }),
       ]);
-      return `${bookmarks}\n\n${candidates}`;
+      const bookmarks = formatPostsForPrompt({ title: 'Bookmarked Games', posts: bookmarkPosts });
+      const tasteSignals = buildUserTasteSignals(bookmarkPosts);
+      return `${bookmarks}\n\n${tasteSignals}\n\n${candidates}`;
     }
 
     default:
@@ -502,6 +639,8 @@ export const __test__ = {
   getCommunityRating,
   getCount,
   normalizeTags,
+  buildUserTasteSignals,
+  formatPlatformDataFallback,
   formatPostForPrompt,
   formatPostsForPrompt,
   selectLowRatedPosts,

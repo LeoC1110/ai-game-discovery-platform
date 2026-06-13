@@ -4,12 +4,11 @@
 
 /** Returned immediately for hi/hello/hey — no Gemini call needed. */
 export const GREETING_RESPONSE =
-  "Hi, I'm Nova. I can help you:\n" +
-  '• Find game recommendations based on your bookmarks\n' +
-  '• Explore community trends and popular posts\n' +
-  '• Search by genre, platform, tags, or game type\n' +
-  '• Understand your taste profile from saved games\n\n' +
-  'What would you like to explore today?';
+  "Hi, I’m Nova. I can help you find games you might enjoy, explore community trends, or recommend titles based on your bookmarks and preferences. What would you like to discover today?";
+
+/** Returned immediately for Chinese greetings — no Gemini call needed. */
+export const CHINESE_GREETING_RESPONSE =
+  '你好，我是 Nova。今天想找新游戏、看看社区在推荐什么，还是让我根据你的收藏给你一些个性化建议？';
 
 /** Returned when Gemini / LangChain times out. */
 export const TIMEOUT_RESPONSE =

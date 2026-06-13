@@ -191,8 +191,27 @@ function buildPersonalizedRecommendationRules() {
     `- Use the user's bookmarks, saved games, stated preferences, previous ratings, and available Platform Data when they are provided.\n` +
     `- Personalized wording is allowed when supported by data, such as "Based on your bookmarks...", "This fits your interest in...", "This matches your preference for...", "Based on your taste...", or "Your saved games suggest...".\n` +
     `- Recommend games from Platform Data first.\n` +
+    `- Community ratings are subjective signals, not absolute quality judgments. A low-rated game can still be recommended when it strongly matches the user's bookmarks, tags, genres, or stated preferences.\n` +
+    `- When recommending a low-rated or divisive game, be transparent: mention that community opinion is mixed or lower, then explain why the user's taste suggests it may still be worth trying.\n` +
     `- If the user asks for recommendations based on bookmarks, recommend different platform games that match the user's saved-game patterns. Do not simply re-list the bookmarked games.\n` +
+    `- For bookmark-based recommendation requests, keep any taste-profile summary to 1-2 concise sentences, then focus on recommendations.\n` +
     `- If there are not enough matching platform games, say so clearly and suggest the closest available matches from Platform Data.\n`
+  );
+}
+
+function buildTasteProfileRules() {
+  return (
+
+    `Taste profile response rules:\n` +
+    `- When the user explicitly asks to summarize, analyze, or describe their taste/profile, or asks what kind of gamer they are, answer with a detailed taste profile before recommending games.\n` +
+    `- When the user primarily asks for recommendations based on bookmarks, provide only a brief taste summary and focus on recommendations.\n` +
+    `- Use User Taste Signals when present, plus bookmarked games, tags, genres, ratings, and community signals from Platform Data.\n` +
+    `- Describe 2-4 likely taste traits in natural language, backed by evidence from the data.\n` +
+    `- Compare the user's saved games against community signals when available: high ratings or high engagement can mean their taste aligns with community favorites; low-rated or divisive bookmarks can mean they may enjoy niche, distinctive, or less mainstream picks.\n` +
+    `- Map evidence to careful personality-style language, such as adventure-oriented explorer, systems-minded thinker, challenge-seeking player, taste-driven curator, community-favorite player, or niche picker.\n` +
+    `- Do not present personality claims as facts. Use softened wording such as "your saved games suggest", "you may enjoy", "you seem to lean toward", or "it looks like".\n` +
+    `- If the user did not ask for recommendations, do not append recommendation cards and do not force a RECOMMENDATIONS block.\n` +
+    `- If there are too few bookmarks or signals, say the profile is tentative and ask the user to bookmark more games or share preferences.\n`
   );
 }
 
@@ -203,6 +222,8 @@ function buildCommunityTrendRules() {
     `- Prefer Community Rating, Rating Count, likes, bookmarks, comments, and trending tags over Author Rating.\n` +
     `- Treat Author Rating as the post author's personal score only, not the full community opinion.\n` +
     `- Focus on current platform/community activity, not personal preference by default.\n` +
+    `- For trending, popular, hottest, top-rated, leaderboard, best, low-rated, worst-rated, or community activity lists, show only the first 5 matching platform games by default unless the user asks for a different count.\n` +
+    `- If the user asks for another batch, next batch, more, 换一批, 下一批, or 再来一批, use conversation context to avoid repeating previously shown titles and show the next 5 matching platform games from Platform Data when possible.\n` +
     `- Use community-centric wording such as "Based on current community activity...", "These games are trending on the platform...", "Top-rated community post.", or "High engagement from likes, comments, or bookmarks."\n` +
     `- Do not use first-person personalized wording such as "Matches your interest", "Fits your interest", "Fits your preference", "Based on your taste", "Based on your bookmarks", "Your saved games", or similar phrases.\n` +
     `- The "reason" field in every RECOMMENDATIONS entry MUST use community/platform wording only.\n` +
@@ -216,7 +237,7 @@ function buildLowRatingRules() {
     `Low rating rules:\n` +
     `- Low rating definition: any game with Community Rating <= ${LOW_RATING_MAX.toFixed(1)}/10 is considered low-rated.\n` +
     `- If Platform Data includes a "Low-rated games" section, summarize that section first before any high-rated or trending section.\n` +
-    `- For low-rated, worst, lowest-rated, or poorly rated queries, rank results from lowest to highest Community Rating.\n` +
+    `- For low-rated, worst, lowest-rated, or poorly rated queries, rank results from lowest to highest Community Rating and show only the first 5 matching games by default.\n` +
     `- Include rating count in prose when available.\n` +
     `- If no games meet the <= ${LOW_RATING_MAX.toFixed(1)}/10 threshold, explicitly say no low-rated games are currently available in the platform data.\n`
   );
@@ -227,7 +248,7 @@ function buildHighRatingRules() {
     `High rating rules:\n` +
     `- Positive rating definition: any game with Community Rating > ${POSITIVE_RATING_MIN.toFixed(1)}/10 is considered positively rated or above average.\n` +
     `- High rating definition: any game with Community Rating >= ${HIGH_RATING_MIN.toFixed(1)}/10 is considered high-rated.\n` +
-    `- For high-rated, best, top-rated, or highest-rated queries, prioritize games with Community Rating >= ${HIGH_RATING_MIN.toFixed(1)}/10 and rank results from highest to lowest Community Rating.\n` +
+    `- For high-rated, best, top-rated, or highest-rated queries, prioritize games with Community Rating >= ${HIGH_RATING_MIN.toFixed(1)}/10, rank results from highest to lowest Community Rating, and show only the first 5 matching games by default.\n` +
     `- For popular, trending, or leaderboard queries, rank by community signals such as Community Rating, Rating Count, likes, bookmarks, and comments. Prefer positively rated games when available.\n` +
     `- Prefer games with stronger Rating Count, likes, bookmarks, or comments when ratings are similar.\n` +
     `- Do not mention, list, summarize, or recommend low-rated games when the user asks for high-rated, best, top-rated, popular, or leaderboard results.\n`
@@ -253,7 +274,9 @@ function buildModeRulesPrompt(plan) {
       `- Use only Platform Data for titles, ratings, tags, likes, bookmarks, comments, and community statistics.\n` +
       `- Do not provide personal recommendations unless the plan explicitly requires recommendation.\n` +
       `- Do not add external games, famous examples, or titles from model training knowledge.\n` +
-      `- For platform inventory/list requests, list only titles present in Platform Data.\n` +
+      `- For platform inventory/list requests, list only titles present in Platform Data and show only the first 10 games by default.\n` +
+      `- For platform inventory/list requests, invite the user to ask "show more platform games" or "next batch of games" if they want another batch.\n` +
+      `- If the user asks for more platform games, use conversation context to avoid repeating previously shown titles and show the next 10 platform games when possible.\n` +
       `- If Platform Data is not attached, say the data was not attached to this request; do not claim the database is empty.`
     );
   }
@@ -273,6 +296,8 @@ function buildModeRulesPrompt(plan) {
     return (
       `Mode-specific rules: Mixed Mode\n` +
       `- First answer the platform query using Platform Data.\n` +
+      `- For trending or popular mixed requests, summarize only the 5 hottest relevant platform games before recommending.\n` +
+      `- If the user asks for another batch, avoid repeating titles already shown in the conversation and use the next 5 relevant platform games from Platform Data when possible.\n` +
       `- Then provide recommendations if the plan requires recommendation.\n` +
       `- Clearly separate platform facts from personalized suggestions.\n` +
       `- Recommendation titles must still come only from Platform Data.`
@@ -292,6 +317,13 @@ function buildModeRulesPrompt(plan) {
 }
 
 function buildIntentRulesPrompt(intent) {
+  if (intent === INTENTS.BOOKMARK_ANALYSIS) {
+    return [
+      buildPersonalizedRecommendationRules(),
+      buildTasteProfileRules(),
+    ].join('\n');
+  }
+
   if (isPersonalIntent(intent)) {
     return buildPersonalizedRecommendationRules();
   }
@@ -593,6 +625,7 @@ export const __test__ = {
   buildRecommendationFormatPrompt,
   buildLowRatingRules,
   buildHighRatingRules,
+  buildTasteProfileRules,
   RECO_FORMAT_RULE,
   sanitizeUserFacingAnswer,
 };

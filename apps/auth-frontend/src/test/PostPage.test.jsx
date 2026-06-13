@@ -62,14 +62,14 @@ describe('PostPage recommend flow', () => {
     expect(screen.getByText('Recommend a Game')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Step 1 .* Select Game/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Search Existing Game/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /continue to recommendation/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^continue$/i })).toBeInTheDocument();
   });
 
   test('disables continue when no game is selected or entered', async () => {
     const mocks = [{ request: { query: ME_QUERY }, result: playerMeResult }];
     renderWithProviders(<PostPage />, { mocks });
 
-    expect(screen.getByRole('button', { name: /continue to recommendation/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^continue$/i })).toBeDisabled();
   });
 
   test('can search/select existing game and publish recommendation', async () => {
@@ -142,7 +142,7 @@ describe('PostPage recommend flow', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: /portal 2/i }));
-    fireEvent.click(screen.getByRole('button', { name: /continue to recommendation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^continue$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/Step 2 .* Write Recommendation/i)).toBeInTheDocument();
@@ -152,13 +152,15 @@ describe('PostPage recommend flow', () => {
     fireEvent.change(screen.getByLabelText(/Tags/i), { target: { value: 'Puzzle' } });
     fireEvent.change(screen.getByLabelText(/Recommendation/i), { target: { value: 'Great co-op puzzles.' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /publish recommendation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^publish$/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^publish$/i })).toBeInTheDocument();
+      expect(screen.getByText(/publish recommendation/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^publish$/i }));
+    const modalPublishButton = document.querySelector('.post-choice-modal__actions .btn-primary');
+    expect(modalPublishButton).toBeInTheDocument();
+    fireEvent.click(modalPublishButton);
 
     await waitFor(() => {
       expect(mutationCalled).toBe(true);
