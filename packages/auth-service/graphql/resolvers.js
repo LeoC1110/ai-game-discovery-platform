@@ -20,6 +20,7 @@ import {
 import { loadStoredPreferences, upsertUserPreferences, clearUserPreferences } from '../services/userMemoryService.js';
 import { invalidateTitlesCache } from '../ai/validatorAgent.js';
 import { sendResetPasswordCodeEmail, sendEmailVerificationCodeEmail } from '../services/emailService.js';
+import { syncContactToHubSpot, updateContactLifecycleStage } from '../services/hubspotService.js';
 import { checkRateLimit, getClientIp } from '../middleware/rateLimit.js';
 import {
   signAuthToken,
@@ -1041,6 +1042,16 @@ export const resolvers = {
       await ensurePlayerForUser(user._id);
 
       try {
+        await syncContactToHubSpot({
+          email: user.email,
+          username: user.username,
+          emailVerified: user.emailVerified === true,
+        });
+      } catch (err) {
+        console.error('[HubSpot] Contact sync failed on register:', err?.message || err);
+      }
+
+      try {
         await resolvers.Mutation.sendEmailVerificationCode(_parent, { email: emailNorm }, { req });
       } catch (err) {
         console.error('[Auth] Registration email verification send failed:', err?.message || err);
@@ -1352,6 +1363,15 @@ export const resolvers = {
         },
         { $set: { used: true } },
       );
+
+      try {
+        await updateContactLifecycleStage({
+          email: normalizedEmail,
+          lifecycleStage: 'customer',
+        });
+      } catch (err) {
+        console.error('[HubSpot] Lifecycle update failed on email verification:', err?.message || err);
+      }
 
       return true;
     },
