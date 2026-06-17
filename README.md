@@ -15,16 +15,16 @@ Users can create game recommendation posts, browse community content, bookmark g
 
 The project demonstrates:
 
-* Full-stack development with React, Node.js, GraphQL, and MongoDB
-* JWT authentication and protected user flows
-* MongoDB-backed community data and user activity
-* A modular AI assistant workflow using LangChain and Google Gemini
-* Intent routing, grounded prompt construction, and structured AI output
-* AI response streaming with visible progress states
-* Validation-oriented design to reduce hallucinated recommendations
-* Automated frontend, backend, and AI pipeline tests
-* Production-readiness improvements such as pagination, rate limiting, input validation, safe logging, Error Boundary, and route-level code splitting
-
+* Full-stack web development with React, Node.js, GraphQL, and MongoDB
+* Secure authentication with JWT and protected user flows
+* Community-driven product features including posts, ratings, bookmarks, follows, profiles, and feedback
+* A modular Nova AI assistant workflow built with LangChain and Google Gemini
+* RAG-enhanced recommendation logic using embeddings-based retrieval from platform data
+* Grounded prompt construction, structured AI output, response validation, and hallucination-risk reduction
+* Streaming AI responses with visible progress states for a better user experience
+* HubSpot CRM integration for feedback collection, beta-user tracking, and product/support workflows
+* Automated testing across frontend, backend, CRM integration, and AI pipeline logic
+* Production-readiness improvements including pagination, rate limiting, input validation, safe logging, Error Boundary, and route-level code splitting
 ---
 
 ## Overview
