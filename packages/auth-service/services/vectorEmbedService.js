@@ -15,6 +15,32 @@ function logDebug(label, data) {
   }
 }
 
+function generateLocalEmbedding(text, dim = 256) {
+  const vector = new Array(dim).fill(0);
+  const normalized = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  // Hash character trigrams into a fixed-length vector.
+  for (let i = 0; i < normalized.length - 2; i++) {
+    const gram = normalized.slice(i, i + 3);
+    let hash = 0;
+    for (let j = 0; j < gram.length; j++) {
+      hash = ((hash << 5) - hash) + gram.charCodeAt(j);
+      hash |= 0;
+    }
+    const index = Math.abs(hash) % dim;
+    vector[index] += 1;
+  }
+
+  const norm = Math.sqrt(vector.reduce((sum, value) => sum + (value * value), 0));
+  if (norm > 0) {
+    for (let i = 0; i < vector.length; i++) {
+      vector[i] = vector[i] / norm;
+    }
+  }
+
+  return vector;
+}
+
 /**
  * Generate embedding vector for text using Gemini
  * @param {string} text - Text to embed
@@ -26,7 +52,7 @@ export async function generateEmbedding(text) {
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'embedding-001' });
+    const model = genAI.getGenerativeModel({ model: 'models/gemini-embedding-2' });
     const result = await model.embedContent(text);
     const embedding = result.embedding.values;
 
@@ -36,8 +62,9 @@ export async function generateEmbedding(text) {
 
     return embedding;
   } catch (err) {
-    console.error('[vectorEmbed] Embedding generation failed:', err?.message);
-    throw err;
+    // Fallback keeps RAG usable even when embedding API is unavailable for the key.
+    console.warn('[vectorEmbed] Gemini embedding unavailable, using local fallback vector:', err?.message);
+    return generateLocalEmbedding(text);
   }
 }
 

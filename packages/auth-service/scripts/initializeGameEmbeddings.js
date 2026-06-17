@@ -41,6 +41,7 @@ function buildEmbeddingContent(game) {
 
 async function initializeEmbeddings() {
   const mode = isApply ? 'APPLY' : 'DRY-RUN';
+  const isDryRunMode = isDryRun || (!isDryRun && !isApply);
   console.log(`[${mode}] Starting game embedding initialization...`);
 
   try {
@@ -60,8 +61,6 @@ async function initializeEmbeddings() {
         skipped++;
         continue;
       }
-
-      const isDryRunMode = isDryRun || (!isDryRun && !isApply);
 
       if (isDryRunMode) {
         const content = buildEmbeddingContent(game);
