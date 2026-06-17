@@ -11,6 +11,11 @@ import GamePost from '../models/GamePost.js';
 import Game from '../models/Game.js';
 import { attachCommunityRatingData, calculateTrendScore } from '../services/communityRatingService.js';
 import { INTENTS } from './routerAgent.js';
+import {
+  semanticSearchGames,
+  hybridSearchGames,
+  getEmbeddingCount,
+} from '../services/vectorEmbedService.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -630,6 +635,13 @@ export async function getMostEngagedPosts(limit = DEFAULT_PLATFORM_LIMIT) {
 export const getMostLikedPosts = getMostEngagedPosts;
 
 export async function getRecommendationCandidates({ userId, userMessage = '', limit = RECOMMENDATION_CANDIDATE_LIMIT } = {}) {
+  // Try RAG-based semantic search first if embeddings are available
+  const ragCandidates = await trySemanticRecommendations(userMessage, limit);
+  if (ragCandidates.length > 0) {
+    return ragCandidates;
+  }
+
+  // Fallback to original keyword-based approach
   const posts = await loadPlatformPosts({
     filter: { postType: 'GAME' },
     sort: { createdAt: -1, _id: 1 },
@@ -639,6 +651,101 @@ export async function getRecommendationCandidates({ userId, userMessage = '', li
 
   const candidates = selectRecommendationCandidates(posts, { userMessage }).slice(0, clampLimit(limit, RECOMMENDATION_CANDIDATE_LIMIT));
   return formatPostsForPrompt({ title: 'Recommendation Candidates', posts: candidates });
+}
+
+/**
+ * Try to get recommendations using semantic search (RAG)
+ * Returns empty string if embeddings not initialized or search fails
+ */
+async function trySemanticRecommendations(query, limit) {
+  try {
+    // Check if embeddings are initialized
+    const embeddingCount = await getEmbeddingCount();
+    if (embeddingCount === 0) {
+      return '';
+    }
+
+    if (!query || query.length < 3) {
+      return '';
+    }
+
+    logDebug('trySemanticRecommendations', {
+      query: query.substring(0, 50),
+      embeddingCount,
+    });
+
+    // Use hybrid search (semantic + keyword boosting)
+    const keywords = extractKeywordsFromQuery(query);
+    const semanticResults = await hybridSearchGames(query, keywords, clampLimit(limit) * 2);
+
+    if (semanticResults.length === 0) {
+      return '';
+    }
+
+    // Fetch full post/game data for matched IDs
+    const gameIds = semanticResults.map((r) => r.gameId);
+    const posts = await GamePost.find({ game: { $in: gameIds }, postType: 'GAME' })
+      .select(SAFE_POST_FIELDS)
+      .populate('game', SAFE_GAME_FIELDS)
+      .limit(clampLimit(limit, RECOMMENDATION_CANDIDATE_LIMIT))
+      .lean();
+
+    if (posts.length === 0) {
+      return '';
+    }
+
+    logDebug('trySemanticRecommendations', {
+      found: posts.length,
+      similarities: semanticResults.slice(0, 3).map((r) => r.similarity),
+    });
+
+    return formatPostsForPrompt({
+      title: 'Semantic Recommendation Candidates (RAG)',
+      posts,
+    });
+  } catch (err) {
+    // Silent fallback — RAG failure should not break the pipeline
+    logDebug('trySemanticRecommendations failed', err?.message);
+    return '';
+  }
+}
+
+/**
+ * Extract keywords from user query for hybrid search boosting
+ */
+function extractKeywordsFromQuery(query = '') {
+  if (!query) return [];
+
+  // Simple keyword extraction: split by spaces and filter common words
+  const common = new Set([
+    'the',
+    'a',
+    'an',
+    'and',
+    'or',
+    'for',
+    'to',
+    'of',
+    'in',
+    'is',
+    'recommend',
+    'game',
+    'games',
+    'like',
+    'similar',
+    'find',
+    'show',
+    'give',
+    'suggest',
+  ]);
+
+  const keywords = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !common.has(word))
+    .slice(0, 5);
+
+  return keywords;
 }
 
 export async function buildPlatformDataForPlan({

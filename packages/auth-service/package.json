@@ -14,6 +14,9 @@
     "backfill:community-ratings-to-game-id:apply": "node scripts/backfillCommunityRatingsToGameId.js --apply",
     "backfill:hubspot": "node scripts/backfillHubSpotContacts.js --dry-run",
     "backfill:hubspot:apply": "node scripts/backfillHubSpotContacts.js --apply",
+    "rag:init": "node scripts/initializeGameEmbeddings.js --dry-run",
+    "rag:init:apply": "node scripts/initializeGameEmbeddings.js --apply",
+    "rag:init:force": "node scripts/initializeGameEmbeddings.js --apply --force",
     "test": "cross-env NODE_ENV=test node --test ai/__tests__/mockMode.test.js ai/__tests__/pipeline.test.js ai/__tests__/routerAgent.test.js ai/__tests__/answerAgent.test.js ai/__tests__/validatorAgent.test.js ai/__tests__/aiPipeline.test.js __tests__/passwordReset.test.js"
   },
   "dependencies": {
