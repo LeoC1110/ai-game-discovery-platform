@@ -868,16 +868,18 @@ select:focus-visible {
   padding: 18px;
 }
 .community-card__top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 12px;
 }
 .community-card__title {
   margin: 0;
   font-size: 17px;
   font-weight: 700;
   line-height: 1.3;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .community-rating-popover {
@@ -943,6 +945,8 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .post-rating-summary--start {
@@ -951,6 +955,7 @@ select:focus-visible {
 
 .post-rating-summary--end {
   align-items: flex-end;
+  justify-self: end;
 }
 
 .post-rating-summary--compact {
@@ -977,6 +982,10 @@ select:focus-visible {
 .post-rating-summary__line--community {
   display: inline-flex;
   align-items: center;
+  width: max-content;
+  min-width: 9.75rem;
+  justify-content: center;
+  white-space: nowrap;
   padding: 4px 10px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--color-border);
@@ -984,6 +993,7 @@ select:focus-visible {
 }
 
 .post-rating-summary--compact .post-rating-summary__line--community {
+  min-width: 9.25rem;
   padding: 3px 8px;
 }
 
@@ -996,12 +1006,15 @@ select:focus-visible {
 .post-rating-summary__interactive {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   border: none;
   background: transparent;
   padding: 0;
   cursor: pointer;
   text-align: inherit;
+  flex: 0 0 auto;
+  min-width: max-content;
 }
 
 .post-rating-summary__interactive:hover .post-rating-summary__line--community {
